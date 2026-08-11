@@ -1,7 +1,7 @@
 # APT Brain
 
 Last audited: 2026-08-11  
-State: implementation in progress — APT-001  
+State: APT-001 complete; awaiting APT-002
 Rule: plan, review and audit before construction
 
 ## Purpose
@@ -95,13 +95,13 @@ Review evidence: a repository search found no active APT card fields or PAN/CVV 
 | Deployment | local build; old protected preview history | No APT project in connected Vercel account; Cloudflare/Codex target not verified; no live browser proof |
 | Tests | 7 static/focused checks pass | Runtime API tests and one sandbox end-to-end happy path plus failure paths |
 | Lint | 15 errors, 20 warnings | Zero-error quality gate |
-| Version control | absent at workspace root | Git repository or confirmed canonical repository/worktree |
+| Version control | Git `main`; recoverable baseline `03ce2ab` | Remote owner is not configured; not required for the local baseline |
 
 ## Correctness and security review
 
 ### P0 — foundation and release blockers
 
-1. No Git repository exists at the workspace root. Safe diff review, rollback and change attribution are unavailable.
+1. `[RESOLVED — APT-001]` Git `main` now exists at the workspace root with recoverable baseline `03ce2ab`.
 2. No connected Supabase or Vercel project is identifiable as APT. Migrations, environment variables and deployments cannot be verified or safely changed.
 3. Registration creates an Auth user before inserting the member. A failed member insert leaves an orphan user and can block retry with the same email (`app/api/cadastros/route.ts:73-84`).
 4. An Asaas checkout is created before subscription/invitation/application writes complete. A database failure can leave an orphan checkout and conflicting local state (`app/api/cadastros/route.ts:86-125`).
@@ -164,7 +164,7 @@ Only one task may be `IN_PROGRESS`. Construction starts only after the user sele
 | ID | Priority | Status | Outcome | Acceptance evidence | Depends on |
 |---|---:|---|---|---|---|
 | APT-000 | P0 | BLOCKED | Establish the Asaas Sandbox security baseline in the canonical backend runtime. | Secret names are present without exposed values; Asaas Checkout proves card data stays outside APT/Supabase; invalid-token and duplicate signed webhook checks pass; key owner, expiry and rotation procedure are recorded. | APT-002, APT-003, Asaas Sandbox administrator access |
-| APT-001 | P0 | IN_PROGRESS | Establish canonical Git repository/worktree and preserve the audited state. | `git status` works; initial state is recoverable; ignored generated files are confirmed. | — |
+| APT-001 | P0 | DONE | Establish canonical Git repository/worktree and preserve the audited state. | Git `main`; baseline `03ce2ab`; secret scan clean; generated/local files confirmed ignored; build passed; 7/7 tests passed. | — |
 | APT-002 | P0 | READY | Decide deployment runtime and package manager. Recommendation: Vercel Next + npm unless Codex hosting is the intended production owner. | Decision recorded; one build path and one lockfile remain planned. | — |
 | APT-003 | P0 | BLOCKED | Connect the correct Supabase APT project and inspect current schema/migrations/advisors read-only. | Project ID recorded; tables, migrations, security and performance advisors captured. | User/project access |
 | APT-004 | P0 | PENDING | Reconcile local migrations with the real APT database before applying anything. | Clean migration plan reviewed; no fabricated or duplicate history; rollback/recovery described. | APT-003 |
@@ -184,7 +184,7 @@ Only one task may be `IN_PROGRESS`. Construction starts only after the user sele
 
 ## Recommended execution sequence
 
-1. `APT-001` — recover safe history.
+1. `APT-001` — DONE: recover safe history.
 2. `APT-002` — choose one runtime and package manager; this also fixes the payment secret owner.
 3. `APT-003` and `APT-004` — connect and reconcile the real database.
 4. `APT-000` — configure and prove the Asaas Sandbox security gate before billing implementation.
@@ -232,7 +232,18 @@ A task is `DONE` only when:
 - Errors must not be converted into empty business states.
 - Identity and money paths require failure-path evidence, not only happy-path UI.
 - When the repository structure has not changed, reuse this audit instead of repeating it. Rerun after dependency, runtime or major architecture changes.
+- The initial Git baseline excludes `.env*`, dependencies, builds, local live sessions, backups, operational spreadsheets and previews; do not force-add them.
+
+## APT-001 completion record — 2026-08-11
+
+- Local repository initialized on `main`; audited baseline commit: `03ce2ab`.
+- Secret-pattern scan found no populated Asaas/Supabase key or private key in the tracked candidates.
+- `.gitignore` was reduced to one native rule for the Impeccable live directory and now excludes `.node_modules.clean-backup/`.
+- Vinext build passed; Node tests passed 7/7.
+- Correctness/security review: no ignored secret, dependency tree, build output, operational spreadsheet or preview entered the index.
+- `ponytail-review`: Lean already. Ship.
+- Existing whole-repository `ponytail-audit` reused; not rerun because no product architecture or dependency changed.
 
 ## Next decision
 
-Payment security is now the selected product gate. The immediate executable task remains `APT-001`; then close `APT-002` so secrets have one runtime owner, connect the real APT Supabase project in `APT-003`, and unblock `APT-000`. No billing construction or production key configuration should happen before those targets are unambiguous.
+Payment security remains the selected product gate. `APT-001` is complete. The next decision is `APT-002`: choose the canonical runtime and package manager so secrets have one owner; recommendation remains Vercel Next + npm. Then connect the real APT Supabase project in `APT-003` and unblock `APT-000`. No billing construction or production key configuration should happen before those targets are unambiguous.

@@ -1,7 +1,7 @@
 # APT Brain
 
 Last audited: 2026-08-11  
-State: APT-003 in progress; canonical Supabase and Vercel targets identified
+State: APT-003 complete; APT-004 ready for migration and policy reconciliation
 Rule: plan, review and audit before construction
 
 ## Purpose
@@ -65,7 +65,7 @@ Minimum card-security controls:
 6. Use separate Sandbox and Production keys, minimum access, expiry/rotation and immediate revocation after suspected exposure.
 7. Verify approval, refusal, duplicate webhook, invalid token and timeout paths in Asaas Sandbox before production.
 
-Current gate status: policy and runtime owner are locked. The canonical Supabase and Vercel projects are now identified under `gaagustavo`, but no payment secret is configured. Vercel currently shows no project environment variables. Remote configuration remains blocked until APT-003 finishes and an Asaas Sandbox administrator provides or generates the Asaas credentials through the approved secret-manager flow. No secret value should be pasted into this file or into chat.
+Current gate status: policy and runtime owner are locked. The canonical Supabase and Vercel projects are identified under `gaagustavo`, but no payment secret is configured. Vercel currently shows no project environment variables. Remote configuration remains blocked until APT-004 reconciles the remote security/migration state and an Asaas Sandbox administrator provides or generates the Asaas credentials through the approved secret-manager flow. No secret value should be pasted into this file or into chat.
 
 Review evidence: a repository search found no active APT card fields or PAN/CVV persistence, and the existing API key/webhook token reads are server-side. The known webhook reconciliation defects remain tracked in APT-006, so this is not integration proof. `ponytail-review`: Lean already. Ship. The whole-repository `ponytail-audit` was not repeated because this cycle changed only execution memory, not code, dependencies or structure.
 
@@ -92,7 +92,7 @@ Review evidence: a repository search found no active APT card fields or PAN/CVV 
 | Asaas webhook | CODED, CHECKED statically | Real signed event, reliable reconciliation, lifecycle dates, retry/error evidence |
 | Member portal `/portal` | CODED, CHECKED | Community link rendering, class in profile, logout, reliable paid-through date, real payments |
 | Form versioning | CODED LOCALLY | Product need; remote migration; recommendation is to remove until a second form/editor is approved |
-| Supabase | Project `APT TENNIS CLUB` (`cjwxqfxrkdgmqbomzhkm`) in organization `AI`, `sa-east-1`; 17 public tables with zero estimated rows; 10 historical migrations visible | Security/performance advisor results; reconcile remote July 2025 history with the three local August 2026 migrations before any apply |
+| Supabase | Project `APT TENNIS CLUB` (`cjwxqfxrkdgmqbomzhkm`) in organization `AI`, `sa-east-1`; 17 public tables with zero estimated rows; 10 historical migrations; security advisor 0 errors/33 warnings/8 suggestions; performance advisor 0 errors/34 warnings/16 suggestions | Reconcile remote July 2025 history, exposed objects/RLS warnings and the three local August 2026 migrations before any apply |
 | Deployment | Vercel project `apt-tennis-club` (`prj_gnjjgijeXutKy5vZM5Q0nn9hXnx3`) under `gaagustavo-9339's projects`; six recent previews are Ready; no production deployment and no project environment variables | Connect the approved Git source, configure reviewed variables and authorize a production deployment in later tasks |
 | Tests | 7 static/focused checks pass | Runtime API tests and one sandbox end-to-end happy path plus failure paths |
 | Lint | 15 errors, 20 warnings | Zero-error quality gate |
@@ -103,7 +103,7 @@ Review evidence: a repository search found no active APT card fields or PAN/CVV 
 ### P0 — foundation and release blockers
 
 1. `[RESOLVED — APT-001]` Git `main` now exists at the workspace root with recoverable baseline `03ce2ab`.
-2. The canonical Supabase and Vercel projects are identified, but remote migration history is not reconciled and Supabase advisors are not captured. Migrations and payment secrets still cannot be safely changed.
+2. `[APT-003 COMPLETE; OPEN IN APT-004]` The canonical projects and advisor state are captured, but remote migration history is not reconciled. Security warnings include permissive write policies and public API/GraphQL exposure, so migrations and payment secrets still cannot be safely changed.
 3. Registration creates an Auth user before inserting the member. A failed member insert leaves an orphan user and can block retry with the same email (`app/api/cadastros/route.ts:73-84`).
 4. An Asaas checkout is created before subscription/invitation/application writes complete. A database failure can leave an orphan checkout and conflicting local state (`app/api/cadastros/route.ts:86-125`).
 5. The webhook returns success when no member reference exists, which can stop provider retries without reconciliation (`app/api/webhooks/asaas/route.ts:34-36`).
@@ -167,8 +167,8 @@ Only one task may be `IN_PROGRESS`. Construction starts only after the user sele
 | APT-000 | P0 | BLOCKED | Establish the Asaas Sandbox security baseline in the canonical backend runtime. | Secret names are present without exposed values; Asaas Checkout proves card data stays outside APT/Supabase; invalid-token and duplicate signed webhook checks pass; key owner, expiry and rotation procedure are recorded. | APT-003, Asaas Sandbox administrator access |
 | APT-001 | P0 | DONE | Establish canonical Git repository/worktree and preserve the audited state. | Git `main`; baseline `03ce2ab`; secret scan clean; generated/local files confirmed ignored; build passed; 7/7 tests passed. | — |
 | APT-002 | P0 | DONE | Select Vercel Next and npm; make Next the default build and keep one canonical lockfile. | User decision recorded; Next webpack and native Turbopack builds pass; 7/7 tests pass; package lock matches manifest; pnpm/Vercel override files removed. | — |
-| APT-003 | P0 | IN_PROGRESS | Connect the correct Supabase APT project and inspect current schema/migrations/advisors read-only. | Project ID recorded; tables, migrations, security and performance advisors captured. | Authenticated `gaagustavo` Supabase access in IAB |
-| APT-004 | P0 | PENDING | Reconcile local migrations with the real APT database before applying anything. | Clean migration plan reviewed; no fabricated or duplicate history; rollback/recovery described. | APT-003 |
+| APT-003 | P0 | DONE | Connect the correct Supabase APT project and inspect current schema/migrations/advisors read-only. | Project ID, 17 tables, 10 migrations and both advisor result sets captured in IAB. | — |
+| APT-004 | P0 | READY | Reconcile local migrations with the real APT database before applying anything. | Clean migration and permission plan reviewed; no fabricated or duplicate history; rollback/recovery described; no remote apply. | APT-003 |
 | APT-005 | P0 | PENDING | Remove partial-failure traps from registration and checkout. | Repeatable failure tests prove no orphan Auth user, member, checkout or consumed invitation. | APT-003, APT-004 |
 | APT-006 | P0 | PENDING | Make Asaas webhook reconciliation retry-safe and lifecycle-correct. | Signed sandbox events cover confirmed, overdue, refunded/deleted and duplicate delivery; dates match provider truth. | APT-003, APT-004 |
 | APT-007 | P1 | PENDING | Make application review operational. | Admin reads every answer, records notes/decision and sends or records information requests without false delivery claims. | APT-003 |
@@ -258,17 +258,19 @@ A task is `DONE` only when:
 - `ponytail-review`: Lean already. Ship.
 - Whole-repository `ponytail-audit` refreshed because the canonical runtime and repository structure changed.
 
-## APT-003 progress record — 2026-08-11
+## APT-003 completion record — 2026-08-11
 
 - Canonical Supabase target identified: organization `AI`, project `APT TENNIS CLUB`, reference `cjwxqfxrkdgmqbomzhkm`, production branch `main`, region `sa-east-1`.
 - The public schema contains 17 APT-related tables. Every table displayed zero estimated rows; Realtime was enabled only for `tennis_form_responses` in the captured table list.
 - Supabase shows 10 historical migrations dated from 2025-07-01 through 2025-07-25. Local source contains only `202608070001_apt_hub.sql`, `202608110001_form_versioning.sql` and `202608110002_invite_revocation.sql`; no reconciliation or migration apply has occurred.
-- Supabase Advisor results remain unverified because the dashboard did not finish returning the security page during the read-only inspection. This is a blocker, not evidence of zero findings.
+- Supabase Security Advisor: 0 errors, 33 warnings and 8 suggestions. Captured warnings include mutable function search paths; always-true RLS write policies on `apt_applications`, `ct_survey_responses` and `tennis_form_responses`; broad public listing on `storage.profile-photos`; and public GraphQL visibility including `apt_applications`, `ct_survey_responses`, `matches` and `points_history`.
+- Supabase Performance Advisor: 0 errors, 34 warnings and 16 suggestions. Captured warnings include repeated per-row Auth/RLS initialization on `matches`, `ranking`, `rounds`, `seasons`, `profiles` and `points_history`.
 - Canonical Vercel target identified under `gaagustavo-9339's projects`: `apt-tennis-club`, project ID `prj_gnjjgijeXutKy5vZM5Q0nn9hXnx3`, domain `apt-tennis-club.vercel.app`.
 - Vercel shows no project environment variables and no production deployment. The failed production attempt `GW7hU8kGL` from 2026-08-08 stopped on the retired `cloudflare:workers` import in `lib/supabase-server.ts`; that import is absent from current local source after APT-002. Six later preview deployments display `Ready`. No variable, deployment, domain or project setting was changed.
 - User corrected the durable boundary: continue all browser work in IAB and only in accounts tied to `gaagustavo`.
-- `ponytail-review`: the target discovery avoided duplicate project creation; no code, dependency or repository structure changed. Reuse the latest whole-repository `ponytail-audit`.
+- Correctness/security review: APT-003 is complete as a read-only discovery task, but the warning counts and exposed objects are production blockers assigned to APT-004; zero advisor errors does not mean the database is secure.
+- `ponytail-review`: the target discovery avoided duplicate project creation and did not mix remediation into inspection. No code, dependency or repository structure changed; reuse the latest whole-repository `ponytail-audit`.
 
 ## Next decision
 
-Payment security remains the selected product gate. `APT-003` is active with both canonical projects identified under `gaagustavo`; Vercel inspection is complete. The next step is to authenticate the `gaagustavo` Supabase account in IAB and capture security/performance advisors. Then APT-004 can reconcile remote and local migration histories. An Asaas Sandbox administrator is still required to unblock APT-000. No billing construction, migration, deployment or production key configuration should happen before these checks pass.
+Payment security remains the selected product gate. `APT-003` is complete and `APT-004` is now READY. The next task must reconcile the 10 remote migrations, three local migrations, RLS policies and public API/GraphQL exposure without applying changes. An Asaas Sandbox administrator is still required to unblock APT-000. No billing construction, migration, deployment or production key configuration should happen before the APT-004 plan is reviewed.

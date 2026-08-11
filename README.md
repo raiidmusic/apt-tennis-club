@@ -49,13 +49,13 @@ Use o mesmo `ASAAS_WEBHOOK_TOKEN` como `authToken` do webhook. O sistema valida 
 
 ## Desenvolvimento
 
-O projeto usa vinext/Cloudflare. Neste workspace, o Node pode ser chamado pelo runtime do Codex:
+O runtime canônico é Next.js na Vercel e o package manager é npm:
 
 ```bash
-node node_modules/vinext/dist/cli.js dev
-node node_modules/vinext/dist/cli.js build
-node node_modules/typescript/bin/tsc --noEmit
-node --test tests/rendered-html.test.mjs
+npm install
+npm run dev
+npm run build
+npm test
 ```
 
 ## Segurança do MVP

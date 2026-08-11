@@ -20,11 +20,13 @@ Centralizar fora do aplicativo esportivo a relação do APT com seus integrantes
 
 - `/` — landing page pública que apresenta o APT e conduz ao requerimento.
 - `/requerimento` — formulário de entrada, uma pergunta por vez, sem CPF ou dados de pagamento.
-- `/gestao` — análise interna; a aprovação gera um link individual de cadastro.
-- `/cadastro?convite=...` — cadastro exclusivo do aprovado, com CPF e preparação da assinatura.
+- `/gestao` — análise interna; a aprovação gera um link individual de cadastro. A gestão também importa atletas atuais por CSV, sem CPF, e gera links individuais de recadastro.
+- `/cadastro?convite=...` — cadastro exclusivo do aprovado ou recadastro de atleta pré-carregado. O atleta confirma contato, informa CPF e cria acesso antes de seguir para a assinatura recorrente no checkout hospedado do Asaas.
 - `/portal` — área financeira e operacional do integrante.
 
 Essas jornadas não compartilham um menu público. O candidato não vê cadastro, portal ou gestão durante o requerimento.
+
+Atletas importados não recebem respostas de requerimento inventadas. Até o recadastro, o membro existe sem CPF, identidade Auth ou cobrança. O APT persiste apenas o hash e os quatro últimos dígitos do CPF; PAN, validade e CVV nunca entram no sistema.
 
 ## Positioning
 

@@ -13,6 +13,7 @@ export async function asaasRequest(path: string, init: RequestInit = {}) {
   const { apiKey, apiBaseUrl } = asaasConfig();
   return fetch(`${apiBaseUrl}${path}`, {
     ...init,
+    signal: init.signal || AbortSignal.timeout(15_000),
     headers: {
       accept: "application/json",
       "Content-Type": "application/json",

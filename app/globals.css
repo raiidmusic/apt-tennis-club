@@ -339,6 +339,7 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .enrollment-form { max-width: 56rem; margin-top: 2.5rem; }
 .fields-grid { display: grid; gap: 1.5rem; }
 .field-label--compact input { min-height: 3.5rem; font-size: 1rem; }
+.field-label--compact input[readonly] { color: var(--muted); background: var(--surface-muted); cursor: not-allowed; }
 .plan-row { display: flex; flex-direction: column; gap: 1rem; margin-top: 2.5rem; padding: 1.25rem 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .plan-row > div { display: grid; gap: 0.2rem; }
 .plan-row > div > span, .plan-row small { color: var(--muted); font-size: 0.76rem; }
@@ -432,6 +433,19 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .empty-state span, .loading-state span { color: var(--muted); font-size: 0.82rem; }
 .empty-state--bordered { margin-top: 1.5rem; border: 1px solid var(--line); background: var(--white); }
 .search-field input { min-height: 3rem; padding: 0.5rem 0; font-size: 0.9rem; }
+.member-import-panel { display: grid; gap: 1rem; margin-top: 1.5rem; padding: 1.25rem; border: 1px solid var(--line); background: var(--white); }
+.member-import-panel > div:first-child { display: grid; gap: 0.25rem; }
+.member-import-panel > div:first-child > span { color: var(--clay-dark); font-size: 0.72rem; font-weight: 790; letter-spacing: 0.08em; text-transform: uppercase; }
+.member-import-panel h3 { margin: 0; font-size: 1.1rem; }
+.member-import-panel p { max-width: 52rem; margin: 0; color: var(--muted); font-size: 0.82rem; }
+.member-import-file { width: max-content; cursor: pointer; }
+.member-import-file input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.member-import-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--line); }
+.member-import-summary > div { display: grid; gap: 0.15rem; padding: 0.8rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.member-import-summary span, .member-import-complete > span { color: var(--muted); font-size: 0.72rem; }
+.member-import-summary strong { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+.member-import-complete { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 1rem; background: var(--success-surface); }
+.member-import-complete .secondary-button { margin-left: auto; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; min-width: 50rem; border-collapse: collapse; text-align: left; }
 th { padding: 0.85rem 1rem; color: var(--muted); font-size: 0.7rem; font-weight: 760; letter-spacing: 0.05em; text-transform: uppercase; }
@@ -478,6 +492,9 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .membership-hero > button { align-self: end; }
   .payment-method { flex-direction: row; align-items: center; justify-content: space-between; }
   .signal-strip { grid-template-columns: repeat(4, 1fr); }
+  .member-import-panel { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+  .member-import-panel > .loading-state, .member-import-panel > .field-error, .member-import-panel > .member-import-summary, .member-import-panel > .primary-button, .member-import-panel > .member-import-complete { grid-column: 1 / -1; }
+  .member-import-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .signal-strip > div { min-height: 8rem; border-right: 1px solid var(--line); border-bottom: 0; }
   .signal-strip > div:last-child { border-right: 0; }
   .candidate-row { grid-template-columns: minmax(16rem, 1.2fr) minmax(9rem, 0.8fr) auto; align-items: center; }

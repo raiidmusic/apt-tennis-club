@@ -1,7 +1,7 @@
 # APT Brain
 
 Last audited: 2026-08-11  
-State: APT-003 complete; APT-004 ready for migration and policy reconciliation
+State: APT-021 in verification; local build complete, external gates pending
 Rule: plan, review and audit before construction
 
 ## Purpose
@@ -41,6 +41,10 @@ Twinner remains responsible for ranking and matches. Supabase is the intended ca
 | D-012 | Payment secrets have separate ownership and values: Asaas generates `ASAAS_API_KEY`; Asaas generates or accepts the webhook `authToken`; APT generates `CPF_HASH_SECRET`. None may be reused, exposed to the browser, committed, logged or stored in application tables. | CONFIRMED | Asaas authentication/webhook docs; Supabase secrets docs; `.env.example` |
 | D-013 | APT and Supabase must never receive or store card PAN, expiry, CVV or a reusable card token. Card entry and card changes remain entirely inside hosted Asaas pages. | CONFIRMED | Asaas Checkout and PCI-DSS docs; current checkout flow and schema search |
 | D-014 | APT external projects and browser operations must use accounts tied to `gaagustavo`; do not use Guedes Associados/Kelly Guedes accounts. Continue browser work in the Codex in-app browser (IAB), not Chrome. | CONFIRMED | explicit user decision 2026-08-11 |
+| D-015 | Preserve the real remote migration history. Reconcile drift with reviewed forward-only migrations; never fabricate, copy or mark historical migrations as applied. | CONFIRMED | APT-004 remote/local reconciliation |
+| D-016 | Keep the eight APT Hub tables server-only: RLS enabled, no `anon`/`authenticated` table privileges, explicit `service_role` access. Grants and RLS are separate controls and both must be verified. | CONFIRMED | current callers and remote policy inspection |
+| D-017 | A credential embedded in historical SQL is permanently compromised. Containment requires session revocation before account disable/delete, removal of the legacy Auth trigger/function path and rotation of any reused credential. | CONFIRMED | APT-004 migration and Auth inspection |
+| D-018 | Existing athletes enter as preloaded members with no CPF, Auth identity or billing record. A hashed individual invite unlocks recadastro; CPF is then stored only as hash plus last four digits and card entry remains in hosted Asaas Checkout. Do not fabricate application answers for imported athletes. | CONFIRMED | explicit user priority 2026-08-11; roster and current-flow audit |
 
 ## Payment security gate — selected 2026-08-11
 
@@ -65,7 +69,7 @@ Minimum card-security controls:
 6. Use separate Sandbox and Production keys, minimum access, expiry/rotation and immediate revocation after suspected exposure.
 7. Verify approval, refusal, duplicate webhook, invalid token and timeout paths in Asaas Sandbox before production.
 
-Current gate status: policy and runtime owner are locked. The canonical Supabase and Vercel projects are identified under `gaagustavo`, but no payment secret is configured. Vercel currently shows no project environment variables. Remote configuration remains blocked until APT-004 reconciles the remote security/migration state and an Asaas Sandbox administrator provides or generates the Asaas credentials through the approved secret-manager flow. No secret value should be pasted into this file or into chat.
+Current gate status: policy and runtime owner are locked. The canonical Supabase and Vercel projects are identified under `gaagustavo`, but no payment secret is configured. Vercel currently shows no project environment variables. APT-004 completed the read-only reconciliation plan; Asaas configuration remains blocked until an Asaas Sandbox administrator provides or generates the credentials through the approved secret-manager flow. No secret value should be pasted into this file or into chat.
 
 Review evidence: a repository search found no active APT card fields or PAN/CVV persistence, and the existing API key/webhook token reads are server-side. The known webhook reconciliation defects remain tracked in APT-006, so this is not integration proof. `ponytail-review`: Lean already. Ship. The whole-repository `ponytail-audit` was not repeated because this cycle changed only execution memory, not code, dependencies or structure.
 
@@ -88,13 +92,13 @@ Review evidence: a repository search found no active APT card fields or PAN/CVV 
 | Admin login `/entrar` | CODED, CHECKED | Session refresh/expiry UX, production auth verification, visible logout |
 | Management `/gestao` | CODED, CHECKED | Full application detail, notes, information-request action, member editing, Twinner/community links |
 | Invitation approval | CODED, CHECKED | Applied revocation migration, real email/manual-copy test, retry behavior |
-| Private registration `/cadastro` | CODED, CHECKED | Compensation for partial Auth/DB/Asaas failures; callback states; real sandbox checkout |
-| Asaas webhook | CODED, CHECKED statically | Real signed event, reliable reconciliation, lifecycle dates, retry/error evidence |
+| Private registration `/cadastro` | CODED, CHECKED; imported-member recadastro and checkout-attempt lock added locally | Apply reviewed migration; valid-invite visual check; real Sandbox checkout and failure-path proof |
+| Asaas webhook | CODED, CHECKED; provider re-query, retryable event record and lifecycle reconciliation added locally | Real signed Sandbox events and concurrent/timeout evidence |
 | Member portal `/portal` | CODED, CHECKED | Community link rendering, class in profile, logout, reliable paid-through date, real payments |
 | Form versioning | CODED LOCALLY | Product need; remote migration; recommendation is to remove until a second form/editor is approved |
-| Supabase | Project `APT TENNIS CLUB` (`cjwxqfxrkdgmqbomzhkm`) in organization `AI`, `sa-east-1`; 17 public tables with zero estimated rows; 10 historical migrations; security advisor 0 errors/33 warnings/8 suggestions; performance advisor 0 errors/34 warnings/16 suggestions | Reconcile remote July 2025 history, exposed objects/RLS warnings and the three local August 2026 migrations before any apply |
+| Supabase | Project `APT TENNIS CLUB` (`cjwxqfxrkdgmqbomzhkm`) in organization `AI`, `sa-east-1`; 17 public tables with zero estimated rows; 10 historical migrations; eight APT Hub tables are API-disabled; security advisor 0 errors/33 warnings/8 suggestions; performance advisor 0 errors/34 warnings/16 suggestions | Contain the compromised legacy admin path, remove premature local form versioning, then fold the four local migrations into one validated forward-only reconciliation before any apply |
 | Deployment | Vercel project `apt-tennis-club` (`prj_gnjjgijeXutKy5vZM5Q0nn9hXnx3`) under `gaagustavo-9339's projects`; six recent previews are Ready; no production deployment and no project environment variables | Connect the approved Git source, configure reviewed variables and authorize a production deployment in later tasks |
-| Tests | 7 static/focused checks pass | Runtime API tests and one sandbox end-to-end happy path plus failure paths |
+| Tests | 10 static/focused checks pass; typecheck and production build pass | Runtime API tests and one sandbox end-to-end happy path plus failure paths |
 | Lint | 15 errors, 20 warnings | Zero-error quality gate |
 | Version control | Git `main`; recoverable baseline `03ce2ab` | Remote owner is not configured; not required for the local baseline |
 
@@ -103,12 +107,12 @@ Review evidence: a repository search found no active APT card fields or PAN/CVV 
 ### P0 — foundation and release blockers
 
 1. `[RESOLVED — APT-001]` Git `main` now exists at the workspace root with recoverable baseline `03ce2ab`.
-2. `[APT-003 COMPLETE; OPEN IN APT-004]` The canonical projects and advisor state are captured, but remote migration history is not reconciled. Security warnings include permissive write policies and public API/GraphQL exposure, so migrations and payment secrets still cannot be safely changed.
-3. Registration creates an Auth user before inserting the member. A failed member insert leaves an orphan user and can block retry with the same email (`app/api/cadastros/route.ts:73-84`).
-4. An Asaas checkout is created before subscription/invitation/application writes complete. A database failure can leave an orphan checkout and conflicting local state (`app/api/cadastros/route.ts:86-125`).
-5. The webhook returns success when no member reference exists, which can stop provider retries without reconciliation (`app/api/webhooks/asaas/route.ts:34-36`).
-6. Webhook updates do not prove the member/subscription rows existed before recording the event as processed (`app/api/webhooks/asaas/route.ts:37-97`).
-7. `current_period_end` is used to preserve paid access but is never populated by the current webhook flow (`app/api/portal/route.ts:28-32`).
+2. `[APT-004 COMPLETE; OPEN IN APT-018/APT-019]` Remote/local drift is mapped. A legacy migration contains an administrative credential, the corresponding Auth user remains present, and legacy Auth functions/triggers and permissive public policies remain exposed. Containment must precede schema construction or production billing.
+3. `[CODED IN APT-021; VERIFY IN SANDBOX]` Auth creation is now compensated if the member write fails, while preloaded members persist CPF hash/contact before Auth and can resume the flow without creating another member.
+4. `[CODED IN APT-021; VERIFY IN SANDBOX]` The subscription row exists before the Checkout POST, one conditional database claim owns the attempt, inconclusive responses block automatic retry and a returned checkout is cancelled if its database persistence fails.
+5. `[CODED IN APT-021; VERIFY IN SANDBOX]` A webhook without a valid member reference or local subscription returns failure so Asaas retries instead of accepting an unreconciled event.
+6. `[CODED IN APT-021; VERIFY IN SANDBOX]` Webhook events are persisted as unprocessed, business state is reconciled idempotently and `processed_at` is set only after success; failures retain an error and remain retryable.
+7. `[CODED IN APT-021; VERIFY IN SANDBOX]` Confirmed/received payments re-query the current Asaas payment and subscription, then record the provider's `nextDueDate` as the local paid-through boundary.
 
 ### P1 — core operational gaps
 
@@ -144,8 +148,9 @@ Tracked-tree snapshot refreshed after the APT-002 runtime decision on 2026-08-11
 5. `delete:` unused 86-line ChatGPT header-auth helper has no callers and competes with Supabase Auth. Replacement: nothing. [`app/chatgpt-auth.ts`]
 6. `delete:` unused Tailwind toolchain while active CSS is plain CSS and PostCSS has no plugins. Replacement: native CSS. [`tailwindcss`, `@tailwindcss/postcss`, `postcss.config.mjs`]
 7. `delete:` nine unreferenced starter/legacy public assets after visual comparison. Replacement: referenced approved assets only. [`public/apt-hero.jpg`, `apt-motion.jpg`, `apt-ritual.jpg`, `favicon.svg`, `file.svg`, `globe.svg`, `logo-apt3.svg`, `og 2.png`, `window.svg`]
+8. `delete after use:` the CSV import panel, endpoint, parser and import-only CSS once the audited legacy roster has been imported and its links exported. Replacement: the normal application/approval flow for future members. [`app/api/membros/importacao/route.ts`, `lib/member-import.ts`, `MemberImportPanel`, related CSS/tests]
 
-net: about -1,320 source lines, -11 direct dependencies and 9 assets possible.
+net: about -1,570 source lines, -11 direct dependencies and 9 assets possible after the one-time roster transition.
 
 ## Ponytail review — recent form/versioning change
 
@@ -164,13 +169,13 @@ Only one task may be `IN_PROGRESS`. Construction starts only after the user sele
 
 | ID | Priority | Status | Outcome | Acceptance evidence | Depends on |
 |---|---:|---|---|---|---|
-| APT-000 | P0 | BLOCKED | Establish the Asaas Sandbox security baseline in the canonical backend runtime. | Secret names are present without exposed values; Asaas Checkout proves card data stays outside APT/Supabase; invalid-token and duplicate signed webhook checks pass; key owner, expiry and rotation procedure are recorded. | APT-003, Asaas Sandbox administrator access |
+| APT-000 | P0 | BLOCKED | Establish the Asaas Sandbox security baseline in the canonical backend runtime. | Secret names are present without exposed values; Asaas Checkout proves card data stays outside APT/Supabase; invalid-token and duplicate signed webhook checks pass; key owner, expiry and rotation procedure are recorded. | APT-004, Asaas Sandbox administrator access |
 | APT-001 | P0 | DONE | Establish canonical Git repository/worktree and preserve the audited state. | Git `main`; baseline `03ce2ab`; secret scan clean; generated/local files confirmed ignored; build passed; 7/7 tests passed. | — |
 | APT-002 | P0 | DONE | Select Vercel Next and npm; make Next the default build and keep one canonical lockfile. | User decision recorded; Next webpack and native Turbopack builds pass; 7/7 tests pass; package lock matches manifest; pnpm/Vercel override files removed. | — |
 | APT-003 | P0 | DONE | Connect the correct Supabase APT project and inspect current schema/migrations/advisors read-only. | Project ID, 17 tables, 10 migrations and both advisor result sets captured in IAB. | — |
-| APT-004 | P0 | READY | Reconcile local migrations with the real APT database before applying anything. | Clean migration and permission plan reviewed; no fabricated or duplicate history; rollback/recovery described; no remote apply. | APT-003 |
-| APT-005 | P0 | PENDING | Remove partial-failure traps from registration and checkout. | Repeatable failure tests prove no orphan Auth user, member, checkout or consumed invitation. | APT-003, APT-004 |
-| APT-006 | P0 | PENDING | Make Asaas webhook reconciliation retry-safe and lifecycle-correct. | Signed sandbox events cover confirmed, overdue, refunded/deleted and duplicate delivery; dates match provider truth. | APT-003, APT-004 |
+| APT-004 | P0 | DONE | Reconcile local migrations with the real APT database before applying anything. | Ten remote and three local migrations mapped; grants, RLS, functions, triggers and Auth exposure inspected; forward-only recovery plan reviewed; no remote apply. | APT-003 |
+| APT-005 | P0 | PENDING | Remove partial-failure traps from registration and checkout. | Repeatable failure tests prove no orphan Auth user, member, checkout or consumed invitation. | APT-000, APT-019 |
+| APT-006 | P0 | PENDING | Make Asaas webhook reconciliation retry-safe and lifecycle-correct. | Signed sandbox events cover confirmed, overdue, refunded/deleted and duplicate delivery; dates match provider truth. | APT-000, APT-019 |
 | APT-007 | P1 | PENDING | Make application review operational. | Admin reads every answer, records notes/decision and sends or records information requests without false delivery claims. | APT-003 |
 | APT-008 | P1 | PENDING | Make member management operational. | Admin updates Twinner/community links and allowed participation states with audit records. | APT-003 |
 | APT-009 | P1 | PENDING | Complete registration callback and retry UX. | Success/cancel/expired states render correctly and retry does not duplicate identity or billing. | APT-005, APT-006 |
@@ -182,19 +187,25 @@ Only one task may be `IN_PROGRESS`. Construction starts only after the user sele
 | APT-015 | P2 | PENDING | Add the smallest runtime tests for trust and money boundaries. | One runnable check per application, invite, registration, webhook and cancellation flow. | APT-005, APT-006 |
 | APT-016 | P2 | PENDING | Verify every user journey visually and end to end. | Mobile and desktop browser evidence; API/data evidence; no console errors; exact live target recorded. | APT-003 through APT-015 as applicable |
 | APT-017 | P2 | PENDING | Configure production services and observability. | Supabase, Asaas, Resend, domain, webhook and failure logs verified in the chosen target. | APT-002, APT-003, APT-006 |
+| APT-018 | P0 | READY | Contain the compromised legacy Supabase administrator and Auth automation path. | Pre-change backup recorded; sessions revoked before account disable/delete; any reused credential rotated; legacy Auth trigger and unnecessary definer functions removed with explicit function grants; a controlled Auth signup creates no legacy profile; advisors and logs reviewed. | APT-004, explicit destructive-action approval |
+| APT-019 | P0 | PENDING | Apply the approved forward-only schema, grant and legacy-surface reconciliation outside production first. | Isolated validation proves the eight canonical tables and constraints, invite revocation, explicit grants/default privileges and RLS; no public legacy data surface, fake history or form-CMS schema; dump diff and advisors reviewed before a separately authorized production apply. | APT-013, APT-018, legacy-data disposition decision |
+| APT-020 | P0 | DROPPED | Start August 2026 collection directly in Asaas while APT automation remains gated. | Replaced by APT-021 after the user required athletes to enter APT and complete their own CPF recadastro before recurrence. | Replaced by APT-021 |
+| APT-021 | P0 | VERIFY | Import current athletes and issue an individual recadastro that creates one hosted monthly Asaas recurrence. | Import preview accepts the validated active roster, deduplicates by normalized email and never imports CPF/card data; each stored token is hashed and revocable; the athlete confirms contact data, enters CPF and creates access; only CPF hash/last four persist; retries do not duplicate Auth, member, checkout or subscription; invalid/expired token and Asaas failure paths pass; full flow is proven in Sandbox before separately authorized production charging. | APT-004; production rollout also requires APT-018, APT-019, Asaas credentials and billing terms |
 
 ## Recommended execution sequence
 
 1. `APT-001` — DONE: recover safe history.
 2. `APT-002` — DONE: Vercel Next + npm; payment secrets belong to Vercel.
-3. `APT-003` and `APT-004` — connect and reconcile the real database.
-4. `APT-000` — configure and prove the Asaas Sandbox security gate before billing implementation.
-5. `APT-013` — remove the premature form CMS unless there is a real near-term editor requirement.
-6. `APT-011` — make the baseline green.
-7. `APT-005` and `APT-006` — secure identity and money flows before expanding UI.
-8. `APT-007` through `APT-010` — complete operational features.
-9. `APT-014` — settle landing content and structure.
-10. `APT-015` through `APT-017` — runtime tests, full verification and live operations.
+3. `APT-003` and `APT-004` — DONE: canonical targets and remote/local drift mapped without mutation.
+4. `APT-021` — build the import and individual recadastro path now; do not generate a real checkout during construction.
+5. `APT-018` — contain the exposed legacy administrator and Auth automation before the first imported athlete creates an identity.
+6. `APT-000` — configure and prove the Asaas Sandbox security gate as soon as an Asaas administrator is available.
+7. `APT-013`, then `APT-019` — remove the premature form CMS locally and validate one forward-only database reconciliation including the APT-021 schema.
+8. `APT-005` and `APT-006` — close the remaining registration and webhook compensation/reconciliation defects; APT-021 shares these gates.
+9. `APT-011` — make the baseline green.
+10. `APT-007` through `APT-010` — complete operational features.
+11. `APT-014` — settle landing content and structure.
+12. `APT-015` through `APT-017` — runtime tests, full verification and live operations.
 
 ## Task lifecycle
 
@@ -235,6 +246,9 @@ A task is `DONE` only when:
 - When the repository structure has not changed, reuse this audit instead of repeating it. Rerun after dependency, runtime or major architecture changes.
 - The initial Git baseline excludes `.env*`, dependencies, builds, local live sessions, backups, operational spreadsheets and previews; do not force-add them.
 - Browser work must stay in IAB and external targets must belong to `gaagustavo`; a similarly named project in a Guedes Associados/Kelly Guedes account is not an acceptable target.
+- Never repeat a secret discovered in Git or migration history. Treat it as compromised, record only the exposure class, and rotate/revoke through an explicitly authorized containment task.
+- Remote row estimates are discovery signals, not backup evidence. Destructive cleanup requires an export/snapshot and an explicit data-disposition decision.
+- `CREATE TABLE IF NOT EXISTS` is not schema reconciliation: it can silently preserve wrong constraints, grants and indexes on an existing table.
 
 ## APT-001 completion record — 2026-08-11
 
@@ -271,6 +285,37 @@ A task is `DONE` only when:
 - Correctness/security review: APT-003 is complete as a read-only discovery task, but the warning counts and exposed objects are production blockers assigned to APT-004; zero advisor errors does not mean the database is secure.
 - `ponytail-review`: the target discovery avoided duplicate project creation and did not mix remediation into inspection. No code, dependency or repository structure changed; reuse the latest whole-repository `ponytail-audit`.
 
+## APT-004 completion record — 2026-08-11
+
+- Scope remained read-only. No migration, user, function, policy, grant, secret or deployment was changed.
+- Remote truth contains ten July 2025 migrations for a legacy tennis/ranking and public-form system. Local truth contains three August 2026 migrations for the APT Hub, form versioning and invite revocation. The remote history must remain unchanged.
+- The eight canonical APT Hub tables already exist remotely with RLS enabled, client API access disabled and no policies. Current application callers use the server-only Supabase secret, so this is the intended permission boundary.
+- The canonical core migration is absent from remote history even though its eight tables exist. Applying it blindly would not reconcile existing constraints because it relies on `CREATE TABLE IF NOT EXISTS`; fabricating an applied migration record is prohibited.
+- Remote `invites` lacks `revoked_at`, so the local revocation migration is unapplied. The four form-versioning tables are absent, which matches the recommendation to remove that premature feature in APT-013 before any database apply.
+- Three legacy intake tables allow unrestricted public insert and select. Legacy ranking/profile tables retain broad policies, a public profile-photo bucket remains listed, and four functions have mutable `search_path`; two functions run as `SECURITY DEFINER`.
+- A historical migration embeds an administrative credential and creates its Auth user. The user still exists. The secret was not copied into this Brain or chat and must be treated as permanently compromised. A legacy Auth-user trigger can also create an unwanted profile during current APT registration.
+- Local tooling has no Supabase CLI or `supabase/config.toml`; APT-019 must first obtain a canonical schema/grant dump in an isolated, reviewed environment rather than improvising remote history.
+- Recovery boundary: record a logical backup/snapshot and current grants/policies before mutation; test forward changes in an isolated branch/project; if validation fails, stop and restore into an isolated target or issue a corrective forward migration. Do not use destructive history rewrites as rollback.
+- Approved plan: APT-018 contains the credential and Auth trigger first; APT-013 removes local form CMS scope; APT-019 creates one reviewed forward-only reconciliation for exact core constraints/indexes, invite revocation, explicit grants/default privileges, function execution privileges and approved legacy cleanup. Production application remains separately authorized.
+- Correctness/security review: explicit table grants and RLS are treated as independent controls; `PUBLIC` function execution and definer-function `search_path` must be reviewed; user sessions must be revoked before disabling/deleting the compromised account; estimated zero rows do not authorize data deletion.
+- `ponytail-review`: do not import ten legacy migrations, add a parallel schema, install dependencies or apply all three local migrations. The smallest correct path is one containment task plus one forward reconciliation after the existing form-versioning deletion. Lean already. Ship.
+- Whole-repository `ponytail-audit` was not repeated because this cycle changed execution memory only; the latest structural audit remains current.
+
+## APT-021 progress record — 2026-08-11
+
+- Source workbook reconciled visually and structurally: 53 athletes total, 35 active, 17 inactive and one status to review. All 35 active athletes have e-mail, 34 have phone and none has CPF.
+- Prepared import CSV contains only the 35 active names, normalized e-mails, phone numbers and `ATIVO` status. It contains no CPF, payment or inactive-athlete data and passes the same parser with 35 accepted and zero rejected rows.
+- The management import performs a preview, normalizes and deduplicates by e-mail, requires an admin session, imports no CPF/card field and generates a new seven-day individual token stored only as SHA-256. Previous unused member invitations are revoked.
+- Existing-athlete onboarding reuses `/cadastro?convite=...`; it does not create fake applications. The e-mail from the invite is locked, contact data may be corrected, CPF is validated and only its keyed hash and last four digits persist.
+- `ASAAS_MONTHLY_VALUE` has no fallback price. The recadastro displays the configured BRL amount and keeps the checkout button disabled until management explicitly configures a positive value.
+- The checkout remains hosted by Asaas with `RECURRENT` and `MONTHLY`. A conditional database claim prevents two simultaneous attempts; inconclusive calls stop automatic retry; a returned checkout is cancelled if its local persistence fails.
+- Webhooks now persist an unprocessed event before reconciliation, query current payment/subscription truth from Asaas, require existing member/subscription rows, update lifecycle state, and mark the event processed only after success. Duplicate processed events return without a second business effect.
+- No new package or alternate onboarding system was added. New source is one shared CSV normalizer, one admin import endpoint, one additive local migration and the extensions to the existing management/registration/webhook surfaces.
+- Verification: prepared CSV 35 accepted/zero rejected; 10/10 focused tests passed; TypeScript passed; Next 16.2.6 production build passed after providing the bundled Node runtime and network access for Poppins. Local IAB rendered `/cadastro`; invalid-token state and card-boundary copy were present. A valid invite/admin import view cannot be verified until the migration and an authenticated non-production target exist.
+- Correctness/security review: no populated secret was introduced; raw tokens are returned only once; CSV export neutralizes spreadsheet-formula prefixes; CPF is transient in the request and not logged or persisted raw; the import route is admin-only and capped; production mutation and real charging remain disabled.
+- `ponytail-review`: reuse of members, invites, `/cadastro`, subscriptions and webhook tables avoids a second onboarding domain. The CSV importer is justified only for the current roster and must be deleted after successful import/export. No new dependency is justified. Lean enough to verify; do not ship before the external gates.
+- Whole-repository `ponytail-audit` refreshed because a route, shared helper and migration were added. Existing deletion candidates remain; the only new debt is the explicitly temporary roster importer.
+
 ## Next decision
 
-Payment security remains the selected product gate. `APT-003` is complete and `APT-004` is now READY. The next task must reconcile the 10 remote migrations, three local migrations, RLS policies and public API/GraphQL exposure without applying changes. An Asaas Sandbox administrator is still required to unblock APT-000. No billing construction, migration, deployment or production key configuration should happen before the APT-004 plan is reviewed.
+APT-004 is complete and APT-021 is locally built but not integrated. Real rollout requires, in order: approve the one unresolved roster status and the final 35-person active set; approve monthly price and first due date; execute APT-018 containment; validate/apply APT-019 in a non-production target; configure Supabase/Asaas/CPF secrets in Vercel; prove recadastro, duplicate/timeout and signed webhook paths in Asaas Sandbox; then authorize the production import and real recurring checkouts. No real athlete, CPF or charge has been created yet.

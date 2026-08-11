@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { AthleteImportInput, parseAthleteCsv } from "../lib/member-import";
 
 type QuestionType = "text" | "email" | "tel" | "number" | "choice" | "multi" | "textarea";
 type AnswerValue = string | string[];
@@ -85,6 +86,16 @@ type FormDefinition = {
     questions: Array<{ id: string; key: string; position: number; title: string; helper?: string | null; type: string; required: boolean }>;
   } | null;
 };
+
+type MemberImportSummary = {
+  activeRows: number;
+  newMembers: number;
+  pendingExisting: number;
+  alreadyRegistered: number;
+  rejected: number;
+};
+
+type MemberInvitation = { id: string; name: string; email: string; whatsapp: string; url: string };
 
 export function Brand({ inverse = false, large = false }: { inverse?: boolean; large?: boolean }) {
   const source = large
@@ -342,29 +353,51 @@ function formatCpf(value: string) { return value.replace(/(\d{3})(\d)/, "$1.$2")
 export function EnrollmentPage() {
   const [submitted, setSubmitted] = useState(false);
   const [cpf, setCpf] = useState("");
-  const [inviteToken, setInviteToken] = useState("");
+  const inviteToken = useRef("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [recadastro, setRecadastro] = useState(false);
+  const [monthlyValue, setMonthlyValue] = useState<number | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [paymentLink, setPaymentLink] = useState("");
-  useEffect(() => { setInviteToken(new URLSearchParams(window.location.search).get("convite") || ""); }, []);
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("convite") || "";
+    inviteToken.current = token;
+    if (!token) { setProfileLoading(false); return; }
+    fetch(`/api/cadastros?convite=${encodeURIComponent(token)}`)
+      .then(async (response) => {
+        const payload = await response.json() as { name?: string; email?: string; phone?: string; recadastro?: boolean; monthlyValue?: number | null; checkoutUrl?: string; error?: string };
+        if (!response.ok) throw new Error(payload.error || "Este convite não pôde ser validado.");
+        setName(payload.name || ""); setEmail(payload.email || ""); setPhone(payload.phone || "");
+        setRecadastro(Boolean(payload.recadastro)); setMonthlyValue(payload.monthlyValue || null); setPaymentLink(payload.checkoutUrl || "");
+      })
+      .catch((validationError) => setError(validationError instanceof Error ? validationError.message : "Este convite não pôde ser validado."))
+      .finally(() => setProfileLoading(false));
+  }, []);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSubmitting(true); setError(""); const data = new FormData(event.currentTarget);
-    try { const response = await fetch("/api/cadastros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inviteToken, name: data.get("name"), cpf, email: data.get("email"), phone: data.get("phone"), password: data.get("password"), consent: data.get("consent") === "on" }) }); const payload = await response.json() as { error?: string; checkoutUrl?: string }; if (!response.ok) throw new Error(payload.error || "Não foi possível concluir o cadastro."); setPaymentLink(payload.checkoutUrl || ""); setSubmitted(true); }
+    try { const response = await fetch("/api/cadastros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inviteToken: inviteToken.current, name, cpf, email, phone, password: data.get("password"), consent: data.get("consent") === "on" }) }); const payload = await response.json() as { error?: string; checkoutUrl?: string }; if (!response.ok) throw new Error(payload.error || "Não foi possível concluir o cadastro."); setPaymentLink(payload.checkoutUrl || ""); setSubmitted(true); }
     catch (submissionError) { setError(submissionError instanceof Error ? submissionError.message : "Não foi possível concluir o cadastro."); }
     finally { setSubmitting(false); }
   }
+  if (paymentLink && !submitted) return <div className="apt-app"><RouteHeader label="Recadastro APT" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Recadastro concluído</p><h1>Sua assinatura está pronta para ativação.</h1><p>Continue no ambiente seguro do Asaas. O APT não recebe nem armazena os dados completos do seu cartão.</p><a className="primary-button" href={paymentLink}>Abrir checkout seguro <span aria-hidden="true">↗</span></a></main></div>;
   if (submitted) return <div className="apt-app"><RouteHeader label="Cadastro do aprovado" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Cadastro recebido</p><h1>{paymentLink ? "Sua assinatura está pronta para ativação." : "Seus dados foram vinculados ao requerimento."}</h1><p>{paymentLink ? "Conclua o pagamento no ambiente seguro do Asaas. O APT não recebe nem armazena os dados completos do seu cartão." : "A cobrança será liberada quando valor e vencimento forem confirmados pela gestão."}</p>{paymentLink ? <a className="primary-button" href={paymentLink}>Abrir checkout seguro <span aria-hidden="true">↗</span></a> : <a className="secondary-button" href="/">Voltar ao site</a>}</main></div>;
   return <div className="apt-app"><RouteHeader label="Cadastro do aprovado" /><main className="enrollment-page" id="main-content">
-    <aside className="enrollment-intro"><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Jogador segura uma bola e uma raquete junto à rede" /><div className="enrollment-intro__shade" /><div><span>Link privado</span><h1>Você foi aprovado. Agora, vamos ativar sua participação.</h1><p>Dados financeiros e CPF ficam separados do requerimento inicial.</p></div></aside>
+    <aside className="enrollment-intro"><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Jogador segura uma bola e uma raquete junto à rede" /><div className="enrollment-intro__shade" /><div><span>Link privado</span><h1>{recadastro ? "Atualize seus dados. Ative sua recorrência." : "Você foi aprovado. Agora, vamos ativar sua participação."}</h1><p>O APT guarda somente a proteção criptográfica do CPF e os quatro últimos dígitos. O cartão fica no Asaas.</p></div></aside>
     <section className="enrollment-content">
-      <header><span>Cadastro e assinatura</span><h2>Confirme os dados usados na cobrança.</h2><p>O cartão será informado somente no ambiente seguro do Asaas.</p></header>
-      {!inviteToken && <div className="access-notice"><strong>Este cadastro precisa de um convite aprovado.</strong><span>Abra o link individual enviado pela gestão do APT.</span></div>}
+      <header><span>{recadastro ? "Recadastro e assinatura" : "Cadastro e assinatura"}</span><h2>Confirme os dados usados na cobrança.</h2><p>O cartão será informado somente no ambiente seguro do Asaas.</p></header>
+      {!profileLoading && !inviteToken.current && <div className="access-notice"><strong>Este cadastro precisa de um convite aprovado.</strong><span>Abra o link individual enviado pela gestão do APT.</span></div>}
+      {!profileLoading && inviteToken.current && !monthlyValue && !error && <div className="access-notice"><strong>A mensalidade ainda não foi liberada.</strong><span>A gestão precisa confirmar o valor antes de gerar a recorrência.</span></div>}
+      {profileLoading && <div className="loading-state"><i /><span>Validando seu convite…</span></div>}
       <form className="enrollment-form" onSubmit={submit}>
-        <div className="fields-grid"><label className="field-label field-label--compact"><span>Nome completo</span><input required name="name" autoComplete="name" placeholder="Nome e sobrenome" /></label><label className="field-label field-label--compact"><span>CPF</span><input required inputMode="numeric" autoComplete="off" value={formatCpf(cpf)} onChange={(event) => setCpf(event.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="000.000.000-00" /></label><label className="field-label field-label--compact"><span>E-mail</span><input required name="email" type="email" autoComplete="email" placeholder="nome@exemplo.com" /></label><label className="field-label field-label--compact"><span>WhatsApp</span><input required name="phone" type="tel" autoComplete="tel" placeholder="(61) 99999-9999" /></label><label className="field-label field-label--compact"><span>Crie uma senha</span><input required name="password" type="password" minLength={8} autoComplete="new-password" placeholder="Mínimo de 8 caracteres" /></label></div>
-        <div className="plan-row"><div><span>Participação mensal APT</span><strong>Valor confirmado no convite</strong><small>Renovação automática · cartão de crédito</small></div><span className="status-chip status-chip--ok">Checkout seguro</span></div>
+        <div className="fields-grid"><label className="field-label field-label--compact"><span>Nome completo</span><input required name="name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome e sobrenome" /></label><label className="field-label field-label--compact"><span>CPF</span><input required inputMode="numeric" autoComplete="off" value={formatCpf(cpf)} onChange={(event) => setCpf(event.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="000.000.000-00" /></label><label className="field-label field-label--compact"><span>E-mail do convite</span><input required readOnly={Boolean(email)} name="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@exemplo.com" /></label><label className="field-label field-label--compact"><span>WhatsApp</span><input required name="phone" type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(61) 99999-9999" /></label><label className="field-label field-label--compact"><span>Crie uma senha</span><input required name="password" type="password" minLength={8} autoComplete="new-password" placeholder="Mínimo de 8 caracteres" /></label></div>
+        <div className="plan-row"><div><span>Participação mensal APT</span><strong>{monthlyValue ? `${monthlyValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por mês` : "Valor ainda não configurado"}</strong><small>Renovação automática · cartão de crédito</small></div><span className="status-chip status-chip--ok">Checkout seguro</span></div>
         <label className="consent-row"><input required name="consent" type="checkbox" /><span>Autorizo o uso destes dados para administrar minha participação, comunicação e cobrança recorrente no APT.</span></label>
         {error && <p className="field-error" role="alert">{error}</p>}
-        <button className="primary-button primary-button--wide" type="submit" disabled={!inviteToken || submitting}>{submitting ? "Validando convite…" : "Continuar para assinatura"}<span aria-hidden="true">→</span></button>
+        <button className="primary-button primary-button--wide" type="submit" disabled={!inviteToken.current || !monthlyValue || profileLoading || submitting}>{submitting ? "Preparando assinatura…" : "Continuar para assinatura"}<span aria-hidden="true">→</span></button>
       </form>
     </section>
   </main></div>;
@@ -422,6 +455,84 @@ export function PortalPage() {
   </main></div>;
 }
 
+function csvCell(value: string) {
+  const safeValue = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  return `"${safeValue.replaceAll('"', '""')}"`;
+}
+
+function MemberImportPanel({ onImported }: { onImported: () => Promise<void> }) {
+  const [athletes, setAthletes] = useState<AthleteImportInput[]>([]);
+  const [fileName, setFileName] = useState("");
+  const [summary, setSummary] = useState<MemberImportSummary | null>(null);
+  const [invitations, setInvitations] = useState<MemberInvitation[]>([]);
+  const [error, setError] = useState("");
+  const [working, setWorking] = useState(false);
+
+  async function requestImport(rows: AthleteImportInput[], commit: boolean) {
+    const response = await fetch("/api/membros/importacao", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ athletes: rows, commit }),
+    });
+    const payload = await response.json() as {
+      summary?: MemberImportSummary;
+      invitations?: MemberInvitation[];
+      error?: string;
+    };
+    if (!response.ok || !payload.summary) throw new Error(payload.error || "Não foi possível validar a importação.");
+    setSummary(payload.summary);
+    if (commit) {
+      setInvitations(payload.invitations || []);
+      await onImported();
+    }
+  }
+
+  async function selectFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setWorking(true); setError(""); setSummary(null); setInvitations([]); setFileName(file.name);
+    try {
+      const parsed = parseAthleteCsv(await file.text());
+      setAthletes(parsed);
+      await requestImport(parsed, false);
+    } catch (fileError) {
+      setAthletes([]);
+      setError(fileError instanceof Error ? fileError.message : "Não foi possível ler o CSV.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function commitImport() {
+    setWorking(true); setError("");
+    try { await requestImport(athletes, true); }
+    catch (importError) { setError(importError instanceof Error ? importError.message : "Não foi possível importar os atletas."); }
+    finally { setWorking(false); }
+  }
+
+  function downloadInvitations() {
+    const rows = [
+      ["NOME", "EMAIL", "TELEFONE", "LINK_RECADASTRO"],
+      ...invitations.map((invitation) => [invitation.name, invitation.email, invitation.whatsapp, invitation.url]),
+    ];
+    const blob = new Blob([rows.map((row) => row.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = "convites-recadastro-apt.csv"; link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return <section className="member-import-panel">
+    <div><span>Recadastro da base atual</span><h3>Importar atletas e gerar links individuais</h3><p>O arquivo deve ter NOME, EMAIL, TELEFONE e RANQUEADO. Apenas linhas ATIVO entram. CPF e cartão não são importados.</p></div>
+    <label className="secondary-button member-import-file"><input type="file" accept=".csv,text/csv" onChange={selectFile} /><span>{fileName || "Selecionar CSV"}</span></label>
+    {working && <div className="loading-state"><i /><span>Validando a base…</span></div>}
+    {error && <p className="field-error" role="alert">{error}</p>}
+    {summary && <div className="member-import-summary"><div><span>Ativos válidos</span><strong>{summary.activeRows}</strong></div><div><span>Novos</span><strong>{summary.newMembers}</strong></div><div><span>Já pendentes</span><strong>{summary.pendingExisting}</strong></div><div><span>Já cadastrados</span><strong>{summary.alreadyRegistered}</strong></div><div><span>Rejeitados</span><strong>{summary.rejected}</strong></div></div>}
+    {summary && !invitations.length && <button className="primary-button" type="button" disabled={working || summary.rejected > 0 || summary.newMembers + summary.pendingExisting === 0} onClick={commitImport}>Importar e gerar {summary.newMembers + summary.pendingExisting} links <span aria-hidden="true">→</span></button>}
+    {invitations.length > 0 && <div className="member-import-complete"><strong>{invitations.length} links gerados.</strong><span>Baixe agora: os tokens não ficam armazenados em texto aberto.</span><button className="secondary-button" type="button" onClick={downloadInvitations}>Baixar links de recadastro</button></div>}
+  </section>;
+}
+
 export function AdminPage() {
   const [tab, setTab] = useState<"resumo" | "membros" | "formularios">("resumo");
   const [query, setQuery] = useState("");
@@ -462,6 +573,7 @@ export function AdminPage() {
   }, []);
   async function updateApplication(id: string, status: "in_review" | "awaiting_info" | "approved" | "rejected") { try { const response = await fetch("/api/requerimentos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status }) }); const payload = await response.json() as { application?: ApplicationRecord; error?: string; inviteDelivery?: "sent" | "manual" }; if (!response.ok || !payload.application) throw new Error(payload.error); setApplications((current) => current.map((item) => item.id === id ? payload.application! : item)); setNotice(status === "approved" ? payload.inviteDelivery === "sent" ? "Convite enviado por e-mail." : "Aprovado. Copie o link individual de cadastro." : "Decisão registrada."); } catch { setNotice("Não foi possível registrar a decisão."); } }
   async function copyInvite(application: ApplicationRecord) { if (!application.inviteToken) return; await navigator.clipboard.writeText(`${window.location.origin}/cadastro?convite=${application.inviteToken}`); setCopiedId(application.id); window.setTimeout(() => setCopiedId(""), 2200); }
+  async function refreshMembers() { const response = await fetch("/api/membros"); const payload = await response.json() as { members?: MemberRecord[] }; if (response.ok) setMembers(payload.members || []); }
   if (authRequired) return <div className="apt-app"><RouteHeader label="Gestão APT" /><main className="access-state"><span>Acesso administrativo</span><h1>Entre com uma conta autorizada.</h1><p>A base de candidatos, integrantes e pagamentos não fica exposta publicamente.</p><a className="primary-button" href="/entrar?next=/gestao">Entrar na gestão</a></main></div>;
   const activeCount = members.filter((member) => member.participationStatus === "active").length;
   const inactiveCount = members.filter((member) => ["inactive", "cancelled"].includes(member.participationStatus)).length;
@@ -472,7 +584,7 @@ export function AdminPage() {
     <section className="admin-content">
       {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice("")}>Fechar</button></div>}
       {tab === "resumo" && <><header className="admin-heading"><div><span>Visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section><section className="review-queue"><header><div><h3>Requerimentos recentes</h3><span>{attentionCount} aguardando decisão</span></div></header>{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{applications.map((application) => <article className="candidate-row" key={application.id}><div className="candidate-identity"><span>{application.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{application.name}</strong><small>{application.city || "Cidade não informada"} · {application.classLevel || "Classe não informada"}</small></div></div><div className="candidate-referrer"><span>Indicação</span><strong>{application.referrer}</strong></div><span className={["approved", "invite_sent", "registered"].includes(application.status) ? "status-chip status-chip--ok" : application.status === "rejected" ? "status-chip status-chip--inactive" : "status-chip status-chip--pending"}>{application.status === "registered" ? "Cadastrado" : application.status === "invite_sent" ? "Convite enviado" : application.status === "approved" ? "Aprovado" : application.status === "rejected" ? "Não aprovado" : application.status === "awaiting_info" ? "Aguardando informação" : "Em análise"}</span><div className="row-actions">{["new", "in_review", "awaiting_info"].includes(application.status) && <><button onClick={() => updateApplication(application.id, "rejected")}>Não aprovar</button><button onClick={() => updateApplication(application.id, "awaiting_info")}>Pedir informação</button><button className="small-primary" onClick={() => updateApplication(application.id, "approved")}>Aprovar e gerar convite</button></>}{application.inviteToken && <button className="small-primary" onClick={() => copyInvite(application)}>{copiedId === application.id ? "Link copiado" : "Copiar link de cadastro"}</button>}{["approved", "invite_sent"].includes(application.status) && !application.inviteToken && <button onClick={() => updateApplication(application.id, "approved")}>Gerar novo link</button>}</div></article>)}</section></>}
-      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Uma base única para saber quem está ativo.</h2></div><label className="search-field"><span className="sr-only">Buscar membro</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome" /></label></header><div className="table-wrap"><table><thead><tr><th>Integrante</th><th>Participação</th><th>Assinatura</th><th>Próximo vencimento</th><th>Atraso</th></tr></thead><tbody>{filteredMembers.map((member) => <tr key={member.id}><td><div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.email} · {member.classLevel || "Sem classe"}</small></div></div></td><td><span className={member.participationStatus === "active" ? "status-chip status-chip--ok" : member.participationStatus === "pending_payment" ? "status-chip status-chip--pending" : "status-chip status-chip--inactive"}>{member.participationStatus}</span></td><td>{member.subscriptionStatus}</td><td>{member.nextDueDate || "—"}</td><td>{member.overdueDays ? `${member.overdueDays} dias` : "—"}</td></tr>)}</tbody></table>{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Tente outro nome.</span></div>}</div></>}
+      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Uma base única para saber quem está ativo.</h2></div><label className="search-field"><span className="sr-only">Buscar membro</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome" /></label></header><MemberImportPanel onImported={refreshMembers} /><div className="table-wrap"><table><thead><tr><th>Integrante</th><th>Participação</th><th>Assinatura</th><th>Próximo vencimento</th><th>Atraso</th></tr></thead><tbody>{filteredMembers.map((member) => <tr key={member.id}><td><div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.email} · {member.classLevel || "Sem classe"}</small></div></div></td><td><span className={member.participationStatus === "active" ? "status-chip status-chip--ok" : member.participationStatus === "pending_payment" ? "status-chip status-chip--pending" : "status-chip status-chip--inactive"}>{member.participationStatus}</span></td><td>{member.subscriptionStatus}</td><td>{member.nextDueDate || "—"}</td><td>{member.overdueDays ? `${member.overdueDays} dias` : "—"}</td></tr>)}</tbody></table>{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Tente outro nome.</span></div>}</div></>}
       {tab === "formularios" && <><header className="admin-heading"><div><span>Formulários</span><h2>A conversa atual de entrada.</h2></div>{selectedForm?.publishedVersion && <span className="status-chip status-chip--ok">Versão {selectedForm.publishedVersion.number} publicada</span>}</header>{formsError && <section className="empty-state empty-state--bordered"><strong>Versionamento ainda indisponível.</strong><span>{formsError}</span></section>}{!formsError && forms.length === 0 && <section className="empty-state empty-state--bordered"><strong>Nenhum formulário publicado.</strong><span>Aplique a migration de formulários para registrar a versão atual.</span></section>}{selectedForm && <section className="forms-layout"><aside className="form-index" aria-label="Formulários cadastrados">{forms.map((form) => <button className={form.id === selectedForm.id ? "form-index__item form-index__item--active" : "form-index__item"} key={form.id} onClick={() => setSelectedFormId(form.id)}><strong>{form.name}</strong><small>{form.publishedVersion ? `${form.publishedVersion.questions.length} perguntas · ${form.publishedVersion.submissionCount} envios` : "Sem versão publicada"}</small></button>)}</aside><div className="form-editor"><header><div><span>{selectedForm.name}</span><p>{selectedForm.description}</p><small>A versão publicada é imutável. Para editar, será necessário criar e validar uma nova versão antes da publicação.</small></div>{selectedForm.publishedVersion?.publishedAt && <time dateTime={selectedForm.publishedVersion.publishedAt}>Publicada em {new Intl.DateTimeFormat("pt-BR").format(new Date(selectedForm.publishedVersion.publishedAt))}</time>}</header>{selectedForm.publishedVersion ? <ol className="question-editor-list">{selectedForm.publishedVersion.questions.map((item) => <li key={item.id}><span className="drag-index">{String(item.position).padStart(2, "0")}</span><span><strong>{item.title}</strong><small>{item.required ? "Obrigatória" : "Opcional"} · {item.type}</small></span></li>)}</ol> : <div className="empty-state"><strong>Sem versão publicada.</strong><span>Crie uma nova versão antes de disponibilizar este formulário.</span></div>}</div></section>}</>}
     </section>
     <nav className="admin-mobile-nav" aria-label="Gestão"><button className={tab === "resumo" ? "active" : ""} onClick={() => setTab("resumo")}>Visão geral</button><button className={tab === "membros" ? "active" : ""} onClick={() => setTab("membros")}>Membros</button><button className={tab === "formularios" ? "active" : ""} onClick={() => setTab("formularios")}>Formulários</button></nav>

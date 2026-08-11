@@ -98,6 +98,17 @@ export async function createAuthUser(input: {
   return payload.id;
 }
 
+export async function deleteAuthUser(userId: string) {
+  const { url, secretKey } = supabaseConfig();
+  const response = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+    headers: { apikey: secretKey, Authorization: `Bearer ${secretKey}` },
+  });
+  if (!response.ok && response.status !== 404) {
+    throw new SupabaseRequestError("Não foi possível desfazer o acesso incompleto.", response.status);
+  }
+}
+
 export async function signInWithPassword(email: string, password: string) {
   const { url, publishableKey } = supabaseConfig();
   if (!publishableKey) throw new SupabaseRequestError("Chave pública do Supabase não configurada.", 503);

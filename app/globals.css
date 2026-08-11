@@ -1,0 +1,541 @@
+:root {
+  --navy: oklch(25% 0.055 255);
+  --navy-deep: oklch(18% 0.038 255);
+  --navy-soft: oklch(35% 0.046 255);
+  --clay: oklch(57% 0.17 38);
+  --clay-dark: oklch(44% 0.145 36);
+  --red: oklch(55% 0.22 28);
+  --mineral: oklch(97% 0.004 255);
+  --white: oklch(100% 0 0);
+  --surface: oklch(100% 0 0);
+  --surface-muted: oklch(94% 0.006 255);
+  --line: oklch(84% 0.009 255);
+  --ink: oklch(21% 0.035 255);
+  --muted: oklch(43% 0.026 255);
+  --olive: oklch(39% 0.06 128);
+  --success-surface: oklch(94% 0.025 135);
+  --warning-surface: oklch(94% 0.036 70);
+  --danger: oklch(49% 0.18 27);
+  --danger-surface: oklch(95% 0.03 27);
+  --font-ui: "Avenir Next", Avenir, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Avenir Next Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --radius-sm: 0.5rem;
+  --radius-md: 0.875rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --z-sticky: 30;
+  --z-toast: 60;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--mineral); color: var(--ink); font-family: var(--font-ui); font-size: 1rem; line-height: 1.55; text-rendering: optimizeLegibility; }
+button, input, textarea { font: inherit; }
+button { color: inherit; }
+a { color: inherit; text-decoration: none; }
+img { max-width: 100%; }
+button, a, input, textarea { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline: 0.1875rem solid var(--clay); outline-offset: 0.1875rem; }
+button:disabled { cursor: not-allowed; opacity: 0.38; }
+.apt-app { min-height: 100dvh; overflow-x: clip; }
+.skip-link { position: fixed; top: -6rem; left: 1rem; z-index: 80; padding: 0.75rem 1rem; background: var(--white); color: var(--navy); }
+.skip-link:focus { top: 1rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+.brand-lockup { display: inline-flex; flex: 0 0 auto; line-height: 0; }
+.brand-lockup img { display: block; width: 3.25rem; height: 3.25rem; object-fit: contain; }
+.brand-lockup--large img { width: clamp(9rem, 28vw, 15rem); height: auto; }
+.route-header { position: sticky; top: 0; z-index: var(--z-sticky); display: flex; align-items: center; justify-content: space-between; min-height: 4.5rem; padding: 0.55rem max(1rem, env(safe-area-inset-left)); background: color-mix(in oklch, var(--mineral) 96%, transparent); border-bottom: 1px solid var(--line); backdrop-filter: blur(0.75rem); }
+.route-header > span { color: var(--muted); font-size: 0.76rem; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
+
+.primary-button, .secondary-button, .danger-button { min-height: 3rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.65rem; padding: 0.75rem 1.1rem; border-radius: var(--radius-sm); font-weight: 720; cursor: pointer; transition: background 180ms var(--ease), border-color 180ms var(--ease), color 180ms var(--ease), transform 180ms var(--ease); }
+.primary-button { border: 1px solid var(--clay); background: var(--clay); color: var(--white); }
+.primary-button:hover { border-color: var(--clay-dark); background: var(--clay-dark); }
+.primary-button--light { border-color: var(--white); background: var(--white); color: var(--navy-deep); }
+.primary-button--light:hover { border-color: var(--mineral); background: var(--mineral); }
+.secondary-button { border: 1px solid var(--line); background: transparent; color: var(--ink); }
+.secondary-button:hover { border-color: var(--navy); }
+.danger-button { border: 1px solid var(--danger); background: var(--danger); color: var(--white); }
+.text-button { min-height: 2.75rem; padding: 0; border: 0; background: transparent; color: var(--navy); font-weight: 720; text-decoration: underline; text-underline-offset: 0.3rem; cursor: pointer; }
+.text-button--danger { color: var(--danger); }
+
+/* Landing — close structural study of the supplied reference, rebuilt for APT */
+.apt-landing { --lp-sky: oklch(74% 0.12 233); --lp-sky-deep: oklch(61% 0.15 236); background: var(--mineral); color: var(--ink); }
+.apt-landing main { padding: 0.75rem; }
+#o-apt, #ranking, #temporada, #duvidas, #entrada { scroll-margin-top: 1rem; }
+.apt-site-nav { position: absolute; z-index: var(--z-sticky); top: 1.35rem; left: 1.35rem; right: 1.35rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; color: var(--white); }
+.apt-site-nav__brand { min-width: 3rem; min-height: 3rem; display: inline-flex; align-items: center; }
+.apt-site-nav__brand .brand-lockup img { width: 4.65rem; height: auto; }
+.apt-site-nav__links, .apt-site-nav__member { display: none; }
+.apt-site-nav__actions { display: flex; align-items: center; gap: 0.75rem; }
+.apt-pill { min-height: 3rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.7rem; padding: 0.72rem 1rem; border-radius: 999px; font-size: 0.78rem; font-weight: 780; line-height: 1; transition: transform 180ms var(--ease), background 180ms var(--ease), color 180ms var(--ease); }
+.apt-pill span { width: 1.65rem; height: 1.65rem; display: grid; place-items: center; margin: -0.3rem -0.45rem -0.3rem 0; border-radius: 50%; background: color-mix(in oklch, currentColor 13%, transparent); }
+.apt-pill--clay { background: var(--clay); color: var(--white); }
+.apt-pill--light { background: var(--white); color: var(--navy-deep); }
+
+.apt-hero { position: relative; min-height: calc(100svh - 1.5rem); display: flex; align-items: flex-end; overflow: hidden; border-radius: 0.9rem; background: var(--navy-deep); color: var(--white); }
+.apt-hero > img, .apt-hero__shade { position: absolute; inset: 0; width: 100%; height: 100%; }
+.apt-hero > img { object-fit: cover; object-position: 52% 50%; transform: scale(1.01); }
+.apt-hero__shade { background: linear-gradient(180deg, oklch(10% 0.035 255 / 0.46), transparent 35%, oklch(10% 0.035 255 / 0.9) 100%), linear-gradient(90deg, oklch(10% 0.035 255 / 0.42), transparent 72%); }
+.apt-hero__content { position: relative; z-index: 2; width: 100%; padding: 8.5rem 1.1rem 10.5rem; }
+.apt-kicker { margin: 0 0 1rem; font-size: 0.72rem; font-weight: 720; letter-spacing: 0.04em; }
+.apt-hero h1, .apt-section-heading h2, .apt-cycle h2, .apt-faq h2, .apt-entry h2 { margin: 0; font-family: var(--font-display); font-weight: 790; letter-spacing: -0.04em; text-wrap: balance; }
+.apt-hero h1 { max-width: 12ch; font-family: var(--font-poppins), var(--font-ui); font-size: clamp(2.9rem, 13vw, 5.15rem); font-weight: 600; line-height: 1; letter-spacing: -0.03em; }
+.apt-hero__headline, .apt-hero__headline > span:first-child { display: block; }
+.apt-hero__rotator { min-height: 1.08em; display: block; overflow: hidden; padding-bottom: 0.08em; }
+.apt-hero__rotator-line { width: max-content; max-width: 100%; display: block; color: oklch(91% 0.07 58); font-weight: 700; animation: apt-statement-in 520ms var(--ease) both; }
+.apt-hero__intro { max-width: 29rem; margin: 1.25rem 0 1.35rem; color: oklch(94% 0.006 255); font-size: 0.95rem; line-height: 1.5; text-wrap: pretty; }
+.apt-hero__tags { position: absolute; z-index: 2; left: 1rem; bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.4rem; max-width: calc(100% - 2rem); margin: 0; padding: 0; list-style: none; }
+.apt-hero__tags li { padding: 0.48rem 0.7rem; border: 1px solid oklch(100% 0 0 / 0.25); border-radius: 999px; background: oklch(12% 0.035 255 / 0.42); backdrop-filter: blur(0.6rem); font-size: 0.68rem; }
+.apt-hero__season { position: absolute; z-index: 3; right: 1rem; bottom: 4.6rem; width: min(15rem, calc(100% - 2rem)); display: none; grid-template-columns: 4.4rem 1fr; gap: 0.75rem; padding: 0.6rem; border: 1px solid oklch(100% 0 0 / 0.24); border-radius: 0.75rem; background: oklch(100% 0 0 / 0.12); backdrop-filter: blur(1rem); box-shadow: 0 1rem 2.5rem oklch(8% 0.03 255 / 0.25); }
+.apt-hero__season img { width: 4.4rem; height: 4.4rem; border-radius: 0.45rem; object-fit: cover; }
+.apt-hero__season div { display: grid; align-content: center; }
+.apt-hero__season span, .apt-hero__season small { color: oklch(90% 0.008 255); font-size: 0.63rem; }
+.apt-hero__season strong { font-size: 0.85rem; }
+
+.apt-manifesto { max-width: 66rem; margin: 0 auto; padding: 5.5rem 1rem 4.5rem; text-align: center; }
+.apt-manifesto > p { margin: 0 auto; font-size: clamp(1.35rem, 5.4vw, 2.5rem); line-height: 1.14; letter-spacing: -0.028em; text-wrap: balance; }
+.apt-manifesto > p:nth-child(2) { max-width: 48rem; margin-top: 2.25rem; color: var(--muted); font-size: clamp(1rem, 3.8vw, 1.3rem); line-height: 1.48; }
+.apt-manifesto strong { color: var(--navy); font-weight: 810; }
+.apt-manifesto__mark { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1rem; margin: 3rem auto 0; }
+.apt-manifesto__mark span { height: 1px; background: var(--line); }
+.apt-manifesto__mark img { width: 2.8rem; height: 2.8rem; object-fit: contain; }
+
+.apt-photo-rail { display: flex; gap: 0.75rem; overflow-x: auto; margin-inline: -0.75rem; padding: 1rem 0.75rem 4.5rem; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.apt-photo-rail::-webkit-scrollbar { display: none; }
+.apt-photo-rail figure { flex: 0 0 72vw; height: 23rem; margin: 0; overflow: hidden; border-radius: 0.75rem; scroll-snap-align: center; }
+.apt-photo-rail img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.apt-photo-rail figure:nth-child(2) img { object-position: center 35%; }
+
+.apt-product, .apt-courts, .apt-faq { padding: 4.5rem 0; }
+.apt-section-heading { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2rem; }
+.apt-section-heading h2, .apt-cycle h2, .apt-faq h2, .apt-entry h2 { max-width: 13ch; font-size: clamp(2.45rem, 10vw, 5rem); line-height: 0.94; }
+.apt-section-heading p, .apt-cycle__copy > p, .apt-faq header > p, .apt-entry p { max-width: 38rem; margin: 0; color: var(--muted); font-size: 0.94rem; line-height: 1.55; text-wrap: pretty; }
+.apt-product__grid { display: grid; gap: 0.75rem; }
+.apt-product-card { position: relative; min-height: 20rem; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; padding: 1.25rem; border-radius: 0.9rem; }
+.apt-product-card--image, .apt-product-card--detail { color: var(--white); background: var(--navy-deep); }
+.apt-product-card--image > img, .apt-product-card--detail > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.apt-product-card--image::after, .apt-product-card--detail::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, oklch(10% 0.035 255 / 0.72), transparent 72%); }
+.apt-product-card--image div, .apt-product-card--detail p { position: relative; z-index: 1; margin-top: auto; }
+.apt-product-card span { font-size: 0.7rem; }
+.apt-product-card h3 { max-width: 15ch; margin: 0.35rem 0 0; font-size: 1.35rem; line-height: 1.08; }
+.apt-product-card p { max-width: 22rem; margin: 0.75rem 0 0; font-size: 0.82rem; line-height: 1.5; }
+.apt-product-card strong { font-family: var(--font-display); font-size: clamp(5rem, 24vw, 8rem); line-height: 0.8; letter-spacing: -0.06em; }
+.apt-product-card--blue { background: var(--lp-sky); color: var(--navy-deep); }
+.apt-product-card--clay { background: var(--clay); color: var(--white); }
+.apt-product-card--detail { min-height: 15rem; }
+.apt-product-card--detail p { font-size: 1rem; }
+
+.apt-section-heading--center { align-items: center; max-width: 52rem; margin-inline: auto; text-align: center; }
+.apt-section-heading--center h2 { max-width: 15ch; }
+.apt-courts__grid { display: grid; gap: 0.75rem; }
+.apt-court { min-height: 24rem; display: flex; flex-direction: column; padding: 1.35rem; overflow: hidden; border-radius: 0.9rem; }
+.apt-court > span { width: max-content; padding: 0.42rem 0.68rem; border: 1px solid currentColor; border-radius: 999px; font-size: 0.65rem; }
+.apt-court h3 { max-width: 8ch; margin: auto 0 0; font-family: var(--font-display); font-size: clamp(3.2rem, 14vw, 5.5rem); line-height: 0.83; letter-spacing: -0.05em; }
+.apt-court p { max-width: 18rem; margin: 1rem 0 0; font-size: 0.9rem; }
+.apt-court small { margin-top: 0.35rem; opacity: 0.7; }
+.apt-court--central { color: var(--white); background: var(--navy-deep); }
+.apt-court--one { color: var(--navy-deep); background: var(--lp-sky); }
+.apt-court--two { color: var(--white); background: var(--clay); }
+.apt-court--three { color: var(--navy-deep); background: oklch(91% 0.015 250); }
+
+.apt-cycle { display: grid; overflow: hidden; margin-inline: -0.75rem; background: var(--navy-deep); color: var(--white); }
+.apt-cycle figure { min-height: 30rem; margin: 0; }
+.apt-cycle figure img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.apt-cycle__copy { padding: 4rem 1.5rem; }
+.apt-cycle__copy > p { margin-top: 1rem; color: oklch(81% 0.016 255); }
+.apt-cycle ol { margin: 2.5rem 0 0; padding: 0; list-style: none; border-top: 1px solid oklch(100% 0 0 / 0.2); }
+.apt-cycle li { display: grid; grid-template-columns: 2.5rem 1fr; gap: 0.8rem; padding: 1.25rem 0; border-bottom: 1px solid oklch(100% 0 0 / 0.2); }
+.apt-cycle li > span { color: var(--clay); font-size: 0.72rem; font-weight: 800; }
+.apt-cycle li strong { display: block; font-size: 1rem; }
+.apt-cycle li p { margin: 0.35rem 0 0; color: oklch(78% 0.015 255); font-size: 0.82rem; }
+
+.apt-member-block { display: grid; gap: 0.75rem; padding: 4.5rem 0; }
+.apt-member-block__visual { min-height: 27rem; overflow: hidden; border-radius: 0.9rem; }
+.apt-member-block__visual img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: center; }
+.apt-member-block__quote { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; padding: 3rem 1.5rem; border-radius: 0.9rem; background: var(--white); }
+.apt-member-block__quote > span { color: var(--clay-dark); font-size: 0.72rem; font-weight: 780; }
+.apt-member-block blockquote { max-width: 23ch; margin: 1.25rem 0 0; font-family: var(--font-display); font-size: clamp(1.8rem, 7vw, 3.2rem); line-height: 1.02; letter-spacing: -0.03em; }
+.apt-text-link { min-height: 3rem; display: inline-flex; align-items: center; gap: 0.65rem; margin-top: 2rem; border-bottom: 1px solid currentColor; font-size: 0.85rem; font-weight: 760; }
+
+.apt-faq header { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem; }
+.apt-faq__layout { display: grid; gap: 0.75rem; }
+.apt-faq__layout figure { min-height: 24rem; margin: 0; overflow: hidden; border-radius: 0.9rem; }
+.apt-faq__layout figure img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.apt-faq__items { border-top: 1px solid var(--line); }
+.apt-faq details { border-bottom: 1px solid var(--line); }
+.apt-faq summary { min-height: 4rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; cursor: pointer; font-weight: 760; list-style: none; }
+.apt-faq summary::-webkit-details-marker { display: none; }
+.apt-faq summary::after { content: "+"; width: 1.8rem; height: 1.8rem; display: grid; flex: 0 0 auto; place-items: center; border: 1px solid var(--line); border-radius: 50%; }
+.apt-faq details[open] summary::after { content: "−"; background: var(--navy); color: var(--white); }
+.apt-faq details p { max-width: 39rem; margin: -0.25rem 0 1.4rem; color: var(--muted); font-size: 0.88rem; }
+
+.apt-entry { display: grid; gap: 3rem; margin-inline: -0.75rem; padding: 4.5rem 1.5rem; background: var(--clay); color: var(--white); }
+.apt-entry .brand-lockup--large img { width: min(13rem, 46vw); }
+.apt-entry p { margin-top: 1rem; color: oklch(97% 0.01 38); }
+.apt-entry .apt-pill { margin-top: 1.5rem; }
+.apt-footer { position: relative; min-height: 26rem; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; gap: 2rem; padding: 3rem 1.5rem 1rem; background: var(--mineral); }
+.apt-footer .brand-lockup img { width: 5rem; height: auto; }
+.apt-footer p { margin: 0.75rem 0 0; color: var(--muted); font-size: 0.72rem; }
+.apt-footer > div, .apt-footer nav { position: relative; z-index: 2; }
+.apt-footer nav { display: grid; gap: 0.25rem; align-self: flex-end; text-align: right; font-size: 0.82rem; font-weight: 720; }
+.apt-footer nav a { min-height: 2.75rem; display: inline-flex; align-items: center; justify-content: flex-end; }
+.apt-footer > span { position: absolute; left: -0.035em; bottom: -0.25em; color: var(--navy-deep); font-family: var(--font-display); font-size: clamp(14rem, 67vw, 42rem); font-weight: 850; line-height: 0.72; letter-spacing: -0.095em; pointer-events: none; }
+
+@media (max-width: 47.99rem) {
+  .apt-footer { min-height: 34rem; justify-content: flex-start; }
+  .apt-footer nav { grid-template-columns: repeat(2, max-content); align-self: flex-start; gap: 0 1.25rem; margin-top: 2rem; text-align: left; }
+  .apt-footer nav a { justify-content: flex-start; }
+}
+
+@media (min-width: 48rem) {
+  .apt-landing main { padding: 1.25rem; }
+  .apt-site-nav { top: 2rem; left: 2rem; right: 2rem; }
+  .apt-site-nav__brand .brand-lockup img { width: 5.8rem; }
+  .apt-site-nav__member { min-height: 2.75rem; display: inline-flex; align-items: center; font-size: 0.76rem; font-weight: 720; }
+  .apt-hero { min-height: calc(100svh - 2.5rem); }
+  .apt-hero__content { padding: 9rem 2.5rem 8.25rem; }
+  .apt-hero h1 { max-width: 13.5ch; font-size: clamp(3.8rem, 7.5vw, 5rem); }
+  .apt-hero__intro { max-width: 27rem; font-size: 1rem; }
+  .apt-hero__tags { left: 2.5rem; bottom: 2.25rem; }
+  .apt-hero__season { right: 2.5rem; bottom: 2.25rem; display: grid; }
+  .apt-manifesto { padding-block: 7.5rem 6rem; }
+  .apt-photo-rail { margin-inline: -1.25rem; padding-inline: 1.25rem; }
+  .apt-photo-rail figure { flex-basis: 36vw; height: 27rem; }
+  .apt-product, .apt-courts, .apt-faq { padding: 6rem 1rem; }
+  .apt-section-heading, .apt-faq header { flex-direction: row; align-items: flex-end; justify-content: space-between; }
+  .apt-section-heading p, .apt-faq header > p { max-width: 27rem; }
+  .apt-section-heading--center { flex-direction: column; align-items: center; }
+  .apt-product__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .apt-product-card--image { grid-column: 1 / -1; min-height: 30rem; }
+  .apt-product-card--detail { grid-column: 1 / -1; min-height: 22rem; }
+  .apt-courts__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .apt-court { min-height: 30rem; }
+  .apt-cycle { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-inline: -1.25rem; }
+  .apt-cycle figure { min-height: 48rem; }
+  .apt-cycle__copy { display: flex; flex-direction: column; justify-content: center; padding: 5rem 3rem; }
+  .apt-member-block { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 6rem 1rem; }
+  .apt-member-block__visual, .apt-member-block__quote { min-height: 38rem; }
+  .apt-faq__layout { grid-template-columns: minmax(18rem, 0.8fr) minmax(0, 1.2fr); align-items: stretch; }
+  .apt-faq__layout figure { min-height: 34rem; }
+  .apt-faq__items { padding-left: 2rem; }
+  .apt-entry { grid-template-columns: minmax(13rem, 0.7fr) minmax(0, 1fr); align-items: end; margin-inline: -1.25rem; padding: 6rem 3rem; }
+  .apt-footer { min-height: 35rem; padding: 4rem 3rem 1rem; }
+  .apt-footer nav { grid-template-columns: repeat(2, auto); gap: 0 2rem; }
+}
+
+@media (min-width: 64rem) {
+  .apt-landing main { padding: 1.75rem; }
+  .apt-site-nav { top: 2.75rem; left: 50%; right: auto; width: min(44rem, calc(100% - 7rem)); min-height: 3.2rem; padding: 0.25rem 0.3rem 0.25rem 1rem; border: 1px solid oklch(100% 0 0 / 0.2); border-radius: 999px; background: oklch(12% 0.035 255 / 0.58); backdrop-filter: blur(1rem); transform: translateX(-50%); }
+  .apt-site-nav__brand .brand-lockup img { width: 4.8rem; }
+  .apt-site-nav__links { display: flex; align-items: center; gap: 1.15rem; }
+  .apt-site-nav__links a { min-height: 2.75rem; display: inline-flex; align-items: center; font-size: 0.68rem; font-weight: 690; }
+  .apt-site-nav__member { display: none; }
+  .apt-hero { min-height: calc(100svh - 3.5rem); }
+  .apt-hero__content { padding: 8.5rem clamp(3rem, 5vw, 5rem) 8rem; }
+  .apt-hero h1 { max-width: 14ch; font-size: clamp(4.15rem, 5vw, 5.15rem); }
+  .apt-hero__intro { max-width: 28rem; }
+  .apt-hero__tags { left: clamp(3rem, 5vw, 5rem); bottom: 3rem; }
+  .apt-hero__season { right: clamp(3rem, 5vw, 5rem); bottom: 3rem; width: 18rem; grid-template-columns: 5rem 1fr; }
+  .apt-hero__season img { width: 5rem; height: 5rem; }
+  .apt-manifesto { padding-block: 9rem 7rem; }
+  .apt-photo-rail { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; overflow: visible; margin-inline: -1.75rem; padding: 1rem 0 8rem; }
+  .apt-photo-rail figure { height: 30rem; transform: rotate(-1.2deg); }
+  .apt-photo-rail figure:nth-child(even) { transform: translateY(2rem) rotate(1.2deg); }
+  .apt-photo-rail figure:first-child { border-radius: 0 0.9rem 0.9rem 0; }
+  .apt-photo-rail figure:last-child { border-radius: 0.9rem 0 0 0.9rem; }
+  .apt-product, .apt-courts, .apt-faq { max-width: 86rem; margin-inline: auto; padding: 7rem 2rem; }
+  .apt-product__grid { grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: repeat(2, 15rem); }
+  .apt-product-card--image { grid-column: 1 / 7; grid-row: 1 / 3; min-height: 0; }
+  .apt-product-card--blue { grid-column: 7 / 10; grid-row: 1; min-height: 0; }
+  .apt-product-card--clay { grid-column: 10 / 13; grid-row: 1; min-height: 0; }
+  .apt-product-card--detail { grid-column: 7 / 13; grid-row: 2; min-height: 0; margin-top: 0; }
+  .apt-product-card strong { font-size: clamp(4.5rem, 6.5vw, 6.75rem); }
+  .apt-courts__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .apt-court { min-height: 34rem; }
+  .apt-court h3 { font-size: clamp(3.6rem, 5vw, 5.2rem); }
+  .apt-cycle { grid-template-columns: minmax(0, 1.1fr) minmax(30rem, 0.9fr); margin-inline: -1.75rem; }
+  .apt-cycle figure { min-height: 55rem; }
+  .apt-cycle__copy { padding: 7rem clamp(4rem, 7vw, 8rem); }
+  .apt-member-block { max-width: 86rem; margin-inline: auto; padding: 8rem 2rem; }
+  .apt-member-block__visual, .apt-member-block__quote { min-height: 43rem; }
+  .apt-member-block__quote { padding: clamp(3rem, 6vw, 6rem); }
+  .apt-faq__layout { grid-template-columns: minmax(24rem, 0.78fr) minmax(30rem, 1.22fr); }
+  .apt-faq__items { padding-left: clamp(3rem, 6vw, 6rem); }
+  .apt-entry { grid-template-columns: minmax(18rem, 0.65fr) minmax(30rem, 1fr); margin-inline: -1.75rem; padding: 8rem clamp(4rem, 8vw, 9rem); }
+  .apt-footer { min-height: 44rem; padding: 5rem clamp(4rem, 8vw, 9rem) 1rem; }
+}
+
+/* Conversational forms */
+.form-shell { min-height: 100dvh; display: flex; flex-direction: column; background: var(--mineral); }
+.form-visual { position: relative; min-height: 10rem; overflow: hidden; flex: 0 0 auto; padding: 1rem; color: var(--white); background: var(--navy-deep); }
+.form-visual > img, .form-visual__shade { position: absolute; inset: 0; width: 100%; height: 100%; }
+.form-visual > img { object-fit: cover; object-position: 50% 48%; }
+.form-visual__shade { background: linear-gradient(90deg, oklch(12% 0.025 255 / 0.72), transparent 70%); }
+.form-visual > a, .form-visual > p { position: relative; z-index: 2; }
+.form-visual .brand-lockup--large img { width: 5.5rem; }
+.form-visual > p { display: none; max-width: 19rem; margin: auto 0 0; font-family: var(--font-display); font-size: 1.8rem; font-weight: 760; line-height: 1; text-transform: uppercase; }
+.question-stage { min-height: calc(100dvh - 10rem); display: flex; flex-direction: column; background: var(--mineral); }
+.form-topbar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 1rem; padding: 1rem; }
+.form-topbar button { width: 2.75rem; height: 2.75rem; border: 1px solid var(--line); border-radius: 50%; background: transparent; cursor: pointer; }
+.form-topbar > span { color: var(--muted); font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+.progress-track { height: 0.16rem; overflow: hidden; background: var(--line); }
+.progress-track span { display: block; width: 100%; height: 100%; transform-origin: left; background: var(--clay); transition: transform 300ms var(--ease); }
+.question-content { flex: 1; padding: 2rem 1rem; }
+.question-copy { animation: question-in 360ms var(--ease) both; }
+.question-copy > span { color: var(--clay-dark); font-size: 0.76rem; font-weight: 760; }
+.question-copy h1 { max-width: 18ch; margin: 0.8rem 0 0; font-family: var(--font-display); font-size: clamp(2.25rem, 9vw, 4.6rem); font-weight: 790; line-height: 0.98; letter-spacing: -0.03em; text-wrap: balance; }
+.question-copy p { max-width: 50ch; margin: 1rem 0 0; color: var(--muted); }
+.answer-area { margin-top: 2.5rem; }
+.field-label { display: grid; gap: 0.5rem; max-width: 43rem; }
+.field-label > span { color: var(--muted); font-size: 0.78rem; font-weight: 700; }
+.field-label input, .field-label textarea, .search-field input, .question-editor-list input { width: 100%; border: 0; border-bottom: 1px solid var(--navy-soft); border-radius: 0; background: transparent; color: var(--ink); }
+.field-label input { min-height: 4rem; padding: 0.55rem 0; font-size: 1.35rem; }
+.field-label textarea { padding: 0.75rem 0; font-size: 1.22rem; line-height: 1.5; resize: vertical; }
+.field-label input::placeholder, .field-label textarea::placeholder, .search-field input::placeholder { color: oklch(47% 0.018 255); opacity: 1; }
+.field-label input:focus, .field-label textarea:focus { border-color: var(--clay); }
+.choice-list { display: grid; gap: 0.5rem; max-width: 49rem; margin: 0; padding: 0; border: 0; }
+.choice { min-height: 3.65rem; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.8rem; padding: 0.75rem 0.9rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--white); cursor: pointer; transition: border-color 180ms var(--ease), background 180ms var(--ease), transform 120ms var(--ease); }
+.choice:hover { border-color: var(--navy-soft); }
+.choice--selected { border-color: var(--clay); background: oklch(96% 0.02 38); }
+.choice input { position: absolute; opacity: 0; pointer-events: none; }
+.choice-key, .choice-check { width: 1.8rem; height: 1.8rem; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); font-size: 0.7rem; font-weight: 780; }
+.choice--selected .choice-key, .choice--selected .choice-check { border-color: var(--clay); background: var(--clay); color: var(--white); }
+.choice i { color: var(--clay-dark); font-style: normal; font-weight: 850; }
+.field-error { max-width: 43rem; margin: 0.9rem 0 0; color: var(--danger); font-weight: 720; }
+.form-actions { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: flex-end; gap: 1rem; padding: 0.9rem 1rem max(0.9rem, env(safe-area-inset-bottom)); background: color-mix(in oklch, var(--mineral) 96%, transparent); border-top: 1px solid var(--line); backdrop-filter: blur(0.75rem); }
+.form-actions > span { display: none; color: var(--muted); font-size: 0.76rem; }
+.form-success { display: flex; flex: 1; flex-direction: column; justify-content: center; align-items: flex-start; padding: 3rem 1rem; }
+.success-symbol { width: 3rem; height: 3rem; display: grid; place-items: center; border-radius: 50%; background: var(--success-surface); color: var(--olive); font-size: 1.45rem; font-weight: 850; }
+.form-success > p:first-of-type, .success-page > p:first-of-type { margin: 1.5rem 0 0; color: var(--olive); font-size: 0.76rem; font-weight: 790; letter-spacing: 0.08em; text-transform: uppercase; }
+.form-success h1, .success-page h1 { max-width: 13ch; margin: 0.75rem 0 0; font-family: var(--font-display); font-size: clamp(2.5rem, 9vw, 4.8rem); font-weight: 800; line-height: 0.98; letter-spacing: -0.03em; }
+.form-success > p:last-of-type, .success-page > p:last-of-type { max-width: 48ch; margin: 1.25rem 0 2rem; color: var(--muted); }
+
+/* Approved registration */
+.content-page { padding: 3.5rem 1rem; }
+.success-page { min-height: calc(100dvh - 4.5rem); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
+.enrollment-page { min-height: calc(100dvh - 4.5rem); display: grid; background: var(--white); }
+.enrollment-intro { position: relative; min-height: 28rem; overflow: hidden; display: flex; align-items: flex-end; padding: 2rem 1rem; color: var(--white); }
+.enrollment-intro > img, .enrollment-intro__shade { position: absolute; inset: 0; width: 100%; height: 100%; }
+.enrollment-intro > img { object-fit: cover; object-position: center; }
+.enrollment-intro__shade { background: linear-gradient(0deg, oklch(13% 0.03 255 / 0.85), oklch(13% 0.03 255 / 0.06) 75%); }
+.enrollment-intro > div:last-child { position: relative; z-index: 2; }
+.enrollment-intro span, .enrollment-content header > span, .admin-heading > div > span, .admin-sidebar > div > span { font-size: 0.74rem; font-weight: 790; letter-spacing: 0.09em; text-transform: uppercase; }
+.enrollment-intro h1 { max-width: 15ch; margin: 0.75rem 0 0; font-family: var(--font-display); font-size: clamp(2.4rem, 8vw, 4.5rem); font-weight: 800; line-height: 0.96; letter-spacing: -0.03em; text-wrap: balance; }
+.enrollment-intro p { max-width: 34rem; margin: 1rem 0 0; color: oklch(87% 0.01 255); }
+.enrollment-content { padding: 3.5rem 1rem; }
+.enrollment-content header h2 { max-width: 16ch; margin: 0.75rem 0 0; font-family: var(--font-display); font-size: clamp(2.2rem, 7vw, 3.8rem); font-weight: 790; line-height: 0.98; letter-spacing: -0.025em; }
+.enrollment-content header p { max-width: 42rem; margin: 1rem 0 0; color: var(--muted); }
+.access-notice { display: grid; gap: 0.25rem; margin-top: 2rem; padding: 1rem; border: 1px solid oklch(72% 0.05 70); border-radius: var(--radius-sm); background: var(--warning-surface); }
+.access-notice span { color: var(--muted); }
+.enrollment-form { max-width: 56rem; margin-top: 2.5rem; }
+.fields-grid { display: grid; gap: 1.5rem; }
+.field-label--compact input { min-height: 3.5rem; font-size: 1rem; }
+.plan-row { display: flex; flex-direction: column; gap: 1rem; margin-top: 2.5rem; padding: 1.25rem 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.plan-row > div { display: grid; gap: 0.2rem; }
+.plan-row > div > span, .plan-row small { color: var(--muted); font-size: 0.76rem; }
+.consent-row { display: flex; align-items: flex-start; gap: 0.75rem; margin-top: 1.5rem; color: var(--muted); font-size: 0.88rem; cursor: pointer; }
+.consent-row input { width: 1.1rem; height: 1.1rem; margin: 0.2rem 0 0; accent-color: var(--clay); }
+.primary-button--wide { width: 100%; margin-top: 1.5rem; }
+
+/* Authentication and protected states */
+.login-page { min-height: calc(100dvh - 4.5rem); display: grid; background: var(--white); }
+.login-page > section { display: flex; flex-direction: column; justify-content: center; padding: 3.5rem 1rem; }
+.login-page > section > span, .access-state > span { color: var(--clay-dark); font-size: 0.74rem; font-weight: 790; letter-spacing: 0.09em; text-transform: uppercase; }
+.login-page h1, .access-state h1 { max-width: 14ch; margin: 0.75rem 0 0; font-family: var(--font-display); font-size: clamp(2.5rem, 9vw, 4.8rem); font-weight: 800; line-height: 0.96; letter-spacing: -0.03em; }
+.login-page > section > p, .access-state > p { max-width: 44ch; margin: 1rem 0 0; color: var(--muted); }
+.login-page form { width: 100%; max-width: 30rem; display: grid; gap: 1.25rem; margin-top: 2.5rem; }
+.login-page form .primary-button { margin-top: 0.5rem; }
+.login-page > aside { position: relative; display: none; min-height: 32rem; overflow: hidden; background: var(--navy-deep); }
+.login-page > aside img, .login-page > aside div { position: absolute; inset: 0; width: 100%; height: 100%; }
+.login-page > aside img { object-fit: cover; }
+.login-page > aside div { background: linear-gradient(0deg, oklch(13% 0.03 255 / 0.48), transparent); }
+.access-state { min-height: calc(100dvh - 4.5rem); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 3.5rem 1rem; }
+.access-state .primary-button { margin-top: 2rem; }
+
+/* Product surfaces */
+.member-page, .admin-page { min-height: calc(100dvh - 4.5rem); background: var(--surface-muted); }
+.member-rail, .admin-sidebar { display: none; background: var(--navy-deep); color: var(--white); }
+.member-content, .admin-content { position: relative; padding: 2rem 1rem 6.5rem; }
+.member-welcome, .admin-heading { display: flex; flex-direction: column; gap: 1.25rem; }
+.member-welcome p { margin: 0; color: var(--muted); }
+.member-welcome h1, .admin-heading h2 { max-width: 18ch; margin: 0.25rem 0 0; font-family: var(--font-display); font-size: clamp(2.25rem, 7vw, 3.75rem); font-weight: 790; line-height: 0.98; letter-spacing: -0.03em; text-wrap: balance; }
+.membership-hero { display: grid; gap: 1px; margin-top: 2.5rem; background: var(--line); border: 1px solid var(--line); }
+.membership-hero > div { min-height: 9.5rem; display: flex; flex-direction: column; justify-content: space-between; padding: 1.25rem; background: var(--white); }
+.membership-hero > div > span, .membership-hero small, .profile-data span { color: var(--muted); font-size: 0.76rem; }
+.membership-hero > div > strong { font-size: 1.55rem; }
+.membership-hero > button { margin: 1rem; }
+.member-list, .payment-method, .profile-data, .exit-section, .review-queue, .signal-strip, .forms-layout, .table-wrap { margin-top: 1.5rem; background: var(--white); border: 1px solid var(--line); }
+.member-list > header, .review-queue > header { display: flex; justify-content: space-between; align-items: flex-end; padding: 1rem; border-bottom: 1px solid var(--line); }
+.member-list h2, .review-queue h3 { margin: 0; font-size: 1.05rem; }
+.member-list header > span, .review-queue header span { color: var(--muted); font-size: 0.76rem; }
+.movement-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.75rem; min-height: 4.5rem; padding: 0.9rem 1rem; border-bottom: 1px solid var(--line); }
+.movement-row:last-child { border-bottom: 0; }
+.movement-row > div { display: grid; }
+.movement-row span { color: var(--muted); font-size: 0.78rem; }
+.movement-row > strong { font-size: 0.78rem; }
+.movement-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--clay); }
+.movement-dot--ok { background: var(--olive); }
+.payment-method { display: flex; flex-direction: column; gap: 1rem; padding: 1rem; }
+.payment-method > div { display: flex; align-items: center; gap: 1rem; }
+.payment-method > div > div { display: grid; }
+.payment-method span { color: var(--muted); font-size: 0.78rem; }
+.payment-method > p { max-width: 46rem; margin: 0; color: var(--muted); }
+.card-glyph { min-width: 4.5rem; min-height: 3rem; display: grid; place-items: center; border-radius: var(--radius-sm); background: var(--navy); color: var(--white) !important; letter-spacing: 0.15em; }
+.profile-data { display: grid; }
+.profile-data > div { display: grid; gap: 0.2rem; padding: 1rem; border-bottom: 1px solid var(--line); }
+.profile-data > button { justify-self: start; margin: 0.5rem 1rem; }
+.exit-section { padding: 1.25rem; }
+.exit-section h2 { margin: 0; font-size: 1.05rem; }
+.exit-section > p { max-width: 46rem; color: var(--muted); }
+.exit-confirm { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.exit-confirm p { color: var(--muted); }
+.success-message { padding: 0.8rem; border-radius: var(--radius-sm); background: var(--success-surface); color: var(--olive) !important; font-weight: 720; }
+.mobile-tabbar, .admin-mobile-nav { position: fixed; z-index: var(--z-sticky); left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(3, 1fr); padding: 0.5rem 0.5rem max(0.5rem, env(safe-area-inset-bottom)); background: color-mix(in oklch, var(--white) 96%, transparent); border-top: 1px solid var(--line); backdrop-filter: blur(0.75rem); }
+.mobile-tabbar button, .admin-mobile-nav button { min-height: 3rem; border: 0; background: transparent; color: var(--muted); font-size: 0.74rem; font-weight: 720; }
+.mobile-tabbar button.active, .admin-mobile-nav button.active { color: var(--clay-dark); }
+.toast { position: fixed; z-index: var(--z-toast); top: 5.25rem; left: 1rem; right: 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.85rem 1rem; border-radius: var(--radius-sm); background: var(--navy-deep); color: var(--white); font-size: 0.85rem; }
+.toast button { border: 0; background: transparent; color: inherit; text-decoration: underline; cursor: pointer; }
+
+.status-chip { width: max-content; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.6rem; border-radius: 999px; font-size: 0.7rem; font-weight: 780; white-space: nowrap; }
+.status-chip--ok { background: var(--success-surface); color: var(--olive); }
+.status-chip--pending { background: var(--warning-surface); color: oklch(42% 0.09 70); }
+.status-chip--inactive { background: var(--surface-muted); color: var(--muted); }
+.admin-heading > div > span { color: var(--muted); }
+.signal-strip { display: grid; }
+.signal-strip > div { display: grid; gap: 0.25rem; padding: 1rem; border-bottom: 1px solid var(--line); }
+.signal-strip > div:last-child { border-bottom: 0; }
+.signal-strip span, .signal-strip small { color: var(--muted); font-size: 0.76rem; }
+.signal-strip strong { font-size: 1.65rem; font-variant-numeric: tabular-nums; }
+.review-queue { overflow: hidden; }
+.review-queue > header > div { display: grid; gap: 0.2rem; }
+.candidate-row { display: grid; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--line); }
+.candidate-row:last-child { border-bottom: 0; }
+.candidate-identity { display: flex; align-items: center; gap: 0.8rem; }
+.candidate-identity > span, .member-cell > span { width: 2.4rem; height: 2.4rem; display: grid; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--surface-muted); color: var(--navy); font-size: 0.72rem; font-weight: 800; }
+.candidate-identity > div, .member-cell > div, .candidate-referrer { display: grid; }
+.candidate-identity small, .candidate-referrer span, .member-cell small { color: var(--muted); font-size: 0.76rem; }
+.candidate-referrer strong { font-size: 0.85rem; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.row-actions button, .small-primary, .table-action { min-height: 2.75rem; padding: 0.55rem 0.75rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; font-size: 0.76rem; font-weight: 730; cursor: pointer; }
+.row-actions .small-primary, .small-primary { border-color: var(--navy); background: var(--navy); color: var(--white); }
+.loading-state, .empty-state { min-height: 10rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; padding: 2rem; text-align: center; }
+.loading-state i { width: 1.25rem; height: 1.25rem; border: 2px solid var(--line); border-top-color: var(--clay); border-radius: 50%; animation: spin 800ms linear infinite; }
+.empty-state span, .loading-state span { color: var(--muted); font-size: 0.82rem; }
+.empty-state--bordered { margin-top: 1.5rem; border: 1px solid var(--line); background: var(--white); }
+.search-field input { min-height: 3rem; padding: 0.5rem 0; font-size: 0.9rem; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; min-width: 50rem; border-collapse: collapse; text-align: left; }
+th { padding: 0.85rem 1rem; color: var(--muted); font-size: 0.7rem; font-weight: 760; letter-spacing: 0.05em; text-transform: uppercase; }
+td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem; }
+.member-cell { display: flex; align-items: center; gap: 0.75rem; }
+.forms-layout { display: grid; overflow: hidden; }
+.form-index { display: flex; overflow-x: auto; background: var(--surface-muted); border-bottom: 1px solid var(--line); }
+.form-index__item { min-width: 15rem; display: grid; gap: 0.25rem; padding: 1rem; border: 0; border-right: 1px solid var(--line); background: transparent; text-align: left; cursor: pointer; }
+.form-index__item--active { background: var(--white); }
+.form-index__item small { color: var(--muted); }
+.form-editor { padding: 1rem; }
+.form-editor > header { display: flex; flex-direction: column; gap: 1rem; }
+.form-editor > header > div { display: grid; gap: 0.2rem; }
+.form-editor > header p { margin: 0; color: var(--muted); font-size: 0.8rem; }
+.form-editor > header small, .form-editor > header time { color: var(--muted); font-size: 0.72rem; }
+.form-editor > header > div { max-width: 42rem; }
+.question-editor-list { margin: 1rem 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.question-editor-list li { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 0.75rem; padding: 0.75rem 0; border-bottom: 1px solid var(--line); }
+.drag-index { color: var(--muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.question-editor-list input { min-height: 2.8rem; padding: 0.4rem 0; }
+.question-editor-list li > div { grid-column: 2; display: flex; gap: 0.25rem; }
+.question-editor-list li > span:nth-child(2) { display: grid; gap: 0.18rem; }
+.question-editor-list li > span:nth-child(2) small { color: var(--muted); font-size: 0.68rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
+.question-editor-list li button { width: 2.35rem; height: 2.35rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; cursor: pointer; }
+.question-editor-list li .remove-button { color: var(--danger); }
+
+@keyframes question-in { from { opacity: 0; transform: translateY(0.75rem); filter: blur(0.18rem); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes apt-statement-in { from { opacity: 0; transform: translateY(0.42em); filter: blur(0.08em); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+
+@media (min-width: 48rem) {
+  .question-content { padding: 3rem 3rem 2rem; }
+  .form-topbar { padding-inline: 3rem; }
+  .form-actions { justify-content: space-between; padding-inline: 3rem; }
+  .form-actions > span { display: inline; }
+  .choice-list--two, .fields-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .enrollment-content { padding: 4.5rem 3rem; }
+  .login-page > section, .access-state { padding: 4.5rem 3rem; }
+  .plan-row { flex-direction: row; align-items: center; justify-content: space-between; }
+  .primary-button--wide { width: auto; }
+  .member-content, .admin-content { padding: 3rem 2rem 6.5rem; }
+  .member-welcome, .admin-heading { flex-direction: row; align-items: flex-end; justify-content: space-between; }
+  .membership-hero { grid-template-columns: 1fr 1fr auto; align-items: stretch; }
+  .membership-hero > button { align-self: end; }
+  .payment-method { flex-direction: row; align-items: center; justify-content: space-between; }
+  .signal-strip { grid-template-columns: repeat(4, 1fr); }
+  .signal-strip > div { min-height: 8rem; border-right: 1px solid var(--line); border-bottom: 0; }
+  .signal-strip > div:last-child { border-right: 0; }
+  .candidate-row { grid-template-columns: minmax(16rem, 1.2fr) minmax(9rem, 0.8fr) auto; align-items: center; }
+  .candidate-row .row-actions { grid-column: 1 / -1; }
+  .forms-layout { grid-template-columns: minmax(14rem, 0.55fr) minmax(0, 1.45fr); }
+  .form-index { display: block; border-right: 1px solid var(--line); border-bottom: 0; }
+  .form-index__item { width: 100%; border-right: 0; border-bottom: 1px solid var(--line); }
+  .form-editor { padding: 1.5rem; }
+  .form-editor > header { flex-direction: row; align-items: flex-end; justify-content: space-between; }
+  .question-editor-list li { grid-template-columns: auto 1fr auto; }
+  .question-editor-list li > div { grid-column: auto; }
+}
+
+@media (min-width: 64rem) {
+  .form-shell { display: grid; grid-template-columns: minmax(20rem, 34%) 1fr; }
+  .form-visual { min-height: 100dvh; padding: 2rem; }
+  .form-visual .brand-lockup--large img { width: 8rem; }
+  .form-visual > p { display: block; }
+  .question-stage { min-height: 100dvh; }
+  .question-content { display: flex; flex-direction: column; justify-content: center; padding: 3rem clamp(3rem, 7vw, 7rem); }
+  .form-topbar, .form-actions { padding-inline: clamp(3rem, 7vw, 7rem); }
+  .form-success { padding: clamp(3rem, 7vw, 7rem); }
+  .enrollment-page { grid-template-columns: minmax(25rem, 42%) 1fr; }
+  .enrollment-intro { min-height: calc(100dvh - 4.5rem); padding: 4rem; }
+  .enrollment-content { display: flex; flex-direction: column; justify-content: center; padding: 5rem clamp(3rem, 6vw, 6rem); }
+  .login-page { grid-template-columns: minmax(25rem, 0.9fr) minmax(26rem, 1.1fr); }
+  .login-page > section { padding: 5rem clamp(3rem, 7vw, 7rem); }
+  .login-page > aside { display: block; }
+  .access-state { padding: 5rem clamp(3rem, 7vw, 7rem); }
+  .member-page, .admin-page { display: grid; grid-template-columns: 16.5rem 1fr; }
+  .member-rail, .admin-sidebar { position: sticky; top: 4.5rem; height: calc(100dvh - 4.5rem); display: flex; flex-direction: column; padding: 1.5rem; }
+  .member-profile { display: flex; align-items: center; gap: 0.75rem; margin-top: 3rem; }
+  .member-profile > span { width: 2.6rem; height: 2.6rem; display: grid; place-items: center; border-radius: 50%; background: var(--clay); font-size: 0.75rem; font-weight: 820; }
+  .member-profile > div { display: grid; }
+  .member-profile small { color: oklch(74% 0.015 255); }
+  .member-rail nav, .admin-sidebar nav { display: grid; gap: 0.3rem; margin-top: 3rem; }
+  .side-link { min-height: 2.9rem; padding: 0.65rem 0.75rem; border: 0; border-radius: var(--radius-sm); background: transparent; color: oklch(75% 0.015 255); text-align: left; cursor: pointer; }
+  .side-link--active { background: oklch(100% 0 0 / 0.1); color: var(--white); }
+  .rail-status, .sidebar-footer { margin-top: auto; color: oklch(75% 0.015 255); font-size: 0.76rem; }
+  .rail-status { display: flex; align-items: center; gap: 0.5rem; }
+  .rail-status i { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: oklch(72% 0.14 135); }
+  .admin-sidebar > div { margin-top: 3rem; }
+  .admin-sidebar h1 { margin: 0.5rem 0 0; font-family: var(--font-display); font-size: 2rem; line-height: 1; }
+  .sidebar-footer { display: grid; gap: 0.2rem; }
+  .member-content, .admin-content { padding: 4rem clamp(3rem, 6vw, 6rem); }
+  .mobile-tabbar, .admin-mobile-nav { display: none; }
+  .candidate-row { grid-template-columns: minmax(16rem, 1.2fr) minmax(9rem, 0.8fr) auto auto; }
+  .candidate-row .row-actions { grid-column: auto; justify-content: flex-end; }
+  .toast { top: 5.5rem; left: auto; right: 2rem; width: min(28rem, calc(100vw - 4rem)); }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .primary-button:hover, .secondary-button:hover, .row-actions button:hover, .table-action:hover { transform: translateY(-1px); }
+  .apt-landing__header nav a:not(.apt-landing__header-cta):hover, .apt-landing__secondary-link:hover, .apt-landing__text-link:hover { opacity: 0.72; }
+  .apt-landing__header-cta:hover, .apt-landing__button--clay:hover { background: var(--clay-dark); transform: translateY(-1px); }
+  .apt-landing__button--light:hover { background: var(--mineral); transform: translateY(-1px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

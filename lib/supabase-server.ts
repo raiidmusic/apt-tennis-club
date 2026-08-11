@@ -1,0 +1,137 @@
+type RuntimeEnv = Record<string, string | undefined>;
+
+export class SupabaseRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly details?: unknown,
+  ) {
+    super(message);
+  }
+}
+
+export function runtimeEnv() {
+  return process.env as RuntimeEnv;
+}
+
+function supabaseConfig() {
+  const currentEnv = runtimeEnv();
+  const url = currentEnv.SUPABASE_URL?.replace(/\/$/, "");
+  const secretKey = currentEnv.SUPABASE_SECRET_KEY || currentEnv.SUPABASE_SERVICE_ROLE_KEY;
+  const publishableKey =
+    currentEnv.SUPABASE_PUBLISHABLE_KEY ||
+    currentEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    currentEnv.SUPABASE_ANON_KEY;
+
+  if (!url || !secretKey) {
+    throw new SupabaseRequestError("Supabase não configurado.", 503);
+  }
+
+  return { url, secretKey, publishableKey };
+}
+
+type AdminRequestOptions = {
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  query?: Record<string, string>;
+  body?: unknown;
+  prefer?: string;
+  single?: boolean;
+};
+
+export async function supabaseAdmin<T>(
+  resource: string,
+  options: AdminRequestOptions = {},
+): Promise<T> {
+  const { url, secretKey } = supabaseConfig();
+  const query = new URLSearchParams(options.query);
+  const response = await fetch(`${url}/rest/v1/${resource}${query.size ? `?${query}` : ""}`, {
+    method: options.method || "GET",
+    headers: {
+      apikey: secretKey,
+      Authorization: `Bearer ${secretKey}`,
+      Accept: options.single ? "application/vnd.pgrst.object+json" : "application/json",
+      "Content-Type": "application/json",
+      ...(options.prefer ? { Prefer: options.prefer } : {}),
+    },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    cache: "no-store",
+  });
+
+  if (response.status === 204) return undefined as T;
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    throw new SupabaseRequestError(
+      payload?.message || payload?.error_description || "Falha ao acessar o Supabase.",
+      response.status,
+      payload,
+    );
+  }
+  return payload as T;
+}
+
+export async function createAuthUser(input: {
+  email: string;
+  password: string;
+  name: string;
+  memberId: string;
+}) {
+  const { url, secretKey } = supabaseConfig();
+  const response = await fetch(`${url}/auth/v1/admin/users`, {
+    method: "POST",
+    headers: {
+      apikey: secretKey,
+      Authorization: `Bearer ${secretKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email: input.email,
+      password: input.password,
+      email_confirm: true,
+      user_metadata: { name: input.name, member_id: input.memberId },
+    }),
+  });
+  const payload = await response.json() as { id?: string; msg?: string; message?: string };
+  if (!response.ok || !payload.id) {
+    throw new SupabaseRequestError(payload.msg || payload.message || "Não foi possível criar o acesso.", response.status);
+  }
+  return payload.id;
+}
+
+export async function signInWithPassword(email: string, password: string) {
+  const { url, publishableKey } = supabaseConfig();
+  if (!publishableKey) throw new SupabaseRequestError("Chave pública do Supabase não configurada.", 503);
+  const response = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: { apikey: publishableKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const payload = await response.json() as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    error_description?: string;
+    msg?: string;
+  };
+  if (!response.ok || !payload.access_token) {
+    throw new SupabaseRequestError(payload.error_description || payload.msg || "E-mail ou senha inválidos.", response.status);
+  }
+  return payload;
+}
+
+export async function getAuthUser(accessToken: string) {
+  const { url, publishableKey } = supabaseConfig();
+  if (!publishableKey) throw new SupabaseRequestError("Chave pública do Supabase não configurada.", 503);
+  const response = await fetch(`${url}/auth/v1/user`, {
+    headers: { apikey: publishableKey, Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  if (!response.ok) return null;
+  return response.json() as Promise<{ id: string; email?: string }>;
+}
+
+export async function sha256(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}

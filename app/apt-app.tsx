@@ -20,12 +20,21 @@ type ApplicationRecord = {
   id: string;
   name: string;
   email: string;
+  whatsapp: string;
   city: string;
   classLevel: string;
   referrer: string;
   status: "new" | "in_review" | "awaiting_info" | "approved" | "rejected" | "invite_sent" | "registered";
   inviteToken?: string | null;
   createdAt: string;
+};
+
+type AdminNote = { id: string; body: string; created_by: string; created_at: string };
+type ApplicationDetail = ApplicationRecord & {
+  profession?: string;
+  answers: Record<string, AnswerValue>;
+  emailStatus?: string;
+  notes: AdminNote[];
 };
 
 const questions: Question[] = [
@@ -60,6 +69,8 @@ type MemberRecord = {
   amountCents: number;
   nextDueDate?: string | null;
   overdueDays: number;
+  twinnerUrl?: string | null;
+  whatsappCommunityUrl?: string | null;
 };
 
 type PortalPayload = {
@@ -441,13 +452,14 @@ export function PortalPage() {
   if (authRequired || !data) return <div className="apt-app"><RouteHeader label="Área do membro" /><main className="access-state"><span>Área reservada</span><h1>Entre para ver sua assinatura.</h1><p>Pagamentos, links do clube e dados pessoais ficam protegidos.</p><a className="primary-button" href="/entrar?next=/portal">Entrar na área do membro</a></main></div>;
   const { member, subscription, payments } = data;
   const initials = member.name.split(" ").map((part) => part[0]).slice(0, 2).join("");
-  const nextDue = subscription?.next_due_date ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long" }).format(new Date(`${subscription.next_due_date}T12:00:00`)) : "A definir";
+  const courtesy = member.participationStatus === "courtesy";
+  const nextDue = courtesy ? "Cortesia" : subscription?.next_due_date ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long" }).format(new Date(`${subscription.next_due_date}T12:00:00`)) : "A definir";
   const active = member.accessActive;
   return <div className="apt-app"><RouteHeader label="Área do membro" /><main className="member-page" id="main-content">
     <aside className="member-rail"><Brand inverse large /><div className="member-profile"><span>{initials}</span><div><strong>{member.name}</strong><small>{member.classLevel || "Classe a confirmar"}</small></div></div><nav aria-label="Área do membro"><button className={tab === "inicio" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("inicio")}>Início</button><button className={tab === "pagamentos" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("pagamentos")}>Pagamentos</button><button className={tab === "perfil" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("perfil")}>Meu cadastro</button></nav><div className="rail-status"><i /> {active ? "Participação ativa" : "Participação em atualização"}</div></aside>
     <section className="member-content">
       {notice && <div className="toast" role="status">{notice}</div>}
-      {tab === "inicio" && <><header className="member-welcome"><div><p>Olá, {member.name.split(" ")[0]}.</p><h1>Sua vida no APT, sem ruído.</h1></div>{member.twinnerUrl ? <a className="secondary-button" href={member.twinnerUrl} target="_blank" rel="noreferrer">Abrir ranking no Twinner <span aria-hidden="true">↗</span></a> : <button className="secondary-button" onClick={() => showNotice("O link do Twinner ainda não foi cadastrado pela gestão.")}>Abrir ranking no Twinner</button>}</header><section className="membership-hero"><div><span>Próxima mensalidade</span><strong>{nextDue}</strong><small>Renovação automática no cartão</small></div><div><span>Situação</span><strong>{active ? "Em dia" : "Aguardando regularização"}</strong><small>{subscription?.status || "Em configuração"}</small></div><button className="primary-button" onClick={() => setTab("pagamentos")}>Gerenciar pagamento</button></section><section className="member-list"><header><h2>Últimos movimentos</h2><span>{payments.length} registros</span></header>{payments.slice(0, 3).map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>Mensalidade APT</strong><span>{payment.due_date ? `Vencimento em ${new Intl.DateTimeFormat("pt-BR").format(new Date(`${payment.due_date}T12:00:00`))}` : "Cobrança registrada"}</span></div><strong>{payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "Pago" : "Pendente"}</strong></div>)}{payments.length === 0 && <div className="empty-state"><strong>Nenhuma cobrança registrada.</strong><span>O histórico aparece após o primeiro evento do Asaas.</span></div>}</section></>}
+      {tab === "inicio" && <><header className="member-welcome"><div><p>Olá, {member.name.split(" ")[0]}.</p><h1>Sua vida no APT, sem ruído.</h1></div></header><section className="membership-hero"><div><span>Próxima mensalidade</span><strong>{nextDue}</strong><small>{courtesy ? "Acesso liberado pela gestão" : "Renovação automática no cartão"}</small></div><div><span>Situação</span><strong>{active ? "Em dia" : "Aguardando regularização"}</strong><small>{courtesy ? "Participação cortesia" : subscription?.status || "Em configuração"}</small></div>{!courtesy && <button className="primary-button" onClick={() => setTab("pagamentos")}>Gerenciar pagamento</button>}</section>{active && <section className="member-list"><header><h2>Acessos rápidos</h2><span>Participação ativa</span></header>{member.twinnerUrl && <div className="movement-row"><i className="movement-dot movement-dot--ok" /><div><strong>Cadastro no Tweener</strong><span>Entre para fazer parte da migração e acompanhar o APT.</span></div><a href={member.twinnerUrl} target="_blank" rel="noreferrer">Fazer cadastro</a></div>}{member.whatsappCommunityUrl && <div className="movement-row"><i className="movement-dot movement-dot--ok" /><div><strong>Comunidade APT no WhatsApp</strong><span>Receba os avisos e a organização do clube.</span></div><a href={member.whatsappCommunityUrl} target="_blank" rel="noreferrer">Entrar</a></div>}</section>}<section className="member-list"><header><h2>Últimos movimentos</h2><span>{payments.length} registros</span></header>{payments.slice(0, 3).map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>Mensalidade APT</strong><span>{payment.due_date ? `Vencimento em ${new Intl.DateTimeFormat("pt-BR").format(new Date(`${payment.due_date}T12:00:00`))}` : "Cobrança registrada"}</span></div><strong>{payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "Pago" : "Pendente"}</strong></div>)}{payments.length === 0 && <div className="empty-state"><strong>Nenhuma cobrança registrada.</strong><span>O histórico aparece após o primeiro evento do Asaas.</span></div>}</section></>}
       {tab === "pagamentos" && <><header className="member-welcome"><div><p>Pagamentos</p><h1>Assinatura e cobranças.</h1></div></header><section className="payment-method"><div><span className="card-glyph">••••</span><div><strong>Cartão protegido pelo Asaas</strong><span>Os dados completos nunca ficam no APT.</span></div></div><p>Quando a troca de cartão estiver disponível, ela será aberta no ambiente seguro do Asaas — nunca nesta página.</p></section><section className="member-list"><header><h2>Histórico</h2><span>{payments.length} cobranças</span></header>{payments.map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>{(payment.value_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong><span>{payment.due_date || "Sem vencimento informado"}</span></div>{payment.invoice_url ? <a href={payment.invoice_url} target="_blank" rel="noreferrer">Abrir cobrança</a> : <strong>{payment.status}</strong>}</div>)}</section></>}
       {tab === "perfil" && <><header className="member-welcome"><div><p>Meu cadastro</p><h1>Dados da participação.</h1></div></header><section className="profile-data"><div><span>Nome</span><strong>{member.name}</strong></div><div><span>E-mail</span><strong>{member.email}</strong></div><div><span>WhatsApp</span><strong>{member.whatsapp}</strong></div><div><span>CPF</span><strong>{member.cpfMasked}</strong></div></section><section className="exit-section"><h2>Encerrar participação</h2><p>O encerramento interrompe novas cobranças. O acesso segue até o fim do período já pago.</p>{!exitRequested && <><button className="text-button text-button--danger" onClick={() => setExitOpen((open) => !open)}>{exitOpen ? "Voltar" : "Quero sair do ranking"}</button>{exitOpen && <div className="exit-confirm"><p>Ao confirmar, nenhuma nova mensalidade será criada.</p><button className="danger-button" onClick={requestCancellation} disabled={cancelling}>{cancelling ? "Cancelando no Asaas…" : "Cancelar renovação"}</button></div>}</>}{exitRequested && <p className="success-message" role="status">Renovação cancelada. Nenhuma nova cobrança será criada.</p>}</section></>}
     </section>
@@ -533,6 +545,70 @@ function MemberImportPanel({ onImported }: { onImported: () => Promise<void> }) 
   </section>;
 }
 
+function answerText(value: AnswerValue | undefined) {
+  return Array.isArray(value) ? value.join(", ") : value || "";
+}
+
+function ApplicationReviewDetail({
+  application,
+  loading,
+  note,
+  onNoteChange,
+  onClose,
+  onSave,
+}: {
+  application: ApplicationDetail | null;
+  loading: boolean;
+  note: string;
+  onNoteChange: (value: string) => void;
+  onClose: () => void;
+  onSave: (status?: "in_review" | "awaiting_info" | "approved" | "rejected") => void;
+}) {
+  return <section className="application-review" aria-live="polite">
+    <header><div><span>Requerimento</span><h3>{application?.name || "Carregando…"}</h3></div><button type="button" onClick={onClose}>Fechar</button></header>
+    {loading && <div className="loading-state"><i /><span>Carregando respostas…</span></div>}
+    {application && !loading && <div className="application-review__grid">
+      <dl className="application-answers">
+        {questions.filter((question) => answerText(application.answers[question.id])).map((question) => <div key={question.id}><dt>{question.title}</dt><dd>{answerText(application.answers[question.id])}</dd></div>)}
+      </dl>
+      <aside className="application-notes">
+        <div><span>Notas internas</span><p>O pedido de informação é apenas registrado aqui; o contato ainda deve ser feito pela gestão.</p></div>
+        {application.notes.map((item) => <article key={item.id}><p>{item.body}</p><small>{item.created_by} · {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.created_at))}</small></article>)}
+        <label className="field-label field-label--compact"><span>Nova nota ou informação solicitada</span><textarea rows={4} value={note} maxLength={1200} onChange={(event) => onNoteChange(event.target.value)} placeholder="Registre contexto, decisão ou o que precisa ser solicitado." /></label>
+        <div className="application-review__actions"><button type="button" onClick={() => onSave()} disabled={!note.trim()}>Registrar nota</button><button type="button" onClick={() => onSave("rejected")}>Não aprovar</button><button type="button" onClick={() => onSave("awaiting_info")} disabled={!note.trim()}>Registrar pedido de informação</button><button className="small-primary" type="button" onClick={() => onSave("approved")}>Aprovar e gerar convite</button></div>
+      </aside>
+    </div>}
+  </section>;
+}
+
+function MemberManagementDetail({ member, saving, error, onClose, onSave }: {
+  member: MemberRecord;
+  saving: boolean;
+  error: string;
+  onClose: () => void;
+  onSave: (changes: { participationStatus?: string; twinnerUrl?: string; whatsappCommunityUrl?: string }) => void;
+}) {
+  const [participationStatus, setParticipationStatus] = useState("");
+  const [twinnerUrl, setTwinnerUrl] = useState(member.twinnerUrl || "");
+  const [whatsappCommunityUrl, setWhatsappCommunityUrl] = useState(member.whatsappCommunityUrl || "");
+  const initialTweenerUrl = member.twinnerUrl || "";
+  const initialWhatsappUrl = member.whatsappCommunityUrl || "";
+  return <section className="member-management" aria-labelledby="member-management-title">
+    <header><div><span>Integrante</span><h3 id="member-management-title">{member.name}</h3><p>{member.email}</p></div><button type="button" onClick={onClose}>Fechar</button></header>
+    <form onSubmit={(event) => { event.preventDefault(); onSave({ participationStatus: participationStatus || undefined, twinnerUrl: twinnerUrl === initialTweenerUrl ? undefined : twinnerUrl, whatsappCommunityUrl: whatsappCommunityUrl === initialWhatsappUrl ? undefined : whatsappCommunityUrl }); }}>
+      {error && <p className="field-error" role="alert">{error}</p>}
+      <label className="field-label field-label--compact"><span>Participação</span><select name="participation-status" value={participationStatus} onChange={(event) => setParticipationStatus(event.target.value)}><option value="">Manter: {member.participationStatus}</option><option value="pending_payment">Aguardando pagamento</option><option value="courtesy">Cortesia</option><option value="inactive">Inativo</option></select><small>Ativo e inadimplente são atualizados pelo fluxo financeiro.</small></label>
+      <label className="field-label field-label--compact"><span>Link individual do Tweener</span><input name="tweener-url" type="url" inputMode="url" autoComplete="off" value={twinnerUrl} onChange={(event) => setTwinnerUrl(event.target.value)} placeholder="https://app.tweener.club/…" /><small>Em branco, usa o acesso padrão do clube.</small></label>
+      <label className="field-label field-label--compact"><span>Convite individual do WhatsApp</span><input name="whatsapp-community-url" type="url" inputMode="url" autoComplete="off" value={whatsappCommunityUrl} onChange={(event) => setWhatsappCommunityUrl(event.target.value)} placeholder="https://chat.whatsapp.com/…" /><small>Em branco, usa a comunidade padrão do APT.</small></label>
+      <div className="member-management__actions"><button className="small-primary" type="submit" disabled={saving}>{saving ? "Salvando…" : "Salvar acessos"}</button></div>
+    </form>
+  </section>;
+}
+
+function MemberManagementList({ members, onManage }: { members: MemberRecord[]; onManage: (member: MemberRecord) => void }) {
+  return <div className="member-management-list">{members.map((member) => <article key={member.id} className="member-management-card"><div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.email} · {member.classLevel || "Sem classe"}</small></div></div><div className="member-management-card__status"><span className={["active", "courtesy"].includes(member.participationStatus) ? "status-chip status-chip--ok" : member.participationStatus === "pending_payment" ? "status-chip status-chip--pending" : "status-chip status-chip--inactive"}>{member.participationStatus}</span><small>{member.nextDueDate ? `Vence ${member.nextDueDate}` : member.subscriptionStatus}</small></div><button className="table-action" type="button" onClick={() => onManage(member)}>Gerenciar integrante</button></article>)}</div>;
+}
+
 export function AdminPage() {
   const [tab, setTab] = useState<"resumo" | "membros" | "formularios">("resumo");
   const [query, setQuery] = useState("");
@@ -544,6 +620,12 @@ export function AdminPage() {
   const [asaasConnected, setAsaasConnected] = useState(false);
   const [copiedId, setCopiedId] = useState("");
   const [notice, setNotice] = useState("");
+  const [selectedApplication, setSelectedApplication] = useState<ApplicationDetail | null>(null);
+  const [applicationLoading, setApplicationLoading] = useState(false);
+  const [reviewNote, setReviewNote] = useState("");
+  const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
+  const [memberSaving, setMemberSaving] = useState(false);
+  const [memberError, setMemberError] = useState("");
   const [loading, setLoading] = useState(true);
   const [authRequired, setAuthRequired] = useState(false);
   const filteredMembers = members.filter((member) => member.name.toLowerCase().includes(query.toLowerCase()));
@@ -555,12 +637,14 @@ export function AdminPage() {
         fetch("/api/requerimentos"), fetch("/api/membros"), fetch("/api/asaas/status"), fetch("/api/formularios"),
       ]);
       const [applicationPayload, memberPayload, asaasPayload, formPayload] = await Promise.all([
-        applicationResponse.json() as Promise<{ applications?: ApplicationRecord[] }>,
+        applicationResponse.json() as Promise<{ applications?: ApplicationRecord[]; error?: string }>,
         memberResponse.json() as Promise<{ members?: MemberRecord[] }>,
         asaasResponse.json() as Promise<{ connected?: boolean }>,
         formResponse.json() as Promise<{ forms?: FormDefinition[]; error?: string }>,
       ]);
-      setApplications(applicationPayload.applications || []); setMembers(memberPayload.members || []);
+      if (applicationResponse.ok) setApplications(applicationPayload.applications || []);
+      else setNotice(applicationPayload.error || "Não foi possível carregar os requerimentos.");
+      setMembers(memberPayload.members || []);
       setAsaasConnected(Boolean(asaasPayload.connected));
       if (formResponse.ok) {
         const loadedForms = formPayload.forms || [];
@@ -571,7 +655,41 @@ export function AdminPage() {
       }
     }).catch(() => setNotice("Não foi possível atualizar os dados agora.")).finally(() => setLoading(false));
   }, []);
-  async function updateApplication(id: string, status: "in_review" | "awaiting_info" | "approved" | "rejected") { try { const response = await fetch("/api/requerimentos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status }) }); const payload = await response.json() as { application?: ApplicationRecord; error?: string; inviteDelivery?: "sent" | "manual" }; if (!response.ok || !payload.application) throw new Error(payload.error); setApplications((current) => current.map((item) => item.id === id ? payload.application! : item)); setNotice(status === "approved" ? payload.inviteDelivery === "sent" ? "Convite enviado por e-mail." : "Aprovado. Copie o link individual de cadastro." : "Decisão registrada."); } catch { setNotice("Não foi possível registrar a decisão."); } }
+  async function openApplication(id: string) {
+    setApplicationLoading(true); setReviewNote("");
+    try {
+      const response = await fetch(`/api/requerimentos?id=${encodeURIComponent(id)}`);
+      const payload = await response.json() as { application?: ApplicationDetail; error?: string };
+      if (!response.ok || !payload.application) throw new Error(payload.error);
+      setSelectedApplication(payload.application);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Não foi possível abrir o requerimento."); }
+    finally { setApplicationLoading(false); }
+  }
+  async function updateApplication(id: string, status?: "in_review" | "awaiting_info" | "approved" | "rejected") {
+    try {
+      const response = await fetch("/api/requerimentos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status, note: reviewNote }) });
+      const payload = await response.json() as { application?: ApplicationRecord; note?: AdminNote; error?: string; inviteDelivery?: "sent" | "manual" };
+      if (!response.ok || !payload.application) throw new Error(payload.error);
+      setApplications((current) => current.map((item) => item.id === id ? payload.application! : item));
+      setSelectedApplication((current) => current?.id === id ? { ...current, ...payload.application!, notes: payload.note ? [...current.notes, payload.note] : current.notes } : current);
+      setReviewNote("");
+      setNotice(status === "approved" ? payload.inviteDelivery === "sent" ? "Convite enviado por e-mail." : "Aprovado. Copie o link individual de cadastro." : status === "awaiting_info" ? "Pedido de informação registrado. O contato ainda precisa ser feito pela gestão." : status ? "Decisão registrada." : "Nota registrada.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Não foi possível registrar a decisão."); }
+  }
+  async function updateMember(changes: { participationStatus?: string; twinnerUrl?: string; whatsappCommunityUrl?: string }) {
+    if (!selectedMember || Object.values(changes).every((value) => value === undefined)) { setMemberError("Faça ao menos uma alteração antes de salvar."); return; }
+    setMemberError("");
+    setMemberSaving(true);
+    try {
+      const response = await fetch("/api/membros", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: selectedMember.id, ...changes }) });
+      const payload = await response.json() as { member?: Pick<MemberRecord, "id" | "participationStatus" | "twinnerUrl" | "whatsappCommunityUrl">; error?: string };
+      if (!response.ok || !payload.member) throw new Error(payload.error);
+      setMembers((current) => current.map((member) => member.id === payload.member!.id ? { ...member, ...payload.member! } : member));
+      setSelectedMember((current) => current ? { ...current, ...payload.member! } : current);
+      setNotice("Acessos do integrante atualizados.");
+    } catch (error) { setMemberError(error instanceof Error ? error.message : "Não foi possível atualizar o integrante."); }
+    finally { setMemberSaving(false); }
+  }
   async function copyInvite(application: ApplicationRecord) { if (!application.inviteToken) return; await navigator.clipboard.writeText(`${window.location.origin}/cadastro?convite=${application.inviteToken}`); setCopiedId(application.id); window.setTimeout(() => setCopiedId(""), 2200); }
   async function refreshMembers() { const response = await fetch("/api/membros"); const payload = await response.json() as { members?: MemberRecord[] }; if (response.ok) setMembers(payload.members || []); }
   if (authRequired) return <div className="apt-app"><RouteHeader label="Gestão APT" /><main className="access-state"><span>Acesso administrativo</span><h1>Entre com uma conta autorizada.</h1><p>A base de candidatos, integrantes e pagamentos não fica exposta publicamente.</p><a className="primary-button" href="/entrar?next=/gestao">Entrar na gestão</a></main></div>;
@@ -583,8 +701,8 @@ export function AdminPage() {
     <aside className="admin-sidebar"><Brand inverse /><div><span>Gestão APT</span><h1>Clube em movimento.</h1></div><nav aria-label="Gestão"><button className={tab === "resumo" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("resumo")}>Visão geral</button><button className={tab === "membros" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("membros")}>Membros e cobranças</button><button className={tab === "formularios" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("formularios")}>Formulários</button></nav><div className="sidebar-footer"><span>Integração financeira</span><strong>{asaasConnected ? "Asaas conectado" : "Asaas pendente"}</strong></div></aside>
     <section className="admin-content">
       {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice("")}>Fechar</button></div>}
-      {tab === "resumo" && <><header className="admin-heading"><div><span>Visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section><section className="review-queue"><header><div><h3>Requerimentos recentes</h3><span>{attentionCount} aguardando decisão</span></div></header>{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{applications.map((application) => <article className="candidate-row" key={application.id}><div className="candidate-identity"><span>{application.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{application.name}</strong><small>{application.city || "Cidade não informada"} · {application.classLevel || "Classe não informada"}</small></div></div><div className="candidate-referrer"><span>Indicação</span><strong>{application.referrer}</strong></div><span className={["approved", "invite_sent", "registered"].includes(application.status) ? "status-chip status-chip--ok" : application.status === "rejected" ? "status-chip status-chip--inactive" : "status-chip status-chip--pending"}>{application.status === "registered" ? "Cadastrado" : application.status === "invite_sent" ? "Convite enviado" : application.status === "approved" ? "Aprovado" : application.status === "rejected" ? "Não aprovado" : application.status === "awaiting_info" ? "Aguardando informação" : "Em análise"}</span><div className="row-actions">{["new", "in_review", "awaiting_info"].includes(application.status) && <><button onClick={() => updateApplication(application.id, "rejected")}>Não aprovar</button><button onClick={() => updateApplication(application.id, "awaiting_info")}>Pedir informação</button><button className="small-primary" onClick={() => updateApplication(application.id, "approved")}>Aprovar e gerar convite</button></>}{application.inviteToken && <button className="small-primary" onClick={() => copyInvite(application)}>{copiedId === application.id ? "Link copiado" : "Copiar link de cadastro"}</button>}{["approved", "invite_sent"].includes(application.status) && !application.inviteToken && <button onClick={() => updateApplication(application.id, "approved")}>Gerar novo link</button>}</div></article>)}</section></>}
-      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Uma base única para saber quem está ativo.</h2></div><label className="search-field"><span className="sr-only">Buscar membro</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome" /></label></header><MemberImportPanel onImported={refreshMembers} /><div className="table-wrap"><table><thead><tr><th>Integrante</th><th>Participação</th><th>Assinatura</th><th>Próximo vencimento</th><th>Atraso</th></tr></thead><tbody>{filteredMembers.map((member) => <tr key={member.id}><td><div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.email} · {member.classLevel || "Sem classe"}</small></div></div></td><td><span className={member.participationStatus === "active" ? "status-chip status-chip--ok" : member.participationStatus === "pending_payment" ? "status-chip status-chip--pending" : "status-chip status-chip--inactive"}>{member.participationStatus}</span></td><td>{member.subscriptionStatus}</td><td>{member.nextDueDate || "—"}</td><td>{member.overdueDays ? `${member.overdueDays} dias` : "—"}</td></tr>)}</tbody></table>{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Tente outro nome.</span></div>}</div></>}
+      {tab === "resumo" && <><header className="admin-heading"><div><span>Visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section><section className="review-queue"><header><div><h3>Requerimentos recentes</h3><span>{attentionCount} aguardando decisão</span></div></header>{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{applications.map((application) => <article className="candidate-row" key={application.id}><div className="candidate-identity"><span>{application.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{application.name}</strong><small>{application.city || "Cidade não informada"} · {application.classLevel || "Classe não informada"}</small></div></div><div className="candidate-referrer"><span>Indicação</span><strong>{application.referrer}</strong></div><span className={["approved", "invite_sent", "registered"].includes(application.status) ? "status-chip status-chip--ok" : application.status === "rejected" ? "status-chip status-chip--inactive" : "status-chip status-chip--pending"}>{application.status === "registered" ? "Cadastrado" : application.status === "invite_sent" ? "Convite enviado" : application.status === "approved" ? "Aprovado" : application.status === "rejected" ? "Não aprovado" : application.status === "awaiting_info" ? "Aguardando informação" : "Em análise"}</span><div className="row-actions"><button onClick={() => openApplication(application.id)}>Abrir requerimento</button>{application.inviteToken && <button className="small-primary" onClick={() => copyInvite(application)}>{copiedId === application.id ? "Link copiado" : "Copiar link de cadastro"}</button>}{["approved", "invite_sent"].includes(application.status) && !application.inviteToken && <button onClick={() => updateApplication(application.id, "approved")}>Gerar novo link</button>}</div></article>)}</section>{(selectedApplication || applicationLoading) && <ApplicationReviewDetail application={selectedApplication} loading={applicationLoading} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} />}</>}
+      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Uma base única para saber quem está ativo.</h2></div><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome…" /></label></header><MemberImportPanel onImported={refreshMembers} /><MemberManagementList members={filteredMembers} onManage={(member) => { setMemberError(""); setSelectedMember(member); }} /><div className="table-wrap table-wrap--members"><table><thead><tr><th>Integrante</th><th>Participação</th><th>Assinatura</th><th>Próximo vencimento</th><th>Atraso</th><th><span className="sr-only">Ações</span></th></tr></thead><tbody>{filteredMembers.map((member) => <tr key={member.id}><td><div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.email} · {member.classLevel || "Sem classe"}</small></div></div></td><td><span className={["active", "courtesy"].includes(member.participationStatus) ? "status-chip status-chip--ok" : member.participationStatus === "pending_payment" ? "status-chip status-chip--pending" : "status-chip status-chip--inactive"}>{member.participationStatus}</span></td><td>{member.subscriptionStatus}</td><td>{member.nextDueDate || "—"}</td><td>{member.overdueDays ? `${member.overdueDays} dias` : "—"}</td><td><button className="table-action" type="button" onClick={() => { setMemberError(""); setSelectedMember(member); }}>Gerenciar</button></td></tr>)}</tbody></table></div>{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Tente outro nome.</span></div>}{selectedMember && <MemberManagementDetail key={selectedMember.id} member={selectedMember} saving={memberSaving} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} />}</>}
       {tab === "formularios" && <><header className="admin-heading"><div><span>Formulários</span><h2>A conversa atual de entrada.</h2></div>{selectedForm?.publishedVersion && <span className="status-chip status-chip--ok">Versão {selectedForm.publishedVersion.number} publicada</span>}</header>{formsError && <section className="empty-state empty-state--bordered"><strong>Versionamento ainda indisponível.</strong><span>{formsError}</span></section>}{!formsError && forms.length === 0 && <section className="empty-state empty-state--bordered"><strong>Nenhum formulário publicado.</strong><span>Aplique a migration de formulários para registrar a versão atual.</span></section>}{selectedForm && <section className="forms-layout"><aside className="form-index" aria-label="Formulários cadastrados">{forms.map((form) => <button className={form.id === selectedForm.id ? "form-index__item form-index__item--active" : "form-index__item"} key={form.id} onClick={() => setSelectedFormId(form.id)}><strong>{form.name}</strong><small>{form.publishedVersion ? `${form.publishedVersion.questions.length} perguntas · ${form.publishedVersion.submissionCount} envios` : "Sem versão publicada"}</small></button>)}</aside><div className="form-editor"><header><div><span>{selectedForm.name}</span><p>{selectedForm.description}</p><small>A versão publicada é imutável. Para editar, será necessário criar e validar uma nova versão antes da publicação.</small></div>{selectedForm.publishedVersion?.publishedAt && <time dateTime={selectedForm.publishedVersion.publishedAt}>Publicada em {new Intl.DateTimeFormat("pt-BR").format(new Date(selectedForm.publishedVersion.publishedAt))}</time>}</header>{selectedForm.publishedVersion ? <ol className="question-editor-list">{selectedForm.publishedVersion.questions.map((item) => <li key={item.id}><span className="drag-index">{String(item.position).padStart(2, "0")}</span><span><strong>{item.title}</strong><small>{item.required ? "Obrigatória" : "Opcional"} · {item.type}</small></span></li>)}</ol> : <div className="empty-state"><strong>Sem versão publicada.</strong><span>Crie uma nova versão antes de disponibilizar este formulário.</span></div>}</div></section>}</>}
     </section>
     <nav className="admin-mobile-nav" aria-label="Gestão"><button className={tab === "resumo" ? "active" : ""} onClick={() => setTab("resumo")}>Visão geral</button><button className={tab === "membros" ? "active" : ""} onClick={() => setTab("membros")}>Membros</button><button className={tab === "formularios" ? "active" : ""} onClick={() => setTab("formularios")}>Formulários</button></nav>

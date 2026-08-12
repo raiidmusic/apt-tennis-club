@@ -81,3 +81,16 @@ test("keeps paid access after recurring billing is cancelled", async () => {
   assert.match(client, /if \(cancelling\) return/);
   assert.match(client, /Cancelando no Asaas/);
 });
+
+test("keeps Tweener and community access inside an active member portal", async () => {
+  const [portalRoute, client] = await Promise.all([
+    readFile(new URL("../app/api/portal/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(portalRoute, /app\.tweener\.club\/groups\/dd12bbfd-db69-43a2-b683-cccffc322daf/);
+  assert.match(portalRoute, /chat\.whatsapp\.com\/EJOW47yPnwM0q9Zfm6CaUH/);
+  assert.match(portalRoute, /accessActive \? member\.twinner_url \|\| clubLinks\.tweenerUrl : null/);
+  assert.match(client, /Acessos rápidos/);
+  assert.match(client, /Cadastro no Tweener/);
+  assert.match(client, /Comunidade APT no WhatsApp/);
+});

@@ -8,6 +8,11 @@ type MemberRow = {
   whatsapp_community_url: string | null; joined_at: string | null;
 };
 
+const clubLinks = {
+  tweenerUrl: "https://app.tweener.club/groups/dd12bbfd-db69-43a2-b683-cccffc322daf",
+  whatsappCommunityUrl: "https://chat.whatsapp.com/EJOW47yPnwM0q9Zfm6CaUH?s=cl&p=i&ilr=2",
+};
+
 export async function GET(request: Request) {
   const session = await getSession(request).catch(() => null);
   if (!session?.memberId) return Response.json({ error: "Faça login para acessar sua participação." }, { status: 401 });
@@ -29,13 +34,14 @@ export async function GET(request: Request) {
     const currentPeriodEnd = typeof subscription?.current_period_end === "string" ? subscription.current_period_end : null;
     const paidAccessRemains = member.participation_status === "cancellation_requested" &&
       Boolean(currentPeriodEnd && currentPeriodEnd >= new Date().toISOString().slice(0, 10));
-    const accessActive = member.participation_status === "active" || paidAccessRemains;
+    const accessActive = member.participation_status === "active" || member.participation_status === "courtesy" || paidAccessRemains;
     return Response.json({
       member: {
         id: member.id, name: member.name, email: member.email, whatsapp: member.whatsapp,
         cpfMasked: `***.***.***-${member.cpf_last4}`, classLevel: member.class_level,
-        participationStatus: member.participation_status, twinnerUrl: member.twinner_url,
-        whatsappCommunityUrl: accessActive ? member.whatsapp_community_url : null,
+        participationStatus: member.participation_status,
+        twinnerUrl: accessActive ? member.twinner_url || clubLinks.tweenerUrl : null,
+        whatsappCommunityUrl: accessActive ? member.whatsapp_community_url || clubLinks.whatsappCommunityUrl : null,
         accessActive,
         joinedAt: member.joined_at,
       },

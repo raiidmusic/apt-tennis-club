@@ -29,6 +29,9 @@ const allowedChoices: Record<string, Set<string>> = {
 type AnswerValue = string | string[];
 type ApplicationStatus = "new" | "in_review" | "awaiting_info" | "approved" | "rejected" | "invite_sent";
 type InviteApplication = { id: string; name: string; email: string };
+type AdminNote = { id: string; body: string; created_by: string; created_at: string };
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function valueAsText(value: AnswerValue | undefined) {
   return Array.isArray(value) ? value.join(", ") : String(value || "").trim();
@@ -173,12 +176,28 @@ export async function GET(request: Request) {
   const admin = await requireAdmin(request).catch(() => null);
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
   try {
+    const applicationId = new URL(request.url).searchParams.get("id");
+    if (applicationId) {
+      if (!uuidPattern.test(applicationId)) return Response.json({ error: "Requerimento inválido." }, { status: 400 });
+      const [applications, notes] = await Promise.all([
+        supabaseAdmin<Array<Record<string, unknown>>>("applications", {
+          query: { select: "id,name,email,whatsapp,city,profession,class_level,referrer,answers,status,email_status,created_at", id: `eq.${applicationId}`, limit: "1" },
+        }),
+        supabaseAdmin<AdminNote[]>("admin_notes", {
+          query: { select: "id,body,created_by,created_at", application_id: `eq.${applicationId}`, order: "created_at.asc" },
+        }),
+      ]);
+      if (!applications[0]) return Response.json({ error: "Requerimento não encontrado." }, { status: 404 });
+      const application = applications[0];
+      return Response.json({ application: { ...toApplication(application), profession: application.profession, answers: application.answers || {}, emailStatus: application.email_status, notes } });
+    }
     const rows = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
       query: { select: "id,name,email,whatsapp,city,class_level,referrer,status,created_at", order: "created_at.desc", limit: "100" },
     });
     return Response.json({ applications: rows.map((row) => toApplication(row)) });
-  } catch {
-    return Response.json({ applications: [] });
+  } catch (error) {
+    const status = error instanceof SupabaseRequestError ? error.status : 500;
+    return Response.json({ error: "Não foi possível carregar os requerimentos." }, { status: status >= 400 && status < 600 ? status : 500 });
   }
 }
 
@@ -186,14 +205,15 @@ export async function PATCH(request: Request) {
   const admin = await requireAdmin(request).catch(() => null);
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
   try {
-    const payload = await request.json() as { id?: string; status?: ApplicationStatus };
+    const payload = await request.json() as { id?: string; status?: ApplicationStatus; note?: string };
     const allowed = new Set<ApplicationStatus>(["in_review", "awaiting_info", "approved", "rejected", "invite_sent"]);
-    if (!payload.id || !payload.status || !allowed.has(payload.status)) {
+    const note = payload.note?.trim() || "";
+    if (!payload.id || !uuidPattern.test(payload.id) || (payload.status && !allowed.has(payload.status)) || (!payload.status && !note) || note.length > 1_200 || (payload.status === "awaiting_info" && !note)) {
       return Response.json({ error: "Decisão inválida." }, { status: 400 });
     }
 
     let inviteToken: string | undefined;
-    let finalStatus: ApplicationStatus = payload.status;
+    let finalStatus: ApplicationStatus | undefined = payload.status;
     let inviteDelivery: "sent" | "manual" | undefined;
     if (payload.status === "approved") {
       inviteToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll("-", "");
@@ -220,15 +240,34 @@ export async function PATCH(request: Request) {
       finalStatus = inviteDelivery === "sent" ? "invite_sent" : "approved";
     }
 
-    const rows = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
-      method: "PATCH", query: { id: `eq.${payload.id}` }, prefer: "return=representation",
-      body: { status: finalStatus, updated_at: new Date().toISOString() },
-    });
+    let savedNote: AdminNote | undefined;
+    // A request for more information must never be shown without the internal
+    // record that explains what the team still has to request.
+    if (note && payload.status === "awaiting_info") {
+      savedNote = (await supabaseAdmin<AdminNote[]>("admin_notes", {
+        method: "POST", prefer: "return=representation",
+        body: { application_id: payload.id, body: note, created_by: admin.email },
+      }))[0];
+    }
+    const rows = finalStatus
+      ? await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
+        method: "PATCH", query: { id: `eq.${payload.id}` }, prefer: "return=representation",
+        body: { status: finalStatus, updated_at: new Date().toISOString() },
+      })
+      : await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
+        query: { select: "id,name,email,whatsapp,city,class_level,referrer,status,created_at", id: `eq.${payload.id}`, limit: "1" },
+      });
     if (!rows[0]) return Response.json({ error: "Requerimento não encontrado." }, { status: 404 });
+    savedNote = savedNote || (note
+      ? (await supabaseAdmin<AdminNote[]>("admin_notes", {
+        method: "POST", prefer: "return=representation",
+        body: { application_id: payload.id, body: note, created_by: admin.email },
+      }))[0]
+      : undefined);
     await supabaseAdmin("audit_logs", {
-      method: "POST", body: { actor: admin.email, action: `application.${finalStatus}`, entity_type: "application", entity_id: payload.id, metadata: { invite_delivery: inviteDelivery } },
+      method: "POST", body: { actor: admin.email, action: finalStatus ? `application.${finalStatus}` : "application.note_added", entity_type: "application", entity_id: payload.id, metadata: { invite_delivery: inviteDelivery, note_recorded: Boolean(savedNote) } },
     });
-    return Response.json({ application: toApplication(rows[0], inviteToken), inviteDelivery });
+    return Response.json({ application: toApplication(rows[0], inviteToken), inviteDelivery, note: savedNote });
   } catch (error) {
     const status = error instanceof SupabaseRequestError ? error.status : 500;
     return Response.json({ error: "Não foi possível atualizar o requerimento." }, { status: status >= 400 && status < 600 ? status : 500 });

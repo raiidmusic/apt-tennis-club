@@ -466,6 +466,15 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .member-management-card__status { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .member-management-card__status > small { color: var(--muted); font-size: 0.75rem; text-align: right; }
 .member-management-card .table-action { width: 100%; min-height: 3rem; border-color: var(--navy); color: var(--navy); }
+.payment-reminder-queue { display: grid; gap: 1rem; margin-top: 1.5rem; padding: 1.25rem; border: 1px solid var(--line); background: var(--surface-muted); }
+.payment-reminder-queue > div:first-child { display: grid; gap: 0.25rem; }
+.payment-reminder-queue span { color: var(--clay-dark); font-size: 0.72rem; font-weight: 790; letter-spacing: 0.08em; text-transform: uppercase; }
+.payment-reminder-queue h3, .payment-reminder-queue p { margin: 0; }
+.payment-reminder-queue h3 { font-size: 1.1rem; }
+.payment-reminder-queue p { color: var(--muted); font-size: 0.82rem; }
+.payment-reminder-queue__next { display: grid; gap: 0.3rem; }
+.payment-reminder-queue__next small { color: var(--muted); font-size: 0.75rem; }
+.payment-reminder-queue__next .small-primary { width: max-content; margin-top: 0.4rem; text-decoration: none; }
 .table-wrap--members { display: none; }
 .loading-state, .empty-state { min-height: 10rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; padding: 2rem; text-align: center; }
 .loading-state i { width: 1.25rem; height: 1.25rem; border: 2px solid var(--line); border-top-color: var(--clay); border-radius: 50%; animation: spin 800ms linear infinite; }
@@ -532,6 +541,8 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .payment-method { flex-direction: row; align-items: center; justify-content: space-between; }
   .signal-strip { grid-template-columns: repeat(4, 1fr); }
   .member-import-panel { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+  .payment-reminder-queue { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .payment-reminder-queue__next { justify-items: end; text-align: right; }
   .member-import-panel > .loading-state, .member-import-panel > .field-error, .member-import-panel > .member-import-summary, .member-import-panel > .primary-button, .member-import-panel > .member-import-complete { grid-column: 1 / -1; }
   .member-import-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .signal-strip > div { min-height: 8rem; border-right: 1px solid var(--line); border-bottom: 0; }

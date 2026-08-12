@@ -17,6 +17,11 @@ test("keeps member access editing admin-only, auditable and inside safe boundari
   assert.match(portalRoute, /member\.participation_status === "courtesy"/);
   assert.match(client, /MemberManagementList/);
   assert.match(client, /Gerenciar integrante/);
+  assert.match(client, /paymentReminderUrl/);
+  assert.match(client, /Fila de lembretes/);
+  assert.match(client, /Cobrar no WhatsApp/);
+  assert.match(client, /https:\/\/wa\.me\//);
+  assert.match(client, /Não há disparo automático/);
   assert.match(client, /Ativo e inadimplente são atualizados pelo fluxo financeiro/);
   assert.match(client, /Verificando acesso\./);
   assert.match(client, /if \(authChecking\) return/);

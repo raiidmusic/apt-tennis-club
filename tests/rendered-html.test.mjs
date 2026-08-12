@@ -13,6 +13,8 @@ test("keeps the APT landing public and free of server secrets", async () => {
   assert.match(client, /Um ranking para quem leva o tênis a sério/i);
   assert.match(client, /Quatro Courts\. Uma escada competitiva/i);
   assert.doesNotMatch(client, /SUPABASE_SECRET_KEY|ASAAS_API_KEY|service_role/i);
+  const layout = await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(layout, /localhost:8400\/live\.js/);
 });
 
 test("keeps public, invited, member and management journeys separate", async () => {

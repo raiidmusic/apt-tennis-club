@@ -10,6 +10,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://www.apttennis.com.br"),
   title: "APT Tennis Club | Beyond the Court",
   description:
     "Um ranking para quem leva o tênis a sério. Jogos equilibrados e participação por indicação em Brasília.",
@@ -40,10 +41,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR">
-      <body className={poppins.variable}>{children}{/* impeccable-live-start */}
-<script src="http://localhost:8400/live.js"></script>
-{/* impeccable-live-end */}
-</body>
+      <body className={poppins.variable}>{children}</body>
     </html>
   );
 }

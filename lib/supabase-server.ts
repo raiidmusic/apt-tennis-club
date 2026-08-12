@@ -14,20 +14,26 @@ export function runtimeEnv() {
   return process.env as RuntimeEnv;
 }
 
-function supabaseConfig() {
+function supabasePublicConfig() {
   const currentEnv = runtimeEnv();
   const url = currentEnv.SUPABASE_URL?.replace(/\/$/, "");
-  const secretKey = currentEnv.SUPABASE_SECRET_KEY || currentEnv.SUPABASE_SERVICE_ROLE_KEY;
   const publishableKey =
     currentEnv.SUPABASE_PUBLISHABLE_KEY ||
     currentEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     currentEnv.SUPABASE_ANON_KEY;
 
-  if (!url || !secretKey) {
-    throw new SupabaseRequestError("Supabase não configurado.", 503);
+  if (!url || !publishableKey) {
+    throw new SupabaseRequestError("Supabase público não configurado.", 503);
   }
 
-  return { url, secretKey, publishableKey };
+  return { url, publishableKey };
+}
+
+function supabaseAdminConfig() {
+  const { url, publishableKey } = supabasePublicConfig();
+  const secretKey = runtimeEnv().SUPABASE_SECRET_KEY || runtimeEnv().SUPABASE_SERVICE_ROLE_KEY;
+  if (!secretKey) throw new SupabaseRequestError("Supabase administrativo não configurado.", 503);
+  return { url, publishableKey, secretKey };
 }
 
 type AdminRequestOptions = {
@@ -42,7 +48,7 @@ export async function supabaseAdmin<T>(
   resource: string,
   options: AdminRequestOptions = {},
 ): Promise<T> {
-  const { url, secretKey } = supabaseConfig();
+  const { url, secretKey } = supabaseAdminConfig();
   const query = new URLSearchParams(options.query);
   const response = await fetch(`${url}/rest/v1/${resource}${query.size ? `?${query}` : ""}`, {
     method: options.method || "GET",
@@ -76,7 +82,7 @@ export async function createAuthUser(input: {
   name: string;
   memberId: string;
 }) {
-  const { url, secretKey } = supabaseConfig();
+  const { url, secretKey } = supabaseAdminConfig();
   const response = await fetch(`${url}/auth/v1/admin/users`, {
     method: "POST",
     headers: {
@@ -99,7 +105,7 @@ export async function createAuthUser(input: {
 }
 
 export async function deleteAuthUser(userId: string) {
-  const { url, secretKey } = supabaseConfig();
+  const { url, secretKey } = supabaseAdminConfig();
   const response = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
     method: "DELETE",
     headers: { apikey: secretKey, Authorization: `Bearer ${secretKey}` },
@@ -110,8 +116,7 @@ export async function deleteAuthUser(userId: string) {
 }
 
 export async function signInWithPassword(email: string, password: string) {
-  const { url, publishableKey } = supabaseConfig();
-  if (!publishableKey) throw new SupabaseRequestError("Chave pública do Supabase não configurada.", 503);
+  const { url, publishableKey } = supabasePublicConfig();
   const response = await fetch(`${url}/auth/v1/token?grant_type=password`, {
     method: "POST",
     headers: { apikey: publishableKey, "Content-Type": "application/json" },
@@ -131,8 +136,7 @@ export async function signInWithPassword(email: string, password: string) {
 }
 
 export async function getAuthUser(accessToken: string) {
-  const { url, publishableKey } = supabaseConfig();
-  if (!publishableKey) throw new SupabaseRequestError("Chave pública do Supabase não configurada.", 503);
+  const { url, publishableKey } = supabasePublicConfig();
   const response = await fetch(`${url}/auth/v1/user`, {
     headers: { apikey: publishableKey, Authorization: `Bearer ${accessToken}` },
     cache: "no-store",

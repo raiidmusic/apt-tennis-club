@@ -94,3 +94,14 @@ test("keeps Tweener and community access inside an active member portal", async 
   assert.match(client, /Cadastro no Tweener/);
   assert.match(client, /Comunidade APT no WhatsApp/);
 });
+
+test("allows the master admin to authenticate before server-only operations are configured", async () => {
+  const [auth, supabase] = await Promise.all([
+    readFile(new URL("../lib/auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase-server.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(supabase, /function supabasePublicConfig\(\)/);
+  assert.match(supabase, /function supabaseAdminConfig\(\)/);
+  assert.match(supabase, /Supabase administrativo não configurado/);
+  assert.match(auth, /if \(adminEmails\.has\(email\)\) return/);
+});

@@ -205,6 +205,12 @@ export function PasswordRecoveryPage({ reset = false }: { reset?: boolean }) {
 }
 
 export function LandingPage() {
+  useEffect(() => {
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    if (hash.get("type") === "recovery" && hash.get("access_token")) {
+      window.location.replace(`/redefinir-senha${window.location.hash}`);
+    }
+  }, []);
   return (
     <div className="apt-app apt-landing">
       <a className="skip-link" href="#main-content">Pular para o conteúdo</a>

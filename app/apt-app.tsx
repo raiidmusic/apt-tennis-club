@@ -627,6 +627,7 @@ export function AdminPage() {
   const [memberSaving, setMemberSaving] = useState(false);
   const [memberError, setMemberError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [authChecking, setAuthChecking] = useState(true);
   const [authRequired, setAuthRequired] = useState(false);
   const filteredMembers = members.filter((member) => member.name.toLowerCase().includes(query.toLowerCase()));
   useEffect(() => {
@@ -653,7 +654,7 @@ export function AdminPage() {
       } else {
         setFormsError(formPayload.error || "Não foi possível carregar os formulários.");
       }
-    }).catch(() => setNotice("Não foi possível atualizar os dados agora.")).finally(() => setLoading(false));
+    }).catch(() => setNotice("Não foi possível atualizar os dados agora.")).finally(() => { setLoading(false); setAuthChecking(false); });
   }, []);
   async function openApplication(id: string) {
     setApplicationLoading(true); setReviewNote("");
@@ -692,6 +693,7 @@ export function AdminPage() {
   }
   async function copyInvite(application: ApplicationRecord) { if (!application.inviteToken) return; await navigator.clipboard.writeText(`${window.location.origin}/cadastro?convite=${application.inviteToken}`); setCopiedId(application.id); window.setTimeout(() => setCopiedId(""), 2200); }
   async function refreshMembers() { const response = await fetch("/api/membros"); const payload = await response.json() as { members?: MemberRecord[] }; if (response.ok) setMembers(payload.members || []); }
+  if (authChecking) return <div className="apt-app"><RouteHeader label="Gestão APT" /><main className="access-state"><span>Acesso administrativo</span><h1>Verificando acesso.</h1><p>A gestão é carregada somente para contas autorizadas.</p></main></div>;
   if (authRequired) return <div className="apt-app"><RouteHeader label="Gestão APT" /><main className="access-state"><span>Acesso administrativo</span><h1>Entre com uma conta autorizada.</h1><p>A base de candidatos, integrantes e pagamentos não fica exposta publicamente.</p><a className="primary-button" href="/entrar?next=/gestao">Entrar na gestão</a></main></div>;
   const activeCount = members.filter((member) => member.participationStatus === "active").length;
   const inactiveCount = members.filter((member) => ["inactive", "cancelled"].includes(member.participationStatus)).length;

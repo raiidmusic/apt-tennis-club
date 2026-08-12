@@ -18,4 +18,6 @@ test("keeps member access editing admin-only, auditable and inside safe boundari
   assert.match(client, /MemberManagementList/);
   assert.match(client, /Gerenciar integrante/);
   assert.match(client, /Ativo e inadimplente são atualizados pelo fluxo financeiro/);
+  assert.match(client, /Verificando acesso\./);
+  assert.match(client, /if \(authChecking\) return/);
 });

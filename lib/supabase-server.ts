@@ -135,6 +135,26 @@ export async function signInWithPassword(email: string, password: string) {
   return payload;
 }
 
+export async function sendPasswordRecovery(email: string, redirectTo: string) {
+  const { url, publishableKey } = supabasePublicConfig();
+  const response = await fetch(`${url}/auth/v1/recover`, {
+    method: "POST",
+    headers: { apikey: publishableKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, redirect_to: redirectTo }),
+  });
+  if (!response.ok) throw new SupabaseRequestError("Não foi possível solicitar a recuperação.", response.status);
+}
+
+export async function resetPasswordWithRecoveryToken(accessToken: string, password: string) {
+  const { url, publishableKey } = supabasePublicConfig();
+  const response = await fetch(`${url}/auth/v1/user`, {
+    method: "PUT",
+    headers: { apikey: publishableKey, Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!response.ok) throw new SupabaseRequestError("O link de recuperação expirou ou já foi usado.", response.status);
+}
+
 export async function getAuthUser(accessToken: string) {
   const { url, publishableKey } = supabasePublicConfig();
   const response = await fetch(`${url}/auth/v1/user`, {

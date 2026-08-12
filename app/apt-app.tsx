@@ -168,7 +168,31 @@ export function LoginPage() {
     } catch (loginError) { setError(loginError instanceof Error ? loginError.message : "Não foi possível entrar."); }
     finally { setSubmitting(false); }
   }
-  return <div className="apt-app"><RouteHeader label="Acesso seguro" /><main className="login-page" id="main-content"><section><span>Área reservada</span><h1>Entre para cuidar da sua participação.</h1><p>Use o e-mail e a senha definidos no cadastro aprovado.</p><form onSubmit={submit}><label className="field-label field-label--compact"><span>E-mail</span><input required name="email" type="email" autoComplete="email" /></label><label className="field-label field-label--compact"><span>Senha</span><input required name="password" type="password" minLength={8} autoComplete="current-password" /></label>{error && <p className="field-error" role="alert">{error}</p>}<button className="primary-button primary-button--wide" type="submit" disabled={submitting}>{submitting ? "Entrando…" : "Entrar"}<span aria-hidden="true">→</span></button></form></section><aside><img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Movimento de um jogador em uma quadra de tênis" /><div /></aside></main></div>;
+  return <div className="apt-app"><RouteHeader label="Acesso seguro" /><main className="login-page" id="main-content"><section><span>Área reservada</span><h1>Entre para cuidar da sua participação.</h1><p>Use o e-mail e a senha definidos no cadastro aprovado.</p><form onSubmit={submit}><label className="field-label field-label--compact"><span>E-mail</span><input required name="email" type="email" autoComplete="email" /></label><label className="field-label field-label--compact"><span>Senha</span><input required name="password" type="password" minLength={8} autoComplete="current-password" /></label>{error && <p className="field-error" role="alert">{error}</p>}<button className="primary-button primary-button--wide" type="submit" disabled={submitting}>{submitting ? "Entrando…" : "Entrar"}<span aria-hidden="true">→</span></button><a className="text-button" href="/recuperar-senha">Esqueci minha senha</a></form></section><aside><img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Movimento de um jogador em uma quadra de tênis" /><div /></aside></main></div>;
+}
+
+export function PasswordRecoveryPage({ reset = false }: { reset?: boolean }) {
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [accessToken, setAccessToken] = useState("");
+  useEffect(() => { if (reset) setAccessToken(new URLSearchParams(window.location.hash.slice(1)).get("access_token") || ""); }, [reset]);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setSubmitting(true); setError("");
+    const data = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/api/auth/recovery", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reset ? { action: "reset", password: data.get("password"), accessToken } : { action: "request", email: data.get("email") }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Não foi possível concluir a recuperação.");
+      setNotice(reset ? "Senha criada. Você já pode entrar na área reservada." : "Se este e-mail estiver cadastrado, enviamos um link seguro para criar uma nova senha.");
+    } catch (recoveryError) { setError(recoveryError instanceof Error ? recoveryError.message : "Não foi possível concluir a recuperação."); }
+    finally { setSubmitting(false); }
+  }
+  if (reset && !accessToken) return <div className="apt-app"><RouteHeader label="Nova senha" /><main className="access-state" id="main-content"><span>Link inválido</span><h1>Solicite um novo link.</h1><p>Por segurança, cada link de recuperação só pode ser usado uma vez.</p><a className="primary-button" href="/recuperar-senha">Recuperar senha</a></main></div>;
+  return <div className="apt-app"><RouteHeader label={reset ? "Nova senha" : "Recuperar senha"} /><main className="login-page" id="main-content"><section><span>Área reservada</span><h1>{reset ? "Crie sua nova senha." : "Recupere seu acesso."}</h1><p>{reset ? "Escolha uma senha com pelo menos 8 caracteres." : "Enviaremos um link seguro para o seu e-mail. O APT nunca envia senhas por mensagem."}</p>{notice ? <div className="recovery-notice"><p>{notice}</p>{reset && <a className="primary-button" href="/entrar">Entrar</a>}</div> : <form onSubmit={submit}>{reset ? <label className="field-label field-label--compact"><span>Nova senha</span><input required name="password" type="password" minLength={8} autoComplete="new-password" /></label> : <label className="field-label field-label--compact"><span>E-mail</span><input required name="email" type="email" autoComplete="email" /></label>}{error && <p className="field-error" role="alert">{error}</p>}<button className="primary-button primary-button--wide" type="submit" disabled={submitting}>{submitting ? "Enviando…" : reset ? "Criar nova senha" : "Enviar link seguro"}<span aria-hidden="true">→</span></button><a className="text-button" href="/entrar">Voltar para entrar</a></form>}</section><aside><img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Movimento de um jogador em uma quadra de tênis" /><div /></aside></main></div>;
 }
 
 export function LandingPage() {

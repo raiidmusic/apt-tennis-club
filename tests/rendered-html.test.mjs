@@ -107,3 +107,19 @@ test("allows the master admin to authenticate before server-only operations are 
   assert.match(supabase, /Supabase administrativo não configurado/);
   assert.match(auth, /if \(adminEmails\.has\(email\)\) return/);
 });
+
+test("keeps password recovery inside the official app and Supabase public-auth boundary", async () => {
+  const [client, route, supabase] = await Promise.all([
+    readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/auth/recovery/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase-server.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(client, /Esqueci minha senha/);
+  assert.match(client, /Crie sua nova senha/);
+  assert.match(route, /APT_PUBLIC_URL/);
+  assert.match(route, /\/redefinir-senha/);
+  assert.match(route, /password\.length < 8/);
+  assert.match(supabase, /auth\/v1\/recover/);
+  assert.match(supabase, /auth\/v1\/user/);
+  assert.doesNotMatch(route, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
+});

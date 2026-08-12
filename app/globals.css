@@ -355,6 +355,8 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .login-page > section > p, .access-state > p { max-width: 44ch; margin: 1rem 0 0; color: var(--muted); }
 .login-page form { width: 100%; max-width: 30rem; display: grid; gap: 1.25rem; margin-top: 2.5rem; }
 .login-page form .primary-button { margin-top: 0.5rem; }
+.recovery-notice { max-width: 30rem; display: grid; gap: 1rem; margin-top: 2.5rem; padding: 1rem; border: 1px solid oklch(72% 0.08 135); border-radius: var(--radius-sm); background: var(--success-surface); color: var(--olive); }
+.recovery-notice p { margin: 0; }
 .login-page > aside { position: relative; display: none; min-height: 32rem; overflow: hidden; background: var(--navy-deep); }
 .login-page > aside img, .login-page > aside div { position: absolute; inset: 0; width: 100%; height: 100%; }
 .login-page > aside img { object-fit: cover; }

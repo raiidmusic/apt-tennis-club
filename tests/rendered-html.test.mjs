@@ -23,12 +23,13 @@ test("keeps public, invited, member and management journeys separate", async () 
     "../app/cadastro/page.tsx",
     "../app/entrar/page.tsx",
     "../app/portal/page.tsx",
+    "../app/membros/page.tsx",
     "../app/gestao/page.tsx",
   ].map((path) => access(new URL(path, import.meta.url))));
   const product = await readFile(new URL("../PRODUCT.md", import.meta.url), "utf8");
   assert.match(product, /\/requerimento/);
   assert.match(product, /\/cadastro\?convite=/);
-  assert.match(product, /\/portal/);
+  assert.match(product, /\/membros/);
   assert.match(product, /\/gestao/);
 });
 

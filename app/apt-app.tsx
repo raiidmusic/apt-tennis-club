@@ -473,7 +473,7 @@ export function PortalPage() {
     }
   }
   if (loading) return <div className="apt-app"><RouteHeader label="Área do membro" /><main className="access-state"><div className="loading-state"><i /><span>Carregando sua participação…</span></div></main></div>;
-  if (authRequired || !data) return <div className="apt-app"><RouteHeader label="Área do membro" /><main className="access-state"><span>Área reservada</span><h1>Entre para ver sua assinatura.</h1><p>Pagamentos, links do clube e dados pessoais ficam protegidos.</p><a className="primary-button" href="/entrar?next=/portal">Entrar na área do membro</a></main></div>;
+  if (authRequired || !data) return <div className="apt-app"><RouteHeader label="Área do membro" /><main className="access-state"><span>Área reservada</span><h1>Entre para ver sua assinatura.</h1><p>Pagamentos, links do clube e dados pessoais ficam protegidos.</p><a className="primary-button" href="/entrar?next=/membros">Entrar na área do membro</a></main></div>;
   const { member, subscription, payments } = data;
   const initials = member.name.split(" ").map((part) => part[0]).slice(0, 2).join("");
   const courtesy = member.participationStatus === "courtesy";

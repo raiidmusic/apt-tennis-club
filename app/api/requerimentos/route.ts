@@ -94,29 +94,6 @@ async function sendInviteEmail(application: InviteApplication, inviteToken: stri
   return response.ok ? "sent" : "failed";
 }
 
-async function registerFormSubmission(applicationId: string, answers: Record<string, AnswerValue>) {
-  try {
-    const forms = await supabaseAdmin<Array<{ id: string }>>("forms", {
-      query: { select: "id", slug: "eq.requerimento-de-entrada", limit: "1" },
-    });
-    if (!forms[0]) return "form_not_found";
-    const versions = await supabaseAdmin<Array<{ id: string }>>("form_versions", {
-      query: { select: "id", form_id: `eq.${forms[0].id}`, status: "eq.published", order: "version_number.desc", limit: "1" },
-    });
-    if (!versions[0]) return "version_not_found";
-    await supabaseAdmin("form_submissions", {
-      method: "POST",
-      query: { on_conflict: "application_id" },
-      prefer: "resolution=ignore-duplicates,return=minimal",
-      body: { form_version_id: versions[0].id, application_id: applicationId, answers },
-    });
-    return "recorded";
-  } catch {
-    // The application remains canonical while the incremental form migration is being deployed.
-    return "unavailable";
-  }
-}
-
 export async function POST(request: Request) {
   try {
     const payload = await request.json() as { answers?: Record<string, AnswerValue>; consent?: boolean };
@@ -158,14 +135,11 @@ export async function POST(request: Request) {
     await supabaseAdmin("applications", {
       method: "PATCH", query: { id: `eq.${id}` }, body: { email_status: emailStatus, updated_at: new Date().toISOString() },
     });
-    const [formSubmissionStatus, auditStatus] = await Promise.all([
-      registerFormSubmission(id, answers),
-      supabaseAdmin("audit_logs", {
-        method: "POST",
-        body: { actor: email, action: "application.submitted", entity_type: "application", entity_id: id, metadata: { consent: true } },
-      }).then(() => "recorded").catch(() => "unavailable"),
-    ]);
-    return Response.json({ id, status: "new", emailStatus, formSubmissionStatus, auditStatus }, { status: 201 });
+    const auditStatus = await supabaseAdmin("audit_logs", {
+      method: "POST",
+      body: { actor: email, action: "application.submitted", entity_type: "application", entity_id: id, metadata: { consent: true } },
+    }).then(() => "recorded").catch(() => "unavailable");
+    return Response.json({ id, status: "new", emailStatus, auditStatus }, { status: 201 });
   } catch (error) {
     const unavailable = error instanceof SupabaseRequestError && error.status === 503;
     return Response.json({ error: unavailable ? "A base do APT ainda está sendo conectada ao Supabase." : "Não foi possível registrar o requerimento." }, { status: unavailable ? 503 : 500 });

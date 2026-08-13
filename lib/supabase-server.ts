@@ -31,9 +31,13 @@ function supabasePublicConfig() {
 
 function supabaseAdminConfig() {
   const { url, publishableKey } = supabasePublicConfig();
-  const secretKey = runtimeEnv().SUPABASE_SECRET_KEY || runtimeEnv().SUPABASE_SERVICE_ROLE_KEY;
+  const secretKey = runtimeEnv().SUPABASE_SECRET_KEY;
   if (!secretKey) throw new SupabaseRequestError("Supabase administrativo não configurado.", 503);
   return { url, publishableKey, secretKey };
+}
+
+function supabaseSecretHeaders(secretKey: string) {
+  return { apikey: secretKey };
 }
 
 type AdminRequestOptions = {
@@ -53,8 +57,7 @@ export async function supabaseAdmin<T>(
   const response = await fetch(`${url}/rest/v1/${resource}${query.size ? `?${query}` : ""}`, {
     method: options.method || "GET",
     headers: {
-      apikey: secretKey,
-      Authorization: `Bearer ${secretKey}`,
+      ...supabaseSecretHeaders(secretKey),
       Accept: options.single ? "application/vnd.pgrst.object+json" : "application/json",
       "Content-Type": "application/json",
       ...(options.prefer ? { Prefer: options.prefer } : {}),
@@ -86,8 +89,7 @@ export async function createAuthUser(input: {
   const response = await fetch(`${url}/auth/v1/admin/users`, {
     method: "POST",
     headers: {
-      apikey: secretKey,
-      Authorization: `Bearer ${secretKey}`,
+      ...supabaseSecretHeaders(secretKey),
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -108,7 +110,7 @@ export async function deleteAuthUser(userId: string) {
   const { url, secretKey } = supabaseAdminConfig();
   const response = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
     method: "DELETE",
-    headers: { apikey: secretKey, Authorization: `Bearer ${secretKey}` },
+    headers: supabaseSecretHeaders(secretKey),
   });
   if (!response.ok && response.status !== 404) {
     throw new SupabaseRequestError("Não foi possível desfazer o acesso incompleto.", response.status);

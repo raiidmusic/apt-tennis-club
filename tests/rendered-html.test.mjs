@@ -17,6 +17,7 @@ test("keeps the APT landing public and free of server secrets", async () => {
   assert.doesNotMatch(client, /SUPABASE_SECRET_KEY|ASAAS_API_KEY|service_role/i);
   const layout = await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(layout, /localhost:8400\/live\.js/);
+  assert.doesNotMatch(layout, /next\/font\/google|Poppins\(/);
 });
 
 test("keeps public, invited, member and management journeys separate", async () => {
@@ -46,21 +47,17 @@ test("Supabase migration protects the complete membership lifecycle", async () =
   assert.doesNotMatch(sql, /cpf\s+text/i);
 });
 
-test("versions the published application form without exposing it publicly", async () => {
-  const [sql, route, client] = await Promise.all([
-    readFile(new URL("../supabase/migrations/202608110001_form_versioning.sql", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/formularios/route.ts", import.meta.url), "utf8"),
+test("uses one canonical application record and renders the operational CRM", async () => {
+  const [route, client] = await Promise.all([
+    readFile(new URL("../app/api/requerimentos/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
   ]);
-  for (const table of ["forms", "form_versions", "form_questions", "form_submissions"]) {
-    assert.match(sql, new RegExp(`create table if not exists public\\.${table}`));
-    assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`));
-  }
-  assert.match(sql, /revoke all on public\.forms[\s\S]+from anon, authenticated/);
-  assert.match(sql, /grant select, insert, update, delete[\s\S]+to service_role/);
-  assert.match(sql, /'consent', 18/);
-  assert.match(route, /requireAdmin/);
-  assert.match(client, /A versão publicada é imutável/);
+  assert.match(route, /body: \{ actor: email, action: "application\.submitted"/);
+  assert.doesNotMatch(route, /form_submissions|form_versions/);
+  assert.match(client, /function CrmKanban/);
+  assert.match(client, /Pipeline de requerimentos/);
+  assert.doesNotMatch(client, /api\/formularios/);
+  await assert.rejects(readFile(new URL("../app/apt-app 2.tsx", import.meta.url), "utf8"));
 });
 
 test("revokes earlier invitations and validates applications on the server", async () => {
@@ -101,6 +98,17 @@ test("keeps Tweener and community access inside an active member portal", async 
   assert.match(client, /Comunidade APT no WhatsApp/);
 });
 
+test("offers a safe session exit in protected areas", async () => {
+  const [client, logoutRoute] = await Promise.all([
+    readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/auth/logout/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(client, /function SignOutButton/);
+  assert.match(client, /fetch\("\/api\/auth\/logout", \{ method: "POST" \}\)/);
+  assert.match(client, /<SignOutButton \/>/);
+  assert.match(logoutRoute, /clearAccessCookie\(\)/);
+});
+
 test("allows the master admin to authenticate before server-only operations are configured", async () => {
   const [auth, supabase] = await Promise.all([
     readFile(new URL("../lib/auth.ts", import.meta.url), "utf8"),
@@ -110,6 +118,24 @@ test("allows the master admin to authenticate before server-only operations are 
   assert.match(supabase, /function supabaseAdminConfig\(\)/);
   assert.match(supabase, /Supabase administrativo não configurado/);
   assert.match(auth, /if \(isAdminEmail\(email\)\) return/);
+});
+
+test("uses only the new Supabase server secret for administrative calls", async () => {
+  const supabase = await readFile(new URL("../lib/supabase-server.ts", import.meta.url), "utf8");
+  assert.match(supabase, /function supabaseSecretHeaders/);
+  assert.match(supabase, /const secretKey = runtimeEnv\(\)\.SUPABASE_SECRET_KEY;/);
+  assert.doesNotMatch(supabase, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(supabase, /return \{ apikey: secretKey \};/);
+  assert.match(supabase, /\.\.\.supabaseSecretHeaders\(secretKey\)/);
+});
+
+test("renders a real checkout callback state instead of treating it as an invalid invitation", async () => {
+  const client = await readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8");
+  assert.match(client, /const \[checkoutStatus, setCheckoutStatus\]/);
+  assert.match(client, /status === "sucesso" \|\| status === "cancelado" \|\| status === "expirado"/);
+  assert.match(client, /checkoutStatus === "sucesso"/);
+  assert.match(client, /Checkout não concluído/);
+  assert.match(client, /Entrar na área do membro/);
 });
 
 test("keeps password recovery inside the official app and Supabase public-auth boundary", async () => {

@@ -139,6 +139,8 @@ test("limits passwordless management access to the configured administrator", as
   assert.match(client, /window\.location\.replace\("\/gestao"\)/);
   assert.match(route, /isAdminEmail\(email\)/);
   assert.match(route, /getAuthUser\(accessToken\)/);
+  assert.match(route, /token_validation_failed/);
+  assert.match(route, /email_not_authorized/);
   assert.match(route, /accessCookie\(accessToken\)/);
   assert.match(auth, /export function isAdminEmail/);
   assert.match(auth, /MASTER_ADMIN_EMAILS/);

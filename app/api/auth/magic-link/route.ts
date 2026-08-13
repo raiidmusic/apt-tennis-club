@@ -20,7 +20,12 @@ export async function POST(request: Request) {
     }
     const authUser = await getAuthUser(accessToken);
     const email = authUser?.email?.toLowerCase() || "";
-    if (!authUser || !isAdminEmail(email)) {
+    if (!authUser) {
+      console.error("management_magic_link_denied", { reason: "token_validation_failed" });
+      return Response.json({ error: "Este link expirou ou já foi usado." }, { status: 401 });
+    }
+    if (!isAdminEmail(email)) {
+      console.error("management_magic_link_denied", { reason: "email_not_authorized" });
       return Response.json({ error: "Este link não tem acesso à gestão." }, { status: 403 });
     }
     return Response.json(

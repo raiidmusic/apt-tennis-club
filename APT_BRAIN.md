@@ -1,7 +1,7 @@
 # APT Brain
 
-Last audited: 2026-08-11  
-State: APT-007 and APT-021 in verification; local build complete, external gates pending
+Last audited: 2026-08-13
+State: APT-022 in progress; official login works, operational database and billing remain release blockers
 Rule: plan, review and audit before construction
 
 ## Purpose
@@ -18,10 +18,10 @@ The APT Hub manages the relationship outside the sports app:
 - internal review and approval;
 - single-use invitation and private registration;
 - recurring billing through hosted Asaas checkout;
-- member access to payments, community links and Twinner;
+- member access to payments, community links and Tweener;
 - operational management of members and payment states.
 
-Twinner remains responsible for ranking and matches. Supabase is the intended canonical database and identity provider. The APT must not collect full card data or persist plaintext CPF.
+Tweener remains responsible for ranking and matches. Supabase is the intended canonical database and identity provider. The APT must not collect full card data or persist plaintext CPF.
 
 ## Non-negotiable decisions
 
@@ -29,14 +29,14 @@ Twinner remains responsible for ranking and matches. Supabase is the intended ca
 |---|---|---|---|
 | D-001 | Supabase is the application database; D1 is not part of the product architecture. | CONFIRMED | `PRODUCT.md`, `README.md`, `lib/supabase-server.ts` |
 | D-002 | Asaas hosted checkout owns card entry and recurring billing. | CONFIRMED | `PRODUCT.md`, `lib/asaas.ts`, `app/api/cadastros/route.ts` |
-| D-003 | Twinner owns ranking and matches; APT owns membership and billing. | CONFIRMED | `PRODUCT.md` |
+| D-003 | Tweener owns ranking and matches; APT owns membership and billing. | CONFIRMED | `PRODUCT.md` |
 | D-004 | Store only CPF hash plus last four digits. | CONFIRMED | `supabase/migrations/202608070001_apt_hub.sql` |
 | D-005 | Invitations are hashed, single-use, valid for seven days and earlier replacements must be revoked. | CONFIRMED LOCALLY | migrations and invitation routes; remote state unverified |
 | D-006 | Hero rotates one solid word: `competir.`, `evoluir.`, `pertencer.`. No shimmer or gradient text. | CONFIRMED | historical approval and current code |
 | D-007 | No fake data, fake buttons or simulated integration may be described as functional. | CONFIRMED | product requirements |
 | D-008 | Vercel Next is the canonical deployment runtime. Vinext/Cloudflare files are retired starter architecture scheduled for removal in APT-012. | CONFIRMED | user decision 2026-08-11; successful Next webpack and Turbopack builds |
 | D-009 | npm is the canonical package manager; `package-lock.json` is the only lockfile. | CONFIRMED | user decision 2026-08-11; lock root validated against `package.json` |
-| D-010 | Keep or remove dynamic form versioning before production. | OPEN, RECOMMEND REMOVE | one static form exists; feature was built before prioritization |
+| D-010 | Keep or remove dynamic form versioning before production. | RESOLVED — REMOVED LOCALLY | one static form uses canonical `applications.answers`; no form editor was approved |
 | D-011 | Reconcile the approved five-block landing spec with the larger current landing. | OPEN | current page includes gallery, metrics, Courts, cycle and FAQ |
 | D-012 | Payment secrets have separate ownership and values: Asaas generates `ASAAS_API_KEY`; Asaas generates or accepts the webhook `authToken`; APT generates `CPF_HASH_SECRET`. None may be reused, exposed to the browser, committed, logged or stored in application tables. | CONFIRMED | Asaas authentication/webhook docs; Supabase secrets docs; `.env.example` |
 | D-013 | APT and Supabase must never receive or store card PAN, expiry, CVV or a reusable card token. Card entry and card changes remain entirely inside hosted Asaas pages. | CONFIRMED | Asaas Checkout and PCI-DSS docs; current checkout flow and schema search |
@@ -46,6 +46,10 @@ Twinner remains responsible for ranking and matches. Supabase is the intended ca
 | D-017 | A credential embedded in historical SQL is permanently compromised. Containment requires session revocation before account disable/delete, removal of the legacy Auth trigger/function path and rotation of any reused credential. | CONFIRMED | APT-004 migration and Auth inspection |
 | D-018 | Existing athletes enter as preloaded members with no CPF, Auth identity or billing record. A hashed individual invite unlocks recadastro; CPF is then stored only as hash plus last four digits and card entry remains in hosted Asaas Checkout. Do not fabricate application answers for imported athletes. | CONFIRMED | explicit user priority 2026-08-11; roster and current-flow audit |
 | D-019 | The canonical club access links are the APT Tweener group `dd12bbfd-db69-43a2-b683-cccffc322daf` and the supplied WhatsApp community invite. They appear only to authenticated members with active participation; member-specific database values may override them later. | CONFIRMED | user-provided links 2026-08-11 |
+| D-020 | V1 is one complete operational loop: application, CRM decision, invite, recadastro, hosted recurring checkout, webhook reconciliation, member portal and management finance. A route or button without its real backend state is not part of V1. | CONFIRMED | explicit launch decision 2026-08-13 |
+| D-021 | The requested ranking shortcut means Tweener. APT links to Tweener and does not rebuild ranking or match management. | CONFIRMED | D-003, user correction context and canonical group link |
+| D-022 | APT never captures, stores or proxies card details. First card registration uses hosted Asaas Checkout. Removing a card means ending its recurring charge; replacement must use a new hosted checkout and only retire the previous subscription after provider-confirmed replacement. | CONFIRMED | D-002, D-013 and official Asaas Checkout/subscription documentation reviewed 2026-08-13 |
+| D-023 | V1 CRM reuses canonical lifecycle states. Application Kanban: `new`, `in_review`, `awaiting_info`, `approved`, `invite_sent`, `registered`, `rejected`. Member operations reuse participation and subscription states; no parallel CRM tables. | CONFIRMED | current schema, Ponytail review and explicit user requirement 2026-08-13 |
 
 ## Payment security gate — selected 2026-08-11
 
@@ -70,7 +74,7 @@ Minimum card-security controls:
 6. Use separate Sandbox and Production keys, minimum access, expiry/rotation and immediate revocation after suspected exposure.
 7. Verify approval, refusal, duplicate webhook, invalid token and timeout paths in Asaas Sandbox before production.
 
-Current gate status: policy and runtime owner are locked. The canonical Supabase and Vercel projects are identified under `gaagustavo`. `ASAAS_WEBHOOK_TOKEN` now exists as a Sensitive, Production-only Vercel variable; its value is not recorded here. The matching production Asaas webhook is saved, uses API v3 with sequential delivery, and remains disabled with zero penalized events until deployment and signed-event verification. `ASAAS_API_KEY`, Sandbox credentials and the other required runtime variables remain unconfigured. APT-004 completed the read-only reconciliation plan; no secret value should be pasted into this file or into chat.
+Current gate status: policy and runtime owner are locked. The canonical Supabase and Vercel projects are identified under `gaagustavo`. `ASAAS_WEBHOOK_TOKEN` now exists as a Sensitive, Production-only Vercel variable; its value is not recorded here. The matching production Asaas webhook is saved, uses API v3 with sequential delivery, and remains disabled with zero penalized events until deployment and signed-event verification. `ASAAS_API_KEY`, Sandbox credentials and the other required runtime variables remain unconfigured. On 2026-08-13, the owner reported that a newly issued `SUPABASE_SECRET_KEY` was saved in Vercel. The code now accepts only that server-only variable and never falls back to the exposed legacy service-role key; a source deployment and runtime check are still required. APT-004 completed the read-only reconciliation plan; no secret value should be pasted into this file or into chat.
 
 Review evidence: a repository search found no active APT card fields or PAN/CVV persistence, and the existing API key/webhook token reads are server-side. The known webhook reconciliation defects remain tracked in APT-006, so this is not integration proof. `ponytail-review`: Lean already. Ship. The whole-repository `ponytail-audit` was not repeated because this cycle changed only execution memory, not code, dependencies or structure.
 
@@ -91,12 +95,12 @@ Review evidence: a repository search found no active APT card fields or PAN/CVV 
 | Landing `/` | CODED, CHECKED | Visual approval of current expanded page; reconcile with landing spec; production target |
 | Application `/requerimento` | CODED, CHECKED | Real Supabase persistence, Resend delivery, admin visibility of full answers, browser flow |
 | Admin login `/entrar` | CODED, CHECKED, VISUAL; `apttennisexclusive@gmail.com` is an existing confirmed Supabase Auth user and was added to the Vercel `APT_ADMIN_EMAILS` allowlist for Production and Preview on 2026-08-11; Preview `dpl_7oyfxATeji7xzfadUef6wg1LRSMA` is Ready and visibly renders `/entrar` | Configure the canonical Site URL before password recovery, then prove `/gestao`, session refresh/expiry UX and visible logout with that account |
-| Management `/gestao` | CODED, CHECKED; application detail, internal notes and recorded information requests added locally | Authenticated browser proof with a real application; member editing, Twinner/community links |
+| Management `/gestao` | CODED, CHECKED; mobile CRM Kanban, application detail, internal notes and recorded information requests added locally | Authenticated browser proof with a real application; member editing, Tweener/community links |
 | Invitation approval | CODED, CHECKED | Applied revocation migration, real email/manual-copy test, retry behavior |
 | Private registration `/cadastro` | CODED, CHECKED; imported-member recadastro and checkout-attempt lock added locally | Apply reviewed migration; valid-invite visual check; real Sandbox checkout and failure-path proof |
 | Asaas webhook | CODED, CHECKED; provider re-query, retryable event record and lifecycle reconciliation added locally | Real signed Sandbox events and concurrent/timeout evidence |
 | Member portal `/portal` | CODED, CHECKED; active-member quick access to the canonical Tweener group and WhatsApp community added locally | Authenticated browser proof; class in profile, logout, reliable paid-through date, real payments |
-| Form versioning | CODED LOCALLY | Product need; remote migration; recommendation is to remove until a second form/editor is approved |
+| Form versioning | REMOVED LOCALLY | The public form writes only to canonical `applications.answers`; no second form/editor is approved |
 | Supabase | Project `APT TENNIS CLUB` (`cjwxqfxrkdgmqbomzhkm`) in organization `AI`, `sa-east-1`; 17 public tables with zero estimated rows; 10 historical migrations; eight APT Hub tables are API-disabled; security advisor 0 errors/33 warnings/8 suggestions; performance advisor 0 errors/34 warnings/16 suggestions | Contain the compromised legacy admin path, remove premature local form versioning, then fold the four local migrations into one validated forward-only reconciliation before any apply |
 | Deployment | Vercel project `apt-tennis-club` (`prj_gnjjgijeXutKy5vZM5Q0nn9hXnx3`) under `gaagustavo-9339's projects`; Preview `dpl_7oyfxATeji7xzfadUef6wg1LRSMA` is Ready; `ASAAS_WEBHOOK_TOKEN` is configured as Sensitive and Production-only; no production deployment exists. `apttennis.com.br` now redirects permanently to `www.apttennis.com.br`, which is attached to Production but awaiting DNS. Supabase Site URL is `https://www.apttennis.com.br`. The deployed source is detached from this local Git worktree (no Git remote), so the Preview confirms settings and legacy login UI but not the current local changes. | Create the two DNS records, connect the approved Git/local source, configure the reviewed variables and authorize a production deployment in later tasks |
 | Tests | 13 static/focused checks pass; typecheck and production build pass | Runtime API tests and one sandbox end-to-end happy path plus failure paths |
@@ -140,29 +144,28 @@ Review evidence: a repository search found no active APT card fields or PAN/CVV 
 
 ## Ponytail audit — whole repository
 
-Tracked-tree snapshot refreshed after the APT-002 runtime decision on 2026-08-11. Findings only; cleanup remains task-scoped.
+Tracked-tree snapshot refreshed after the APT-022 form-versioning removal on 2026-08-13. Findings only; cleanup remains task-scoped.
 
 1. `delete:` the 443-line design generator after the implemented landing receives visual sign-off. Replacement: current app plus final screenshots. [`scripts/generate-apt-v2.mjs`]
 2. `delete:` 399 lines of D1/Drizzle schema, examples and migrations duplicate canonical Supabase. Replacement: existing Supabase server helpers. [`db/`, `examples/d1/`, `drizzle/`, `drizzle.config.ts`]
-3. `delete:` about 230 lines of form CMS/versioning support a single hard-coded application form with no approved editor. Replacement: canonical `applications.answers` and the existing question list. [`supabase/migrations/202608110001_form_versioning.sql`, `app/api/formularios/route.ts`, related callers/UI/tests]
-4. `delete:` 162 lines and seven direct dependencies from the retired Vinext/Cloudflare runtime. Replacement: native Next on Vercel. [`vite.config.ts`, `worker/`, `build/sites-vite-plugin.ts`, `.openai/`, Vinext/Vite/Cloudflare dependencies]
-5. `delete:` unused 86-line ChatGPT header-auth helper has no callers and competes with Supabase Auth. Replacement: nothing. [`app/chatgpt-auth.ts`]
-6. `delete:` unused Tailwind toolchain while active CSS is plain CSS and PostCSS has no plugins. Replacement: native CSS. [`tailwindcss`, `@tailwindcss/postcss`, `postcss.config.mjs`]
-7. `delete:` nine unreferenced starter/legacy public assets after visual comparison. Replacement: referenced approved assets only. [`public/apt-hero.jpg`, `apt-motion.jpg`, `apt-ritual.jpg`, `favicon.svg`, `file.svg`, `globe.svg`, `logo-apt3.svg`, `og 2.png`, `window.svg`]
-8. `delete after use:` the CSV import panel, endpoint, parser and import-only CSS once the audited legacy roster has been imported and its links exported. Replacement: the normal application/approval flow for future members. [`app/api/membros/importacao/route.ts`, `lib/member-import.ts`, `MemberImportPanel`, related CSS/tests]
+3. `delete:` 162 lines and seven direct dependencies from the retired Vinext/Cloudflare runtime. Replacement: native Next on Vercel. [`vite.config.ts`, `worker/`, `build/sites-vite-plugin.ts`, `.openai/`, Vinext/Vite/Cloudflare dependencies]
+4. `delete:` unused 86-line ChatGPT header-auth helper has no callers and competes with Supabase Auth. Replacement: nothing. [`app/chatgpt-auth.ts`]
+5. `delete:` unused Tailwind toolchain while active CSS is plain CSS and PostCSS has no plugins. Replacement: native CSS. [`tailwindcss`, `@tailwindcss/postcss`, `postcss.config.mjs`]
+6. `delete:` nine unreferenced starter/legacy public assets after visual comparison. Replacement: referenced approved assets only. [`public/apt-hero.jpg`, `apt-motion.jpg`, `apt-ritual.jpg`, `favicon.svg`, `file.svg`, `globe.svg`, `logo-apt3.svg`, `og 2.png`, `window.svg`]
+7. `delete after use:` the CSV import panel, endpoint, parser and import-only CSS once the audited legacy roster has been imported and its links exported. Replacement: the normal application/approval flow for future members. [`app/api/membros/importacao/route.ts`, `lib/member-import.ts`, `MemberImportPanel`, related CSS/tests]
 
-net: about -1,570 source lines, -11 direct dependencies and 9 assets possible after the one-time roster transition.
+Resolved this cycle: about -230 lines of unapproved form CMS/versioning were removed; public applications now have one canonical record. Remaining opportunity: about -1,340 source lines, -11 direct dependencies and 9 assets after the one-time roster transition.
 
-## Ponytail review — recent form/versioning change
+## Ponytail review — APT-022 CRM, callback and server-secret change
 
-Diff baseline is unavailable because the workspace has no Git repository. Review is based on the files added in the preceding work cycle. No fixes applied.
+The local Git diff was reviewed on 2026-08-13. No fixes applied.
 
-- `supabase/migrations/202608110001_form_versioning.sql:L1-118: yagni:` four-table form CMS for one hard-coded form with no approved editor. `applications.answers` and the existing question constant cover the current need.
-- `app/api/formularios/route.ts:L20-24: delete:` loading up to 10,000 submissions only to show a management count. Nothing replaces it until that metric drives a decision.
-- `app/api/requerimentos/route.ts:L94-115: delete:` mirrors every answer into `form_submissions` although `applications.answers` is already canonical. Keep one copy until a second form exists.
-- `app/apt-app.tsx:L430-476: shrink:` versions, selector state and version metadata support a single form. Render the existing question list read-only if management still needs visibility.
+- `app/api/requerimentos/route.ts`: one public application write plus a best-effort audit record is the smallest current operational boundary; there is no duplicate form store.
+- `app/apt-app.tsx`: the CRM maps existing application states and opens the existing detail flow. It introduces no tables, drag library, workflow engine or duplicate member state.
+- `lib/supabase-server.ts`: only `SUPABASE_SECRET_KEY` can make server-only calls. The historical service-role variable is absent from the implementation.
+- `app/apt-app.tsx`: checkout callback rendering is presentational; provider webhook reconciliation remains the only source of billing activation.
 
-net: about -230 lines possible.
+`ponytail-review`: Lean already. Ship.
 
 ## Ordered task queue
 
@@ -178,20 +181,47 @@ Only one task may be `IN_PROGRESS`. Construction starts only after the user sele
 | APT-005 | P0 | PENDING | Remove partial-failure traps from registration and checkout. | Repeatable failure tests prove no orphan Auth user, member, checkout or consumed invitation. | APT-000, APT-019 |
 | APT-006 | P0 | PENDING | Make Asaas webhook reconciliation retry-safe and lifecycle-correct. | Signed sandbox events cover confirmed, overdue, refunded/deleted and duplicate delivery; dates match provider truth. | APT-000, APT-019 |
 | APT-007 | P1 | VERIFY | Make application review operational. | Admin reads every answer, records notes/decision and sends or records information requests without false delivery claims. | APT-003 |
-| APT-008 | P1 | IN_PROGRESS | Make member management operational. | Admin updates Tweener/community links and allowed participation states with audit records; an isolated authenticated non-production flow proves the member portal and audit row. | APT-003 |
-| APT-009 | P1 | PENDING | Complete registration callback and retry UX. | Success/cancel/expired states render correctly and retry does not duplicate identity or billing. | APT-005, APT-006 |
-| APT-010 | P1 | PENDING | Complete member portal essentials. | Class, active community link, logout, session-expiry recovery and correct paid-through state verified. | APT-006, APT-008 |
+| APT-008 | P1 | VERIFY | Make member management operational. | Admin updates Tweener/community links and allowed participation states with audit records; an isolated authenticated non-production flow proves the member portal and audit row. | APT-003 |
+| APT-009 | P1 | VERIFY | Complete registration callback and retry UX. | Local success/cancel/expired states and focused test pass; retry/identity/billing requires Sandbox proof. | APT-005, APT-006 |
+| APT-010 | P1 | VERIFY | Complete member portal essentials. | Class, active community link, safe logout and local checks are coded; session-expiry and paid-through require integration proof. | APT-006, APT-008 |
 | APT-011 | P1 | READY | Remove production-local Impeccable script and restore a zero-error lint baseline. | Typecheck, build, tests and lint all pass. | APT-001 recommended |
 | APT-012 | P1 | READY | Remove dead starter architecture and dependencies approved by the Ponytail audit. | Chosen build passes; no Vinext/Cloudflare/D1/Drizzle/unused auth/Tailwind callers; dependency diff reviewed. | APT-001, APT-002 |
-| APT-013 | P1 | READY | Decide whether to revert form versioning. Recommendation: revert before remote application. | D-010 closed; only necessary schema/code remains; tests updated. | APT-001 recommended |
+| APT-013 | P1 | VERIFY | Remove form versioning before remote application. | D-010 closed; only necessary schema/code remains; tests updated. | APT-001 recommended |
 | APT-014 | P2 | READY | Reconcile landing spec, current claims and current expanded design. | Owner confirms content/structure; one canonical spec remains; claims are sourced. | D-011 |
 | APT-015 | P2 | PENDING | Add the smallest runtime tests for trust and money boundaries. | One runnable check per application, invite, registration, webhook and cancellation flow. | APT-005, APT-006 |
 | APT-016 | P2 | PENDING | Verify every user journey visually and end to end. | Mobile and desktop browser evidence; API/data evidence; no console errors; exact live target recorded. | APT-003 through APT-015 as applicable |
-| APT-017 | P2 | IN_PROGRESS | Configure production services and observability. | Supabase, Asaas, Resend, domain, webhook and failure logs verified in the chosen target. | APT-002, APT-003, APT-006 |
+| APT-017 | P2 | VERIFY | Configure production services and observability. | Supabase, Asaas, Resend, domain, webhook and failure logs verified in the chosen target. | APT-002, APT-003, APT-006 |
 | APT-018 | P0 | READY | Contain the compromised legacy Supabase administrator and Auth automation path. | Pre-change backup recorded; sessions revoked before account disable/delete; any reused credential rotated; legacy Auth trigger and unnecessary definer functions removed with explicit function grants; the historical Auth redirect allowlist is reduced to approved live hosts; a controlled Auth signup creates no legacy profile; advisors and logs reviewed. | APT-004, explicit destructive-action approval |
 | APT-019 | P0 | PENDING | Apply the approved forward-only schema, grant and legacy-surface reconciliation outside production first. | Isolated validation proves the eight canonical tables and constraints, invite revocation, explicit grants/default privileges and RLS; no public legacy data surface, fake history or form-CMS schema; dump diff and advisors reviewed before a separately authorized production apply. | APT-013, APT-018, legacy-data disposition decision |
 | APT-020 | P0 | DROPPED | Start August 2026 collection directly in Asaas while APT automation remains gated. | Replaced by APT-021 after the user required athletes to enter APT and complete their own CPF recadastro before recurrence. | Replaced by APT-021 |
 | APT-021 | P0 | VERIFY | Import current athletes and issue an individual recadastro that creates one hosted monthly Asaas recurrence. | Import preview accepts the validated active roster, deduplicates by normalized email and never imports CPF/card data; each stored token is hashed and revocable; the athlete confirms contact data, enters CPF and creates access; only CPF hash/last four persist; retries do not duplicate Auth, member, checkout or subscription; invalid/expired token and Asaas failure paths pass; full flow is proven in Sandbox before separately authorized production charging. | APT-004; production rollout also requires APT-018, APT-019, Asaas credentials and billing terms |
+| APT-022 | P0 | IN_PROGRESS | Release the complete operational V1 on the official domain. | All eight release gates below pass with production-target evidence; no visible `not configured`, fake state or dead action remains in an authorized journey; first real member can complete recadastro and reach `/membros`; management sees the same application, member, subscription and payment truth. | Explicit user authorization 2026-08-13; gates retain their destructive and financial confirmations |
+
+## APT-022 V1 release gates — authorized 2026-08-13
+
+1. **Foundation and security** — configure a newly issued server-only Supabase secret in the `gaagustavo` Vercel project; contain the exposed legacy credential/trigger; reconcile only the required forward schema; re-run security advisors. No old service-role credential may be reused.
+2. **Application and CRM** — `/requerimento` persists one canonical application and shows success; management renders a mobile-first Kanban from existing states, opens every answer, records notes and moves cards through valid transitions.
+3. **Approval and invitation** — approval creates one hashed seven-day invite, revokes older unused invites, sends or exposes one operational link and records delivery state without false claims.
+4. **Recadastro and identity** — invited/imported athlete confirms contact, enters CPF transiently, creates Auth identity and reaches hosted Asaas Checkout; retries cannot duplicate member, identity, subscription or checkout.
+5. **Asaas boundary** — use hosted recurring Checkout for card entry; configure production API key, amount, webhook token and official callback URL; prove Sandbox approval, refusal, duplicate event, invalid token and timeout before production activation. Card data never enters APT/Supabase/logs.
+6. **Management operations** — members, participation, WhatsApp contact, reminder queue, subscriptions, payments and financial history render from canonical tables. Summary metrics derive from persisted truth; no decorative/fake metrics.
+7. **Member portal** — `/membros` shows participation, next due date, payment history/invoice links, logout, profile/class, WhatsApp and Tweener shortcuts. Cancellation stops future recurrence while preserving earned access through the paid period. Card replacement uses a new hosted checkout and provider-confirmed handoff; APT does not expose card fields.
+8. **Launch proof** — focused tests, typecheck, build and lint pass; mobile 375px and desktop journeys are browser-verified on the exact production source; runtime errors/logs reviewed; one controlled first-member end-to-end test passes before roster-wide invitation.
+
+### V1 exclusions that prevent unsafe or duplicated work
+
+- No native ranking, matches or tournament engine; Tweener remains canonical.
+- No card form, PAN/CVV storage or reusable card token in APT/Supabase.
+- No second CRM schema, generic workflow builder, drag library, chart library or new UI framework.
+- No automatic bulk WhatsApp sending. Management opens reviewed, prefilled individual conversations.
+- No production roster blast or real recurrence before the controlled first-member proof.
+
+### Current hard blockers observed on the official domain
+
+- `/requerimento` reaches its final step but returns “A base do APT ainda está sendo conectada ao Supabase.”
+- Authenticated `/gestao` opens, but applications and members cannot load without a valid server-only Supabase credential.
+- Production Asaas API key, monthly amount and live signed webhook proof are absent; the saved webhook remains disabled.
+- Local forward migrations for invitation revocation and imported-member recadastro are not proven applied to the canonical database.
 
 ## Recommended execution sequence
 
@@ -355,6 +385,8 @@ A task is `DONE` only when:
 - Auth cleanup (2026-08-13): by explicit owner instruction, deleted only Auth user `Vinicius` / `vinicius.lopes.albuquerque@gmail.com` (`98409413-3f29-461f-b9d6-05247bfdf2be`) in the canonical Supabase project. Supabase confirmed deletion. `Gabriel Guedes` (`gaagustavo@gmail.com`), the APT master account and all other users were left intact.
 - Management-access correction (2026-08-13): Supabase allowed `https://www.apttennis.com.br/redefinir-senha` but not the exact official root URL requested by the passwordless link. Added only `https://www.apttennis.com.br` to the Auth redirect allowlist. The management allowlist now has an in-code fallback limited to the two owner-controlled accounts (`apttennisexclusive@gmail.com` and `gaagustavo@gmail.com`), plus the Vercel variable for future approved administrators; therefore a stale/misread deployment variable cannot lock the owners out. Non-owner e-mails remain denied. Repeated preceding tests hit the Auth e-mail send rate limit; the application now reports that safe retry instruction instead of a generic failure. No token or credential is logged.
 - Magic-link diagnosis (2026-08-13): Supabase Auth logs show the user verified a link successfully at 08:54 BRT, followed by APT completion 403. Completion now emits only `token_validation_failed` or `email_not_authorized` to the Vercel server log and returns the matching safe client message. It never logs an access token, e-mail address, raw response or credential. This is a temporary diagnosis guard inside the existing route, not a new service or storage path.
+- Management password access verified (2026-08-13, APT-017): the official Production deployment was redeployed after correcting the public Supabase authentication configuration. The confirmed owner account `apttennisexclusive@gmail.com` completed `POST /api/auth/login` with HTTP 200, then `/api/auth/session` returned the `admin` role with HTTP 200. A real browser session subsequently reached `https://www.apttennis.com.br/gestao` and rendered the `GESTÃO APT` shell. The email magic-link route is no longer required for owner access and is not part of the launch path. The management page currently reports that it cannot load applications because no valid server-only Supabase database credential is configured; do not reuse the previously exposed legacy key. Enabling the operational data panel needs one newly generated, server-only Supabase secret and the APT-018 containment/rotation gate before any production data or billing action.
+- Server-secret and checkout callback correction (2026-08-13, APT-022): the owner reports a new `SUPABASE_SECRET_KEY` is saved in Vercel. `lib/supabase-server.ts` now accepts only that server-only key as `apikey`; it refuses the exposed legacy service-role variable entirely. The recadastro screen now renders Asaas success, cancellation and expiry callbacks instead of interpreting them as invalid invitations. Dynamic form/versioning support and its unreferenced duplicate client file were deleted because the one approved public form already has `applications.answers` as its canonical record. Member and management areas now include a server-cleared logout control. The remote Google-font build dependency was removed, so production build no longer requires an external font fetch. Local proof: 19/19 focused tests and TypeScript pass; lint has 0 errors and 20 non-blocking image-optimization/legacy-script warnings. The sandbox blocks the Next compiler from creating its internal process/port, so the final build must be evidenced by the authorized Vercel target rather than claimed locally. Source deployment and runtime/Sandbox proof remain required.
 
 ## Next decision
 

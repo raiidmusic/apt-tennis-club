@@ -28,7 +28,16 @@ export async function POST(request: Request) {
       { headers: { "Set-Cookie": accessCookie(accessToken) } },
     );
   } catch (error) {
-    const status = error instanceof SupabaseRequestError && error.status === 503 ? 503 : 500;
-    return Response.json({ error: status === 503 ? "A autenticação ainda está sendo configurada." : "Não foi possível concluir o acesso." }, { status });
+    const status = error instanceof SupabaseRequestError ? error.status : 500;
+    console.error("management_magic_link_failed", {
+      kind: error instanceof SupabaseRequestError ? "supabase" : "unexpected",
+      status: error instanceof SupabaseRequestError ? error.status : null,
+    });
+    const message = status === 503
+      ? "A autenticação ainda está sendo configurada."
+      : status === 429
+        ? "Aguarde um minuto antes de solicitar outro link."
+        : "Não foi possível concluir o acesso.";
+    return Response.json({ error: message }, { status });
   }
 }

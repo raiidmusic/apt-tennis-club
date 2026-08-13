@@ -141,6 +141,9 @@ test("limits passwordless management access to the configured administrator", as
   assert.match(route, /getAuthUser\(accessToken\)/);
   assert.match(route, /accessCookie\(accessToken\)/);
   assert.match(auth, /export function isAdminEmail/);
+  assert.match(auth, /MASTER_ADMIN_EMAILS/);
+  assert.match(auth, /apttennisexclusive@gmail\.com/);
+  assert.match(auth, /gaagustavo@gmail\.com/);
   assert.match(supabase, /auth\/v1\/otp\?/);
   assert.match(supabase, /create_user: false/);
   assert.doesNotMatch(route, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);

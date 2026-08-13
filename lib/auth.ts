@@ -1,6 +1,10 @@
 import { getAuthUser, runtimeEnv, supabaseAdmin } from "./supabase-server";
 
 const ACCESS_COOKIE = "apt_access_token";
+const MASTER_ADMIN_EMAILS = new Set([
+  "apttennisexclusive@gmail.com",
+  "gaagustavo@gmail.com",
+]);
 
 export type SessionUser = {
   id: string;
@@ -31,12 +35,14 @@ export function clearAccessCookie() {
 }
 
 export function isAdminEmail(email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (MASTER_ADMIN_EMAILS.has(normalizedEmail)) return true;
   return new Set(
     (runtimeEnv().APT_ADMIN_EMAILS || "")
       .split(",")
       .map((item) => item.trim().toLowerCase())
       .filter(Boolean),
-  ).has(email.trim().toLowerCase());
+  ).has(normalizedEmail);
 }
 
 export async function getSession(request: Request): Promise<SessionUser | null> {

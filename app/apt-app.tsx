@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-html-link-for-pages */
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AthleteImportInput, parseAthleteCsv } from "../lib/member-import";
@@ -82,22 +83,6 @@ type PortalPayload = {
   payments: Array<{ id: string; status: string; value_cents: number; due_date?: string; paid_at?: string; invoice_url?: string }>;
 };
 
-type FormDefinition = {
-  id: string;
-  slug: string;
-  name: string;
-  description?: string | null;
-  versions: Array<{ id: string; number: number; status: "draft" | "published" | "archived"; publishedAt?: string | null }>;
-  publishedVersion: {
-    id: string;
-    number: number;
-    status: "published";
-    publishedAt?: string | null;
-    submissionCount: number;
-    questions: Array<{ id: string; key: string; position: number; title: string; helper?: string | null; type: string; required: boolean }>;
-  } | null;
-};
-
 type MemberImportSummary = {
   activeRows: number;
   newMembers: number;
@@ -155,6 +140,17 @@ function RouteHeader({ label }: { label: string }) {
   return <header className="route-header"><a href="/" aria-label="Voltar para o site do APT"><Brand /></a><span>{label}</span></header>;
 }
 
+function SignOutButton({ className = "side-link" }: { className?: string }) {
+  const [leaving, setLeaving] = useState(false);
+  async function signOut() {
+    if (leaving) return;
+    setLeaving(true);
+    try { await fetch("/api/auth/logout", { method: "POST" }); }
+    finally { window.location.assign("/"); }
+  }
+  return <button className={className} type="button" onClick={signOut} disabled={leaving}>{leaving ? "Saindo…" : "Sair"}</button>;
+}
+
 export function LoginPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -163,7 +159,7 @@ export function LoginPage() {
   const [nextPath, setNextPath] = useState("/portal");
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("next");
-    if (requested?.startsWith("/") && !requested.startsWith("//")) setNextPath(requested);
+    if (requested?.startsWith("/") && !requested.startsWith("//")) queueMicrotask(() => setNextPath(requested));
   }, []);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSubmitting(true); setError("");
@@ -200,7 +196,7 @@ export function MagicLinkAccessPage() {
   const [error, setError] = useState("");
   useEffect(() => {
     const accessToken = new URLSearchParams(window.location.hash.slice(1)).get("access_token") || "";
-    if (!accessToken) { setError("Este link de acesso é inválido ou já expirou."); return; }
+    if (!accessToken) { queueMicrotask(() => setError("Este link de acesso é inválido ou já expirou.")); return; }
     void (async () => {
       try {
         const response = await fetch("/api/auth/magic-link", {
@@ -221,7 +217,7 @@ export function PasswordRecoveryPage({ reset = false }: { reset?: boolean }) {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [accessToken, setAccessToken] = useState("");
-  useEffect(() => { if (reset) setAccessToken(new URLSearchParams(window.location.hash.slice(1)).get("access_token") || ""); }, [reset]);
+  useEffect(() => { if (reset) queueMicrotask(() => setAccessToken(new URLSearchParams(window.location.hash.slice(1)).get("access_token") || "")); }, [reset]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSubmitting(true); setError("");
     const data = new FormData(event.currentTarget);
@@ -354,7 +350,7 @@ export function LandingPage() {
           <div className="apt-member-block__visual"><img src="/apt-editorial-hero.jpeg" width="736" height="981" alt="Jogador em quadra diante da arquibancada" loading="lazy" /></div>
           <div className="apt-member-block__quote">
             <span>Para quem já faz parte</span>
-            <blockquote>O ranking acontece no Twinner. Sua assinatura e sua participação ficam no APT.</blockquote>
+            <blockquote>O ranking acontece no Tweener. Sua assinatura e sua participação ficam no APT.</blockquote>
             <a className="apt-text-link" href="/entrar">Entrar na área do membro <span aria-hidden="true">→</span></a>
           </div>
         </section>
@@ -368,7 +364,7 @@ export function LandingPage() {
               <details><summary>Como faço para entrar?</summary><p>O acesso começa por indicação. Você envia um requerimento e a gestão analisa o perfil e a disponibilidade na divisão adequada.</p></details>
               <details><summary>Como são definidos os Courts?</summary><p>A divisão considera o nível de jogo e a disponibilidade de vagas. Depois, os resultados definem promoção e rebaixamento.</p></details>
               <details><summary>Quantos jogos acontecem por rodada?</summary><p>Dois confrontos são liberados a cada 15 dias, com prazo de 14 dias para a realização.</p></details>
-              <details><summary>Onde acompanho o ranking e os pagamentos?</summary><p>O ranking fica no Twinner. Assinatura, pagamentos e situação da participação ficam na área do membro do APT.</p></details>
+              <details><summary>Onde acompanho o ranking e os pagamentos?</summary><p>O ranking fica no Tweener. Assinatura, pagamentos e situação da participação ficam na área do membro do APT.</p></details>
             </div>
           </div>
         </section>
@@ -439,8 +435,10 @@ function formatCpf(value: string) { return value.replace(/(\d{3})(\d)/, "$1.$2")
 
 export function EnrollmentPage() {
   const [submitted, setSubmitted] = useState(false);
+  const [checkoutStatus, setCheckoutStatus] = useState<"sucesso" | "cancelado" | "expirado" | null>(null);
   const [cpf, setCpf] = useState("");
   const inviteToken = useRef("");
+  const [hasInvite, setHasInvite] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -451,9 +449,16 @@ export function EnrollmentPage() {
   const [submitting, setSubmitting] = useState(false);
   const [paymentLink, setPaymentLink] = useState("");
   useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get("convite") || "";
+    const query = new URLSearchParams(window.location.search);
+    const status = query.get("status");
+    if (status === "sucesso" || status === "cancelado" || status === "expirado") {
+      queueMicrotask(() => { setCheckoutStatus(status); setProfileLoading(false); });
+      return;
+    }
+    const token = query.get("convite") || "";
     inviteToken.current = token;
-    if (!token) { setProfileLoading(false); return; }
+    if (!token) { queueMicrotask(() => setProfileLoading(false)); return; }
+    queueMicrotask(() => setHasInvite(true));
     fetch(`/api/cadastros?convite=${encodeURIComponent(token)}`)
       .then(async (response) => {
         const payload = await response.json() as { name?: string; email?: string; phone?: string; recadastro?: boolean; monthlyValue?: number | null; checkoutUrl?: string; error?: string };
@@ -470,21 +475,23 @@ export function EnrollmentPage() {
     catch (submissionError) { setError(submissionError instanceof Error ? submissionError.message : "Não foi possível concluir o cadastro."); }
     finally { setSubmitting(false); }
   }
+  if (checkoutStatus === "sucesso") return <div className="apt-app"><RouteHeader label="Assinatura APT" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Checkout concluído</p><h1>Recebemos sua assinatura.</h1><p>O Asaas está confirmando o pagamento. Assim que a confirmação chegar, sua área de membro será liberada.</p><a className="primary-button" href="/entrar?next=/membros">Entrar na área do membro <span aria-hidden="true">→</span></a></main></div>;
+  if (checkoutStatus === "cancelado" || checkoutStatus === "expirado") return <div className="apt-app"><RouteHeader label="Assinatura APT" /><main className="content-page success-page" id="main-content"><p>Checkout não concluído</p><h1>{checkoutStatus === "expirado" ? "O link de pagamento expirou." : "O pagamento foi cancelado."}</h1><p>Peça à gestão um novo link individual para continuar sua assinatura com segurança.</p><a className="secondary-button" href="/">Voltar ao site</a></main></div>;
   if (paymentLink && !submitted) return <div className="apt-app"><RouteHeader label="Recadastro APT" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Recadastro concluído</p><h1>Sua assinatura está pronta para ativação.</h1><p>Continue no ambiente seguro do Asaas. O APT não recebe nem armazena os dados completos do seu cartão.</p><a className="primary-button" href={paymentLink}>Abrir checkout seguro <span aria-hidden="true">↗</span></a></main></div>;
   if (submitted) return <div className="apt-app"><RouteHeader label="Cadastro do aprovado" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Cadastro recebido</p><h1>{paymentLink ? "Sua assinatura está pronta para ativação." : "Seus dados foram vinculados ao requerimento."}</h1><p>{paymentLink ? "Conclua o pagamento no ambiente seguro do Asaas. O APT não recebe nem armazena os dados completos do seu cartão." : "A cobrança será liberada quando valor e vencimento forem confirmados pela gestão."}</p>{paymentLink ? <a className="primary-button" href={paymentLink}>Abrir checkout seguro <span aria-hidden="true">↗</span></a> : <a className="secondary-button" href="/">Voltar ao site</a>}</main></div>;
   return <div className="apt-app"><RouteHeader label="Cadastro do aprovado" /><main className="enrollment-page" id="main-content">
     <aside className="enrollment-intro"><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Jogador segura uma bola e uma raquete junto à rede" /><div className="enrollment-intro__shade" /><div><span>Link privado</span><h1>{recadastro ? "Atualize seus dados. Ative sua recorrência." : "Você foi aprovado. Agora, vamos ativar sua participação."}</h1><p>O APT guarda somente a proteção criptográfica do CPF e os quatro últimos dígitos. O cartão fica no Asaas.</p></div></aside>
     <section className="enrollment-content">
       <header><span>{recadastro ? "Recadastro e assinatura" : "Cadastro e assinatura"}</span><h2>Confirme os dados usados na cobrança.</h2><p>O cartão será informado somente no ambiente seguro do Asaas.</p></header>
-      {!profileLoading && !inviteToken.current && <div className="access-notice"><strong>Este cadastro precisa de um convite aprovado.</strong><span>Abra o link individual enviado pela gestão do APT.</span></div>}
-      {!profileLoading && inviteToken.current && !monthlyValue && !error && <div className="access-notice"><strong>A mensalidade ainda não foi liberada.</strong><span>A gestão precisa confirmar o valor antes de gerar a recorrência.</span></div>}
+      {!profileLoading && !hasInvite && <div className="access-notice"><strong>Este cadastro precisa de um convite aprovado.</strong><span>Abra o link individual enviado pela gestão do APT.</span></div>}
+      {!profileLoading && hasInvite && !monthlyValue && !error && <div className="access-notice"><strong>A mensalidade ainda não foi liberada.</strong><span>A gestão precisa confirmar o valor antes de gerar a recorrência.</span></div>}
       {profileLoading && <div className="loading-state"><i /><span>Validando seu convite…</span></div>}
       <form className="enrollment-form" onSubmit={submit}>
         <div className="fields-grid"><label className="field-label field-label--compact"><span>Nome completo</span><input required name="name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome e sobrenome" /></label><label className="field-label field-label--compact"><span>CPF</span><input required inputMode="numeric" autoComplete="off" value={formatCpf(cpf)} onChange={(event) => setCpf(event.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="000.000.000-00" /></label><label className="field-label field-label--compact"><span>E-mail do convite</span><input required readOnly={Boolean(email)} name="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@exemplo.com" /></label><label className="field-label field-label--compact"><span>WhatsApp</span><input required name="phone" type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(61) 99999-9999" /></label><label className="field-label field-label--compact"><span>Crie uma senha</span><input required name="password" type="password" minLength={8} autoComplete="new-password" placeholder="Mínimo de 8 caracteres" /></label></div>
         <div className="plan-row"><div><span>Participação mensal APT</span><strong>{monthlyValue ? `${monthlyValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por mês` : "Valor ainda não configurado"}</strong><small>Renovação automática · cartão de crédito</small></div><span className="status-chip status-chip--ok">Checkout seguro</span></div>
         <label className="consent-row"><input required name="consent" type="checkbox" /><span>Autorizo o uso destes dados para administrar minha participação, comunicação e cobrança recorrente no APT.</span></label>
         {error && <p className="field-error" role="alert">{error}</p>}
-        <button className="primary-button primary-button--wide" type="submit" disabled={!inviteToken.current || !monthlyValue || profileLoading || submitting}>{submitting ? "Preparando assinatura…" : "Continuar para assinatura"}<span aria-hidden="true">→</span></button>
+        <button className="primary-button primary-button--wide" type="submit" disabled={!hasInvite || !monthlyValue || profileLoading || submitting}>{submitting ? "Preparando assinatura…" : "Continuar para assinatura"}<span aria-hidden="true">→</span></button>
       </form>
     </section>
   </main></div>;
@@ -532,11 +539,11 @@ export function PortalPage() {
   const nextDue = courtesy ? "Cortesia" : subscription?.next_due_date ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long" }).format(new Date(`${subscription.next_due_date}T12:00:00`)) : "A definir";
   const active = member.accessActive;
   return <div className="apt-app"><RouteHeader label="Área do membro" /><main className="member-page" id="main-content">
-    <aside className="member-rail"><Brand inverse large /><div className="member-profile"><span>{initials}</span><div><strong>{member.name}</strong><small>{member.classLevel || "Classe a confirmar"}</small></div></div><nav aria-label="Área do membro"><button className={tab === "inicio" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("inicio")}>Início</button><button className={tab === "pagamentos" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("pagamentos")}>Pagamentos</button><button className={tab === "perfil" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("perfil")}>Meu cadastro</button></nav><div className="rail-status"><i /> {active ? "Participação ativa" : "Participação em atualização"}</div></aside>
+    <aside className="member-rail"><Brand inverse large /><div className="member-profile"><span>{initials}</span><div><strong>{member.name}</strong><small>{member.classLevel || "Classe a confirmar"}</small></div></div><nav aria-label="Área do membro"><button className={tab === "inicio" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("inicio")}>Início</button><button className={tab === "pagamentos" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("pagamentos")}>Pagamentos</button><button className={tab === "perfil" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("perfil")}>Meu cadastro</button><SignOutButton /></nav><div className="rail-status"><i /> {active ? "Participação ativa" : "Participação em atualização"}</div></aside>
     <section className="member-content">
       {notice && <div className="toast" role="status">{notice}</div>}
       {tab === "inicio" && <><header className="member-welcome"><div><p>Olá, {member.name.split(" ")[0]}.</p><h1>Sua vida no APT, sem ruído.</h1></div></header><section className="membership-hero"><div><span>Próxima mensalidade</span><strong>{nextDue}</strong><small>{courtesy ? "Acesso liberado pela gestão" : "Renovação automática no cartão"}</small></div><div><span>Situação</span><strong>{active ? "Em dia" : "Aguardando regularização"}</strong><small>{courtesy ? "Participação cortesia" : subscription?.status || "Em configuração"}</small></div>{!courtesy && <button className="primary-button" onClick={() => setTab("pagamentos")}>Gerenciar pagamento</button>}</section>{active && <section className="member-list"><header><h2>Acessos rápidos</h2><span>Participação ativa</span></header>{member.twinnerUrl && <div className="movement-row"><i className="movement-dot movement-dot--ok" /><div><strong>Cadastro no Tweener</strong><span>Entre para fazer parte da migração e acompanhar o APT.</span></div><a href={member.twinnerUrl} target="_blank" rel="noreferrer">Fazer cadastro</a></div>}{member.whatsappCommunityUrl && <div className="movement-row"><i className="movement-dot movement-dot--ok" /><div><strong>Comunidade APT no WhatsApp</strong><span>Receba os avisos e a organização do clube.</span></div><a href={member.whatsappCommunityUrl} target="_blank" rel="noreferrer">Entrar</a></div>}</section>}<section className="member-list"><header><h2>Últimos movimentos</h2><span>{payments.length} registros</span></header>{payments.slice(0, 3).map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>Mensalidade APT</strong><span>{payment.due_date ? `Vencimento em ${new Intl.DateTimeFormat("pt-BR").format(new Date(`${payment.due_date}T12:00:00`))}` : "Cobrança registrada"}</span></div><strong>{payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "Pago" : "Pendente"}</strong></div>)}{payments.length === 0 && <div className="empty-state"><strong>Nenhuma cobrança registrada.</strong><span>O histórico aparece após o primeiro evento do Asaas.</span></div>}</section></>}
-      {tab === "pagamentos" && <><header className="member-welcome"><div><p>Pagamentos</p><h1>Assinatura e cobranças.</h1></div></header><section className="payment-method"><div><span className="card-glyph">••••</span><div><strong>Cartão protegido pelo Asaas</strong><span>Os dados completos nunca ficam no APT.</span></div></div><p>Quando a troca de cartão estiver disponível, ela será aberta no ambiente seguro do Asaas — nunca nesta página.</p></section><section className="member-list"><header><h2>Histórico</h2><span>{payments.length} cobranças</span></header>{payments.map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>{(payment.value_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong><span>{payment.due_date || "Sem vencimento informado"}</span></div>{payment.invoice_url ? <a href={payment.invoice_url} target="_blank" rel="noreferrer">Abrir cobrança</a> : <strong>{payment.status}</strong>}</div>)}</section></>}
+      {tab === "pagamentos" && <><header className="member-welcome"><div><p>Pagamentos</p><h1>Assinatura e cobranças.</h1></div></header><section className="payment-method"><div><span className="card-glyph">••••</span><div><strong>Cartão protegido pelo Asaas</strong><span>Os dados completos nunca ficam no APT.</span></div></div><p>Para trocar o cartão, a gestão envia um novo checkout seguro do Asaas. A troca nunca é feita nesta página.</p></section><section className="member-list"><header><h2>Histórico</h2><span>{payments.length} cobranças</span></header>{payments.map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>{(payment.value_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong><span>{payment.due_date || "Sem vencimento informado"}</span></div>{payment.invoice_url ? <a href={payment.invoice_url} target="_blank" rel="noreferrer">Abrir cobrança</a> : <strong>{payment.status}</strong>}</div>)}</section></>}
       {tab === "perfil" && <><header className="member-welcome"><div><p>Meu cadastro</p><h1>Dados da participação.</h1></div></header><section className="profile-data"><div><span>Nome</span><strong>{member.name}</strong></div><div><span>E-mail</span><strong>{member.email}</strong></div><div><span>WhatsApp</span><strong>{member.whatsapp}</strong></div><div><span>CPF</span><strong>{member.cpfMasked}</strong></div></section><section className="exit-section"><h2>Encerrar participação</h2><p>O encerramento interrompe novas cobranças. O acesso segue até o fim do período já pago.</p>{!exitRequested && <><button className="text-button text-button--danger" onClick={() => setExitOpen((open) => !open)}>{exitOpen ? "Voltar" : "Quero sair do ranking"}</button>{exitOpen && <div className="exit-confirm"><p>Ao confirmar, nenhuma nova mensalidade será criada.</p><button className="danger-button" onClick={requestCancellation} disabled={cancelling}>{cancelling ? "Cancelando no Asaas…" : "Cancelar renovação"}</button></div>}</>}{exitRequested && <p className="success-message" role="status">Renovação cancelada. Nenhuma nova cobrança será criada.</p>}</section></>}
     </section>
     <nav className="mobile-tabbar" aria-label="Área do membro"><button className={tab === "inicio" ? "active" : ""} onClick={() => setTab("inicio")}>Início</button><button className={tab === "pagamentos" ? "active" : ""} onClick={() => setTab("pagamentos")}>Pagamentos</button><button className={tab === "perfil" ? "active" : ""} onClick={() => setTab("perfil")}>Cadastro</button></nav>
@@ -696,16 +703,29 @@ function MemberManagementList({ members, onManage }: { members: MemberRecord[]; 
   return <div className="member-management-list">{members.map((member) => { const reminderUrl = paymentReminderUrl(member); return <article key={member.id} className="member-management-card"><div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.email} · {member.classLevel || "Sem classe"}</small></div></div><div className="member-management-card__status"><span className={["active", "courtesy"].includes(member.participationStatus) ? "status-chip status-chip--ok" : member.participationStatus === "pending_payment" ? "status-chip status-chip--pending" : "status-chip status-chip--inactive"}>{member.participationStatus}</span><small>{member.nextDueDate ? `Vence ${member.nextDueDate}` : member.subscriptionStatus}</small></div>{reminderUrl && <a className="table-action" href={reminderUrl} target="_blank" rel="noreferrer">Cobrar no WhatsApp</a>}<button className="table-action" type="button" onClick={() => onManage(member)}>Gerenciar integrante</button></article>; })}</div>;
 }
 
+const crmColumns: Array<{ status: ApplicationRecord["status"]; label: string }> = [
+  { status: "new", label: "Novos" },
+  { status: "in_review", label: "Em análise" },
+  { status: "awaiting_info", label: "Aguardando retorno" },
+  { status: "approved", label: "Aprovados" },
+  { status: "invite_sent", label: "Convites enviados" },
+  { status: "registered", label: "Cadastrados" },
+  { status: "rejected", label: "Não aprovados" },
+];
+
+function CrmKanban({ applications, onOpen }: { applications: ApplicationRecord[]; onOpen: (id: string) => void }) {
+  return <section className="crm-kanban" aria-label="Pipeline de requerimentos">{crmColumns.map((column) => {
+    const cards = applications.filter((application) => application.status === column.status);
+    return <section className="crm-column" key={column.status}><header><strong>{column.label}</strong><span>{cards.length}</span></header><div>{cards.map((application) => <button type="button" className="crm-card" key={application.id} onClick={() => onOpen(application.id)}><strong>{application.name}</strong><small>{application.city || "Cidade não informada"}</small><small>{application.classLevel || "Classe não informada"}</small></button>)}{cards.length === 0 && <p>Sem requerimentos.</p>}</div></section>;
+  })}</section>;
+}
+
 export function AdminPage() {
-  const [tab, setTab] = useState<"resumo" | "membros" | "formularios">("resumo");
+  const [tab, setTab] = useState<"resumo" | "membros">("resumo");
   const [query, setQuery] = useState("");
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
   const [members, setMembers] = useState<MemberRecord[]>([]);
-  const [forms, setForms] = useState<FormDefinition[]>([]);
-  const [selectedFormId, setSelectedFormId] = useState("");
-  const [formsError, setFormsError] = useState("");
   const [asaasConnected, setAsaasConnected] = useState(false);
-  const [copiedId, setCopiedId] = useState("");
   const [notice, setNotice] = useState("");
   const [selectedApplication, setSelectedApplication] = useState<ApplicationDetail | null>(null);
   const [applicationLoading, setApplicationLoading] = useState(false);
@@ -721,26 +741,18 @@ export function AdminPage() {
     fetch("/api/auth/session").then(async (sessionResponse) => {
       const sessionPayload = await sessionResponse.json() as { user?: { role?: string } };
       if (!sessionResponse.ok || sessionPayload.user?.role !== "admin") { setAuthRequired(true); return; }
-      const [applicationResponse, memberResponse, asaasResponse, formResponse] = await Promise.all([
-        fetch("/api/requerimentos"), fetch("/api/membros"), fetch("/api/asaas/status"), fetch("/api/formularios"),
+      const [applicationResponse, memberResponse, asaasResponse] = await Promise.all([
+        fetch("/api/requerimentos"), fetch("/api/membros"), fetch("/api/asaas/status"),
       ]);
-      const [applicationPayload, memberPayload, asaasPayload, formPayload] = await Promise.all([
+      const [applicationPayload, memberPayload, asaasPayload] = await Promise.all([
         applicationResponse.json() as Promise<{ applications?: ApplicationRecord[]; error?: string }>,
         memberResponse.json() as Promise<{ members?: MemberRecord[] }>,
         asaasResponse.json() as Promise<{ connected?: boolean }>,
-        formResponse.json() as Promise<{ forms?: FormDefinition[]; error?: string }>,
       ]);
       if (applicationResponse.ok) setApplications(applicationPayload.applications || []);
       else setNotice(applicationPayload.error || "Não foi possível carregar os requerimentos.");
       setMembers(memberPayload.members || []);
       setAsaasConnected(Boolean(asaasPayload.connected));
-      if (formResponse.ok) {
-        const loadedForms = formPayload.forms || [];
-        setForms(loadedForms);
-        setSelectedFormId(loadedForms[0]?.id || "");
-      } else {
-        setFormsError(formPayload.error || "Não foi possível carregar os formulários.");
-      }
     }).catch(() => setNotice("Não foi possível atualizar os dados agora.")).finally(() => { setLoading(false); setAuthChecking(false); });
   }, []);
   async function openApplication(id: string) {
@@ -778,22 +790,19 @@ export function AdminPage() {
     } catch (error) { setMemberError(error instanceof Error ? error.message : "Não foi possível atualizar o integrante."); }
     finally { setMemberSaving(false); }
   }
-  async function copyInvite(application: ApplicationRecord) { if (!application.inviteToken) return; await navigator.clipboard.writeText(`${window.location.origin}/cadastro?convite=${application.inviteToken}`); setCopiedId(application.id); window.setTimeout(() => setCopiedId(""), 2200); }
   async function refreshMembers() { const response = await fetch("/api/membros"); const payload = await response.json() as { members?: MemberRecord[] }; if (response.ok) setMembers(payload.members || []); }
   if (authChecking) return <div className="apt-app"><RouteHeader label="Gestão APT" /><main className="access-state"><span>Acesso administrativo</span><h1>Verificando acesso.</h1><p>A gestão é carregada somente para contas autorizadas.</p></main></div>;
   if (authRequired) return <div className="apt-app"><RouteHeader label="Gestão APT" /><main className="access-state"><span>Acesso administrativo</span><h1>Entre com uma conta autorizada.</h1><p>A base de candidatos, integrantes e pagamentos não fica exposta publicamente.</p><a className="primary-button" href="/entrar?next=/gestao">Entrar na gestão</a></main></div>;
   const activeCount = members.filter((member) => member.participationStatus === "active").length;
   const inactiveCount = members.filter((member) => ["inactive", "cancelled"].includes(member.participationStatus)).length;
   const attentionCount = applications.filter((item) => ["new", "in_review", "awaiting_info"].includes(item.status)).length;
-  const selectedForm = forms.find((form) => form.id === selectedFormId) || forms[0];
   return <div className="apt-app"><RouteHeader label="Gestão APT" /><main className="admin-page" id="main-content">
-    <aside className="admin-sidebar"><Brand inverse /><div><span>Gestão APT</span><h1>Clube em movimento.</h1></div><nav aria-label="Gestão"><button className={tab === "resumo" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("resumo")}>Visão geral</button><button className={tab === "membros" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("membros")}>Membros e cobranças</button><button className={tab === "formularios" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("formularios")}>Formulários</button></nav><div className="sidebar-footer"><span>Integração financeira</span><strong>{asaasConnected ? "Asaas conectado" : "Asaas pendente"}</strong></div></aside>
+    <aside className="admin-sidebar"><Brand inverse /><div><span>Gestão APT</span><h1>Clube em movimento.</h1></div><nav aria-label="Gestão"><button className={tab === "resumo" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("resumo")}>CRM e visão geral</button><button className={tab === "membros" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("membros")}>Membros e cobranças</button><SignOutButton /></nav><div className="sidebar-footer"><span>Integração financeira</span><strong>{asaasConnected ? "Asaas conectado" : "Asaas pendente"}</strong></div></aside>
     <section className="admin-content">
       {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice("")}>Fechar</button></div>}
-      {tab === "resumo" && <><header className="admin-heading"><div><span>Visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section><section className="review-queue"><header><div><h3>Requerimentos recentes</h3><span>{attentionCount} aguardando decisão</span></div></header>{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{applications.map((application) => <article className="candidate-row" key={application.id}><div className="candidate-identity"><span>{application.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{application.name}</strong><small>{application.city || "Cidade não informada"} · {application.classLevel || "Classe não informada"}</small></div></div><div className="candidate-referrer"><span>Indicação</span><strong>{application.referrer}</strong></div><span className={["approved", "invite_sent", "registered"].includes(application.status) ? "status-chip status-chip--ok" : application.status === "rejected" ? "status-chip status-chip--inactive" : "status-chip status-chip--pending"}>{application.status === "registered" ? "Cadastrado" : application.status === "invite_sent" ? "Convite enviado" : application.status === "approved" ? "Aprovado" : application.status === "rejected" ? "Não aprovado" : application.status === "awaiting_info" ? "Aguardando informação" : "Em análise"}</span><div className="row-actions"><button onClick={() => openApplication(application.id)}>Abrir requerimento</button>{application.inviteToken && <button className="small-primary" onClick={() => copyInvite(application)}>{copiedId === application.id ? "Link copiado" : "Copiar link de cadastro"}</button>}{["approved", "invite_sent"].includes(application.status) && !application.inviteToken && <button onClick={() => updateApplication(application.id, "approved")}>Gerar novo link</button>}</div></article>)}</section>{(selectedApplication || applicationLoading) && <ApplicationReviewDetail application={selectedApplication} loading={applicationLoading} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} />}</>}
+      {tab === "resumo" && <><header className="admin-heading"><div><span>CRM e visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section>{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state empty-state--bordered"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{!loading && applications.length > 0 && <CrmKanban applications={applications} onOpen={openApplication} />}{(selectedApplication || applicationLoading) && <ApplicationReviewDetail application={selectedApplication} loading={applicationLoading} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} />}</>}
       {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Uma base única para saber quem está ativo.</h2></div><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome…" /></label></header><MemberImportPanel onImported={refreshMembers} /><PaymentReminderQueue members={members} /><MemberManagementList members={filteredMembers} onManage={(member) => { setMemberError(""); setSelectedMember(member); }} /><div className="table-wrap table-wrap--members"><table><thead><tr><th>Integrante</th><th>Participação</th><th>Assinatura</th><th>Próximo vencimento</th><th>Atraso</th><th><span className="sr-only">Ações</span></th></tr></thead><tbody>{filteredMembers.map((member) => { const reminderUrl = paymentReminderUrl(member); return <tr key={member.id}><td><div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.email} · {member.classLevel || "Sem classe"}</small></div></div></td><td><span className={["active", "courtesy"].includes(member.participationStatus) ? "status-chip status-chip--ok" : member.participationStatus === "pending_payment" ? "status-chip status-chip--pending" : "status-chip status-chip--inactive"}>{member.participationStatus}</span></td><td>{member.subscriptionStatus}</td><td>{member.nextDueDate || "—"}</td><td>{member.overdueDays ? `${member.overdueDays} dias` : "—"}</td><td><div className="row-actions">{reminderUrl && <a className="table-action" href={reminderUrl} target="_blank" rel="noreferrer">Cobrar</a>}<button className="table-action" type="button" onClick={() => { setMemberError(""); setSelectedMember(member); }}>Gerenciar</button></div></td></tr>; })}</tbody></table></div>{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Tente outro nome.</span></div>}{selectedMember && <MemberManagementDetail key={selectedMember.id} member={selectedMember} saving={memberSaving} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} />}</>}
-      {tab === "formularios" && <><header className="admin-heading"><div><span>Formulários</span><h2>A conversa atual de entrada.</h2></div>{selectedForm?.publishedVersion && <span className="status-chip status-chip--ok">Versão {selectedForm.publishedVersion.number} publicada</span>}</header>{formsError && <section className="empty-state empty-state--bordered"><strong>Versionamento ainda indisponível.</strong><span>{formsError}</span></section>}{!formsError && forms.length === 0 && <section className="empty-state empty-state--bordered"><strong>Nenhum formulário publicado.</strong><span>Aplique a migration de formulários para registrar a versão atual.</span></section>}{selectedForm && <section className="forms-layout"><aside className="form-index" aria-label="Formulários cadastrados">{forms.map((form) => <button className={form.id === selectedForm.id ? "form-index__item form-index__item--active" : "form-index__item"} key={form.id} onClick={() => setSelectedFormId(form.id)}><strong>{form.name}</strong><small>{form.publishedVersion ? `${form.publishedVersion.questions.length} perguntas · ${form.publishedVersion.submissionCount} envios` : "Sem versão publicada"}</small></button>)}</aside><div className="form-editor"><header><div><span>{selectedForm.name}</span><p>{selectedForm.description}</p><small>A versão publicada é imutável. Para editar, será necessário criar e validar uma nova versão antes da publicação.</small></div>{selectedForm.publishedVersion?.publishedAt && <time dateTime={selectedForm.publishedVersion.publishedAt}>Publicada em {new Intl.DateTimeFormat("pt-BR").format(new Date(selectedForm.publishedVersion.publishedAt))}</time>}</header>{selectedForm.publishedVersion ? <ol className="question-editor-list">{selectedForm.publishedVersion.questions.map((item) => <li key={item.id}><span className="drag-index">{String(item.position).padStart(2, "0")}</span><span><strong>{item.title}</strong><small>{item.required ? "Obrigatória" : "Opcional"} · {item.type}</small></span></li>)}</ol> : <div className="empty-state"><strong>Sem versão publicada.</strong><span>Crie uma nova versão antes de disponibilizar este formulário.</span></div>}</div></section>}</>}
     </section>
-    <nav className="admin-mobile-nav" aria-label="Gestão"><button className={tab === "resumo" ? "active" : ""} onClick={() => setTab("resumo")}>Visão geral</button><button className={tab === "membros" ? "active" : ""} onClick={() => setTab("membros")}>Membros</button><button className={tab === "formularios" ? "active" : ""} onClick={() => setTab("formularios")}>Formulários</button></nav>
+    <nav className="admin-mobile-nav" aria-label="Gestão"><button className={tab === "resumo" ? "active" : ""} onClick={() => setTab("resumo")}>CRM</button><button className={tab === "membros" ? "active" : ""} onClick={() => setTab("membros")}>Membros</button></nav>
   </main></div>;
 }

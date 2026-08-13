@@ -30,6 +30,15 @@ export function clearAccessCookie() {
   return `${ACCESS_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`;
 }
 
+export function isAdminEmail(email: string) {
+  return new Set(
+    (runtimeEnv().APT_ADMIN_EMAILS || "")
+      .split(",")
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean),
+  ).has(email.trim().toLowerCase());
+}
+
 export async function getSession(request: Request): Promise<SessionUser | null> {
   const accessToken = parseCookies(request)[ACCESS_COOKIE];
   if (!accessToken) return null;
@@ -37,13 +46,7 @@ export async function getSession(request: Request): Promise<SessionUser | null> 
   const email = authUser?.email?.toLowerCase();
   if (!authUser || !email) return null;
 
-  const adminEmails = new Set(
-    (runtimeEnv().APT_ADMIN_EMAILS || "")
-      .split(",")
-      .map((item) => item.trim().toLowerCase())
-      .filter(Boolean),
-  );
-  if (adminEmails.has(email)) return { id: authUser.id, email, role: "admin" };
+  if (isAdminEmail(email)) return { id: authUser.id, email, role: "admin" };
 
   const members = await supabaseAdmin<Array<{ id: string }>>("members", {
     query: { select: "id", auth_user_id: `eq.${authUser.id}`, limit: "1" },

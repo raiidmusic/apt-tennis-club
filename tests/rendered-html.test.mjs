@@ -12,8 +12,8 @@ test("keeps the APT landing public and free of server secrets", async () => {
   assert.match(client, /Solicitar entrada/i);
   assert.match(client, /Um ranking para quem leva o tênis a sério/i);
   assert.match(client, /Quatro Courts\. Uma escada competitiva/i);
-  assert.match(client, /hash\.get\("type"\) === "recovery"/);
-  assert.match(client, /window\.location\.replace\(`\/redefinir-senha\$\{window\.location\.hash\}`\)/);
+  assert.match(client, /type === "recovery" \|\| type === "magiclink"/);
+  assert.match(client, /type === "recovery" \? "\/redefinir-senha" : "\/acesso-gestao"/);
   assert.doesNotMatch(client, /SUPABASE_SECRET_KEY|ASAAS_API_KEY|service_role/i);
   const layout = await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(layout, /localhost:8400\/live\.js/);
@@ -24,6 +24,7 @@ test("keeps public, invited, member and management journeys separate", async () 
     "../app/requerimento/page.tsx",
     "../app/cadastro/page.tsx",
     "../app/entrar/page.tsx",
+    "../app/acesso-gestao/page.tsx",
     "../app/portal/page.tsx",
     "../app/membros/page.tsx",
     "../app/gestao/page.tsx",
@@ -108,7 +109,7 @@ test("allows the master admin to authenticate before server-only operations are 
   assert.match(supabase, /function supabasePublicConfig\(\)/);
   assert.match(supabase, /function supabaseAdminConfig\(\)/);
   assert.match(supabase, /Supabase administrativo não configurado/);
-  assert.match(auth, /if \(adminEmails\.has\(email\)\) return/);
+  assert.match(auth, /if \(isAdminEmail\(email\)\) return/);
 });
 
 test("keeps password recovery inside the official app and Supabase public-auth boundary", async () => {
@@ -124,5 +125,23 @@ test("keeps password recovery inside the official app and Supabase public-auth b
   assert.match(route, /password\.length < 8/);
   assert.match(supabase, /auth\/v1\/recover/);
   assert.match(supabase, /auth\/v1\/user/);
+  assert.doesNotMatch(route, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test("limits passwordless management access to the configured administrator", async () => {
+  const [client, route, auth, supabase] = await Promise.all([
+    readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/auth/magic-link/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase-server.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(client, /Receber link de acesso da gestão/);
+  assert.match(client, /window\.location\.replace\("\/gestao"\)/);
+  assert.match(route, /isAdminEmail\(email\)/);
+  assert.match(route, /getAuthUser\(accessToken\)/);
+  assert.match(route, /accessCookie\(accessToken\)/);
+  assert.match(auth, /export function isAdminEmail/);
+  assert.match(supabase, /auth\/v1\/otp\?/);
+  assert.match(supabase, /create_user: false/);
   assert.doesNotMatch(route, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
 });

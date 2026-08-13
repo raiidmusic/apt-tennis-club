@@ -145,6 +145,17 @@ export async function sendPasswordRecovery(email: string, redirectTo: string) {
   if (!response.ok) throw new SupabaseRequestError("Não foi possível solicitar a recuperação.", response.status);
 }
 
+export async function sendMagicLink(email: string, redirectTo: string) {
+  const { url, publishableKey } = supabasePublicConfig();
+  const query = new URLSearchParams({ redirect_to: redirectTo });
+  const response = await fetch(`${url}/auth/v1/otp?${query}`, {
+    method: "POST",
+    headers: { apikey: publishableKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, create_user: false }),
+  });
+  if (!response.ok) throw new SupabaseRequestError("Não foi possível enviar o link de acesso.", response.status);
+}
+
 export async function resetPasswordWithRecoveryToken(accessToken: string, password: string) {
   const { url, publishableKey } = supabasePublicConfig();
   const response = await fetch(`${url}/auth/v1/user`, {

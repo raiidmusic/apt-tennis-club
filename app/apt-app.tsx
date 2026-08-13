@@ -158,6 +158,8 @@ function RouteHeader({ label }: { label: string }) {
 export function LoginPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [sendingMagicLink, setSendingMagicLink] = useState(false);
+  const [magicLinkNotice, setMagicLinkNotice] = useState("");
   const [nextPath, setNextPath] = useState("/portal");
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("next");
@@ -177,7 +179,41 @@ export function LoginPage() {
     } catch (loginError) { setError(loginError instanceof Error ? loginError.message : "Não foi possível entrar."); }
     finally { setSubmitting(false); }
   }
-  return <div className="apt-app"><RouteHeader label="Acesso seguro" /><main className="login-page" id="main-content"><section><span>Área reservada</span><h1>Entre para cuidar da sua participação.</h1><p>Use o e-mail e a senha definidos no cadastro aprovado.</p><form onSubmit={submit}><label className="field-label field-label--compact"><span>E-mail</span><input required name="email" type="email" autoComplete="email" /></label><label className="field-label field-label--compact"><span>Senha</span><input required name="password" type="password" minLength={8} autoComplete="current-password" /></label>{error && <p className="field-error" role="alert">{error}</p>}<button className="primary-button primary-button--wide" type="submit" disabled={submitting}>{submitting ? "Entrando…" : "Entrar"}<span aria-hidden="true">→</span></button><a className="text-button" href="/recuperar-senha">Esqueci minha senha</a></form></section><aside><img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Movimento de um jogador em uma quadra de tênis" /><div /></aside></main></div>;
+  async function requestMagicLink(form: HTMLFormElement) {
+    const email = new FormData(form).get("email");
+    setSendingMagicLink(true); setError(""); setMagicLinkNotice("");
+    try {
+      const response = await fetch("/api/auth/magic-link", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "request", email }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Não foi possível enviar o link de acesso.");
+      setMagicLinkNotice("Se este e-mail for autorizado, enviamos um link seguro para entrar na gestão.");
+    } catch (magicLinkError) { setError(magicLinkError instanceof Error ? magicLinkError.message : "Não foi possível enviar o link de acesso."); }
+    finally { setSendingMagicLink(false); }
+  }
+  return <div className="apt-app"><RouteHeader label="Acesso seguro" /><main className="login-page" id="main-content"><section><span>Área reservada</span><h1>Entre para cuidar da sua participação.</h1><p>Use o e-mail e a senha definidos no cadastro aprovado.</p><form onSubmit={submit}><label className="field-label field-label--compact"><span>E-mail</span><input required name="email" type="email" autoComplete="email" /></label><label className="field-label field-label--compact"><span>Senha</span><input required name="password" type="password" minLength={8} autoComplete="current-password" /></label>{error && <p className="field-error" role="alert">{error}</p>}{magicLinkNotice && <p className="recovery-notice" role="status">{magicLinkNotice}</p>}<button className="primary-button primary-button--wide" type="submit" disabled={submitting}>{submitting ? "Entrando…" : "Entrar"}<span aria-hidden="true">→</span></button>{nextPath === "/gestao" && <button className="text-button" type="button" onClick={(event) => requestMagicLink(event.currentTarget.form!)} disabled={sendingMagicLink}>{sendingMagicLink ? "Enviando link…" : "Receber link de acesso da gestão"}</button>}<a className="text-button" href="/recuperar-senha">Esqueci minha senha</a></form></section><aside><img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Movimento de um jogador em uma quadra de tênis" /><div /></aside></main></div>;
+}
+
+export function MagicLinkAccessPage() {
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const accessToken = new URLSearchParams(window.location.hash.slice(1)).get("access_token") || "";
+    if (!accessToken) { setError("Este link de acesso é inválido ou já expirou."); return; }
+    void (async () => {
+      try {
+        const response = await fetch("/api/auth/magic-link", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "complete", accessToken }),
+        });
+        const payload = await response.json() as { error?: string };
+        if (!response.ok) throw new Error(payload.error || "Não foi possível concluir o acesso.");
+        window.location.replace("/gestao");
+      } catch (accessError) { setError(accessError instanceof Error ? accessError.message : "Não foi possível concluir o acesso."); }
+    })();
+  }, []);
+  return <div className="apt-app"><RouteHeader label="Acesso à gestão" /><main className="access-state" id="main-content"><span>Acesso seguro</span><h1>{error ? "Solicite um novo link." : "Confirmando seu acesso."}</h1><p>{error || "Validando sua conta autorizada para abrir a gestão."}</p>{error && <a className="primary-button" href="/entrar?next=/gestao">Receber novo link</a>}</main></div>;
 }
 
 export function PasswordRecoveryPage({ reset = false }: { reset?: boolean }) {
@@ -207,8 +243,9 @@ export function PasswordRecoveryPage({ reset = false }: { reset?: boolean }) {
 export function LandingPage() {
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.slice(1));
-    if (hash.get("type") === "recovery" && hash.get("access_token")) {
-      window.location.replace(`/redefinir-senha${window.location.hash}`);
+    const type = hash.get("type");
+    if (hash.get("access_token") && (type === "recovery" || type === "magiclink")) {
+      window.location.replace(`${type === "recovery" ? "/redefinir-senha" : "/acesso-gestao"}${window.location.hash}`);
     }
   }, []);
   return (

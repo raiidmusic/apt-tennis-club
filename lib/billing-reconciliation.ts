@@ -64,13 +64,18 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
     providerSubscription = (await readJson<Collection<AsaasSubscriptionSnapshot>>(response, "O Asaas não respondeu à busca da assinatura.")).data?.[0] || null;
   }
   const checkoutId = hints.checkoutId || localSubscription.asaas_checkout_id || undefined;
-  const paymentPath = providerSubscription?.id
-    ? `/subscriptions/${encodeURIComponent(providerSubscription.id)}/payments`
-    : `/payments?${new URLSearchParams(checkoutId
-      ? { checkoutSession: checkoutId, limit: "24" }
-      : { externalReference: memberId, limit: "24" })}`;
-  const paymentResponse = await asaasRequest(paymentPath);
-  const payments = (await readJson<Collection<AsaasPaymentSnapshot>>(paymentResponse, "O Asaas não respondeu à conciliação das cobranças.")).data || [];
+  const paymentPaths = providerSubscription?.id
+    ? [`/subscriptions/${encodeURIComponent(providerSubscription.id)}/payments`]
+    : [
+        ...(checkoutId ? [`/payments?${new URLSearchParams({ checkoutSession: checkoutId, limit: "24" })}`] : []),
+        `/payments?${new URLSearchParams({ externalReference: memberId, limit: "24" })}`,
+      ];
+  let payments: AsaasPaymentSnapshot[] = [];
+  for (const paymentPath of paymentPaths) {
+    const paymentResponse = await asaasRequest(paymentPath);
+    payments = (await readJson<Collection<AsaasPaymentSnapshot>>(paymentResponse, "O Asaas não respondeu à conciliação das cobranças.")).data || [];
+    if (payments.length) break;
+  }
 
   if (!providerSubscription && payments[0]?.subscription) {
     const response = await asaasRequest(`/subscriptions/${encodeURIComponent(payments[0].subscription)}`);

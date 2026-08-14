@@ -128,6 +128,9 @@ test("reconciles billing without collecting card data in the APT portal", async 
   assert.match(webhook, /asaas_checkout_id/);
   assert.match(reconciliation, /checkoutSession/);
   assert.match(reconciliation, /localSubscription\.asaas_checkout_id/);
+  assert.match(reconciliation, /externalReference: memberId/);
+  assert.match(webhook, /payload\.event === "CHECKOUT_PAID"/);
+  assert.match(webhook, /participation_status: "active"/);
   assert.match(reconciliation, /subscriptions\/\$\{encodeURIComponent\(providerSubscription\.id\)\}\/payments/);
   assert.doesNotMatch(portalRoute, /creditCardHolderInfo|creditCardToken|\bcvv\b/i);
   assert.doesNotMatch(client, /<input[^>]+(?:card|cvv)/i);

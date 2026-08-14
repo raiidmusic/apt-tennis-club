@@ -79,8 +79,32 @@ export async function POST(request: Request) {
       }
       if (!memberId) throw new SupabaseRequestError("Checkout sem referência do membro.", 409);
       if (payload.event === "CHECKOUT_PAID") {
+        if (!checkoutId) throw new SupabaseRequestError("Evento pago sem identificador do Checkout.", 409);
+        const [verifiedSubscription, member] = await Promise.all([
+          supabaseAdmin<SubscriptionRow[]>("subscriptions", {
+            query: { select: "id,member_id", member_id: `eq.${memberId}`, asaas_checkout_id: `eq.${checkoutId}`, limit: "1" },
+          }).then((rows) => rows[0]),
+          supabaseAdmin<MemberRow[]>("members", {
+            query: { select: "id,joined_at", id: `eq.${memberId}`, limit: "1" },
+          }).then((rows) => rows[0]),
+        ]);
+        if (!verifiedSubscription || !member) throw new SupabaseRequestError("Checkout pago não pertence a um membro do APT.", 409);
         const reconciliation = await reconcileMemberBilling(memberId, { checkoutId });
-        if (!reconciliation.found) throw new SupabaseRequestError("Checkout pago ainda sem assinatura conciliável.", 409);
+        if (!reconciliation.active) {
+          const now = new Date().toISOString();
+          await Promise.all([
+            supabaseAdmin("members", {
+              method: "PATCH",
+              query: { id: `eq.${memberId}` },
+              body: { participation_status: "active", joined_at: member.joined_at || now, updated_at: now },
+            }),
+            supabaseAdmin("subscriptions", {
+              method: "PATCH",
+              query: { id: `eq.${verifiedSubscription.id}` },
+              body: { status: "active", overdue_since: null, updated_at: now },
+            }),
+          ]);
+        }
       }
       await supabaseAdmin("webhook_events", {
         method: "PATCH",

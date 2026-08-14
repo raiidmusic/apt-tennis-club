@@ -22,9 +22,9 @@ type ApplicationRecord = {
   name: string;
   email: string;
   whatsapp: string;
-  city: string;
-  classLevel: string;
-  referrer: string;
+  city: string | null;
+  classLevel: string | null;
+  referrer: string | null;
   status: "new" | "in_review" | "awaiting_info" | "approved" | "rejected" | "invite_sent" | "registered";
   inviteToken?: string | null;
   createdAt: string;
@@ -32,7 +32,7 @@ type ApplicationRecord = {
 
 type AdminNote = { id: string; body: string; created_by: string; created_at: string };
 type ApplicationDetail = ApplicationRecord & {
-  profession?: string;
+  profession?: string | null;
   answers: Record<string, AnswerValue>;
   emailStatus?: string;
   notes: AdminNote[];
@@ -493,15 +493,19 @@ export function EnrollmentPage() {
   const [checkoutStatus, setCheckoutStatus] = useState<"sucesso" | "cancelado" | "expirado" | null>(null);
   const [cpf, setCpf] = useState("");
   const inviteToken = useRef("");
+  const groupToken = useRef("");
   const [hasInvite, setHasInvite] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [recadastro, setRecadastro] = useState(false);
+  const [groupRegistration, setGroupRegistration] = useState(false);
+  const [qualificationState, setQualificationState] = useState<"form" | "pending" | "registered">("form");
   const [monthlyValue, setMonthlyValue] = useState<number | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [qualificationSubmitting, setQualificationSubmitting] = useState(false);
   const [paymentLink, setPaymentLink] = useState("");
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
@@ -511,19 +515,42 @@ export function EnrollmentPage() {
       return;
     }
     const token = query.get("convite") || "";
+    const communityToken = query.get("grupo") || "";
     inviteToken.current = token;
-    if (!token) { queueMicrotask(() => setProfileLoading(false)); return; }
+    groupToken.current = communityToken;
+    if (!token && !communityToken) { queueMicrotask(() => setProfileLoading(false)); return; }
     queueMicrotask(() => setHasInvite(true));
-    fetch(`/api/cadastros?convite=${encodeURIComponent(token)}`)
+    const accessQuery = token ? `convite=${encodeURIComponent(token)}` : `grupo=${encodeURIComponent(communityToken)}`;
+    fetch(`/api/cadastros?${accessQuery}`)
       .then(async (response) => {
-        const payload = await response.json() as { name?: string; email?: string; phone?: string; recadastro?: boolean; monthlyValue?: number | null; checkoutUrl?: string; error?: string };
+        const payload = await response.json() as { name?: string; email?: string; phone?: string; recadastro?: boolean; groupRegistration?: boolean; monthlyValue?: number | null; checkoutUrl?: string; error?: string };
         if (!response.ok) throw new Error(payload.error || "Este convite não pôde ser validado.");
         setName(payload.name || ""); setEmail(payload.email || ""); setPhone(payload.phone || "");
-        setRecadastro(Boolean(payload.recadastro)); setMonthlyValue(payload.monthlyValue || null); setPaymentLink(payload.checkoutUrl || "");
+        setRecadastro(Boolean(payload.recadastro)); setGroupRegistration(Boolean(payload.groupRegistration)); setMonthlyValue(payload.monthlyValue || null); setPaymentLink(payload.checkoutUrl || "");
       })
       .catch((validationError) => setError(validationError instanceof Error ? validationError.message : "Este convite não pôde ser validado."))
       .finally(() => setProfileLoading(false));
   }, []);
+  async function qualifyGroup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setQualificationSubmitting(true); setError("");
+    try {
+      const response = await fetch("/api/cadastros", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "qualify_group", groupToken: groupToken.current, name, email, phone, consent: true }),
+      });
+      const payload = await response.json() as { inviteUrl?: string; pendingApproval?: boolean; alreadyRegistered?: boolean; error?: string };
+      if (!response.ok && response.status !== 202) throw new Error(payload.error || "Não foi possível conferir seu recadastro.");
+      if (payload.inviteUrl) { window.location.assign(payload.inviteUrl); return; }
+      if (payload.alreadyRegistered) { setQualificationState("registered"); return; }
+      if (payload.pendingApproval) { setQualificationState("pending"); return; }
+      throw new Error("Não foi possível conferir seu recadastro.");
+    } catch (qualificationError) {
+      setError(qualificationError instanceof Error ? qualificationError.message : "Não foi possível conferir seu recadastro.");
+    } finally {
+      setQualificationSubmitting(false);
+    }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSubmitting(true); setError(""); const data = new FormData(event.currentTarget);
     try { const response = await fetch("/api/cadastros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inviteToken: inviteToken.current, name, cpf, email, phone, password: data.get("password"), consent: data.get("consent") === "on" }) }); const payload = await response.json() as { error?: string; checkoutUrl?: string }; if (!response.ok) throw new Error(payload.error || "Não foi possível concluir o cadastro."); setPaymentLink(payload.checkoutUrl || ""); setSubmitted(true); }
@@ -532,17 +559,23 @@ export function EnrollmentPage() {
   }
   if (checkoutStatus === "sucesso") return <div className="apt-app"><RouteHeader label="Assinatura APT" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Checkout concluído</p><h1>Recebemos sua assinatura.</h1><p>O Asaas está confirmando o pagamento. Assim que a confirmação chegar, sua área de membro será liberada.</p><a className="primary-button" href="/entrar?next=/membros">Entrar na área do membro <span aria-hidden="true">→</span></a></main></div>;
   if (checkoutStatus === "cancelado" || checkoutStatus === "expirado") return <div className="apt-app"><RouteHeader label="Assinatura APT" /><main className="content-page success-page" id="main-content"><p>Checkout não concluído</p><h1>{checkoutStatus === "expirado" ? "O link de pagamento expirou." : "O pagamento foi cancelado."}</h1><p>Peça à gestão um novo link individual para continuar sua assinatura com segurança.</p><a className="secondary-button" href="/">Voltar ao site</a></main></div>;
+  if (groupRegistration && qualificationState === "pending") return <div className="apt-app"><RouteHeader label="Recadastro APT" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Dados recebidos</p><h1>Sua aprovação rápida já está na gestão.</h1><p>Assim que o APT confirmar sua entrada, você receberá o acesso para concluir o cadastro e a assinatura.</p><a className="secondary-button" href="/">Voltar ao site</a></main></div>;
+  if (groupRegistration && qualificationState === "registered") return <div className="apt-app"><RouteHeader label="Recadastro APT" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Cadastro localizado</p><h1>Você já tem acesso ao APT.</h1><p>Entre com seu e-mail e senha para consultar sua participação e seus pagamentos.</p><a className="primary-button" href="/entrar?next=/membros">Entrar na área do membro <span aria-hidden="true">→</span></a></main></div>;
+  if (groupRegistration) return <div className="apt-app"><RouteHeader label="Recadastro APT" /><main className="enrollment-page" id="main-content">
+    <aside className="enrollment-intro enrollment-intro--plain"><div><span>Comunidade atual</span><h1>Vamos localizar sua participação.</h1><p>Use seus dados atuais. Quem já está na lista segue direto; novos nomes entram em uma aprovação rápida da gestão.</p></div></aside>
+    <section className="enrollment-content"><header><span>Primeiro passo</span><h2>Informe como você está no grupo.</h2><p>CPF, senha e pagamento só serão solicitados depois desta conferência.</p></header>{profileLoading ? <div className="loading-state"><i /><span>Validando o link…</span></div> : <form className="enrollment-form" onSubmit={qualifyGroup}><div className="fields-grid"><label className="field-label field-label--compact"><span>Nome completo</span><input required minLength={2} name="name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome e sobrenome" /></label><label className="field-label field-label--compact"><span>E-mail de acesso</span><input required name="email" type="email" autoComplete="email" spellCheck={false} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@exemplo.com" /></label><label className="field-label field-label--compact"><span>WhatsApp com DDD</span><input required name="phone" type="tel" autoComplete="tel" inputMode="tel" spellCheck={false} value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(61) 99999-9999" /></label></div><p className="form-helper">Ao continuar, você autoriza o APT a usar estes dados para localizar sua participação ou encaminhar uma aprovação rápida.</p>{error && <p className="field-error" role="alert">{error}</p>}<button className="primary-button primary-button--wide" type="submit" disabled={qualificationSubmitting || profileLoading}>{qualificationSubmitting ? "Conferindo…" : "Continuar meu recadastro"}<span aria-hidden="true">→</span></button></form>}</section>
+  </main></div>;
   if (paymentLink && !submitted) return <div className="apt-app"><RouteHeader label="Recadastro APT" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Recadastro concluído</p><h1>Sua assinatura está pronta para ativação.</h1><p>Continue no ambiente seguro do Asaas. O APT não recebe nem armazena os dados completos do seu cartão.</p><a className="primary-button" href={paymentLink}>Abrir checkout seguro <span aria-hidden="true">↗</span></a></main></div>;
   if (submitted) return <div className="apt-app"><RouteHeader label="Cadastro do aprovado" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Cadastro recebido</p><h1>{paymentLink ? "Sua assinatura está pronta para ativação." : "Seus dados foram vinculados ao requerimento."}</h1><p>{paymentLink ? "Conclua o pagamento no ambiente seguro do Asaas. O APT não recebe nem armazena os dados completos do seu cartão." : "A cobrança será liberada quando valor e vencimento forem confirmados pela gestão."}</p>{paymentLink ? <a className="primary-button" href={paymentLink}>Abrir checkout seguro <span aria-hidden="true">↗</span></a> : <a className="secondary-button" href="/">Voltar ao site</a>}</main></div>;
   return <div className="apt-app"><RouteHeader label="Cadastro do aprovado" /><main className="enrollment-page" id="main-content">
     <aside className="enrollment-intro"><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Jogador segura uma bola e uma raquete junto à rede" /><div className="enrollment-intro__shade" /><div><span>Link privado</span><h1>{recadastro ? "Atualize seus dados. Ative sua recorrência." : "Você foi aprovado. Agora, vamos ativar sua participação."}</h1><p>O APT guarda somente a proteção criptográfica do CPF e os quatro últimos dígitos. O cartão fica no Asaas.</p></div></aside>
     <section className="enrollment-content">
       <header><span>{recadastro ? "Recadastro e assinatura" : "Cadastro e assinatura"}</span><h2>Confirme os dados da sua participação.</h2><p>Endereço e cartão serão informados somente no ambiente seguro do Asaas.</p></header>
-      {!profileLoading && !hasInvite && <div className="access-notice"><strong>Este cadastro precisa de um convite aprovado.</strong><span>Abra o link individual enviado pela gestão do APT.</span></div>}
+      {!profileLoading && !hasInvite && <div className="access-notice"><strong>Este cadastro precisa de um acesso válido.</strong><span>Abra o link de recadastro enviado no grupo ou seu convite individual.</span></div>}
       {!profileLoading && hasInvite && !monthlyValue && !error && <div className="access-notice"><strong>A mensalidade ainda não foi liberada.</strong><span>A gestão precisa confirmar o valor antes de gerar a recorrência.</span></div>}
       {profileLoading && <div className="loading-state"><i /><span>Validando seu convite…</span></div>}
       <form className="enrollment-form" onSubmit={submit}>
-        <div className="fields-grid"><label className="field-label field-label--compact"><span>Nome completo</span><input required name="name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome e sobrenome" /></label><label className="field-label field-label--compact"><span>CPF</span><input required name="cpf" inputMode="numeric" autoComplete="off" spellCheck={false} value={formatCpf(cpf)} onChange={(event) => setCpf(event.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="000.000.000-00" /></label><label className="field-label field-label--compact"><span>E-mail do convite</span><input required readOnly={Boolean(email)} name="email" type="email" autoComplete="email" spellCheck={false} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@exemplo.com" /></label><label className="field-label field-label--compact"><span>WhatsApp</span><input required name="phone" type="tel" autoComplete="tel" inputMode="tel" spellCheck={false} value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(61) 99999-9999" /></label><label className="field-label field-label--compact"><span>Crie uma senha</span><input required name="password" type="password" minLength={8} autoComplete="new-password" placeholder="Mínimo de 8 caracteres" /></label></div>
+        <div className="fields-grid"><label className="field-label field-label--compact"><span>Nome completo</span><input required name="name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome e sobrenome" /></label><label className="field-label field-label--compact"><span>CPF</span><input required name="cpf" inputMode="numeric" autoComplete="off" spellCheck={false} value={formatCpf(cpf)} onChange={(event) => setCpf(event.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="000.000.000-00" /></label><label className="field-label field-label--compact"><span>E-mail de acesso</span><input required readOnly={Boolean(email)} name="email" type="email" autoComplete="email" spellCheck={false} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@exemplo.com" /></label><label className="field-label field-label--compact"><span>WhatsApp</span><input required name="phone" type="tel" autoComplete="tel" inputMode="tel" spellCheck={false} value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(61) 99999-9999" /></label><label className="field-label field-label--compact"><span>Crie uma senha</span><input required name="password" type="password" minLength={8} autoComplete="new-password" placeholder="Mínimo de 8 caracteres" /></label></div>
         <div className="plan-row"><div><span>Participação mensal APT</span><strong>{monthlyValue ? `${monthlyValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por mês` : "Valor ainda não configurado"}</strong><small>Renovação automática · cartão de crédito</small></div><span className="status-chip status-chip--ok">Checkout seguro</span></div>
         <label className="consent-row"><input required name="consent" type="checkbox" /><span>Autorizo o uso destes dados para administrar minha participação, comunicação e cobrança recorrente no APT.</span></label>
         {error && <p className="field-error" role="alert">{error}</p>}
@@ -784,7 +817,7 @@ function ApplicationReviewDetail({
           <div className="crm-contact-actions"><a href={`mailto:${application.email}`}>E-mail</a>{whatsappUrl && <a href={whatsappUrl} target="_blank" rel="noreferrer">WhatsApp</a>}</div>
         </section>
         <section className="crm-stage-card" aria-labelledby="crm-stage-title">
-          <div><span>Etapa do CRM</span><h4 id="crm-stage-title">Mova o lead com uma decisão clara.</h4></div>
+          <div><span>{application.answers.origem ? "Aprovação rápida" : "Etapa do CRM"}</span><h4 id="crm-stage-title">{application.answers.origem ? "Veio pelo recadastro da comunidade." : "Mova o lead com uma decisão clara."}</h4>{application.answers.origem && <p>Confira nome, e-mail e WhatsApp. Se reconhecer o integrante, aprove e gere o convite.</p>}</div>
           {statusLocked ? <p>Esta ficha já chegou a <strong>{applicationStatusLabels[application.status]}</strong>. O cadastro e a cobrança seguem no fluxo do membro.</p> : <><label><span>Próxima etapa</span><select value={nextStatus} onChange={(event) => setNextStatus(event.target.value as typeof nextStatus)}><option value="new">Novo</option><option value="in_review">Em análise</option><option value="awaiting_info">Aguardando retorno</option><option value="rejected">Não aprovado</option></select></label><button className="secondary-button" type="button" onClick={() => onSave(nextStatus)} disabled={saving || nextStatus === application.status || (nextStatus === "awaiting_info" && !note.trim())}>{saving ? "Salvando…" : "Aplicar etapa"}</button><button className="primary-button" type="button" onClick={() => onSave("approved")} disabled={saving}>{saving ? "Processando…" : "Aprovar e gerar convite"}<span aria-hidden="true">→</span></button></>}
           {application.inviteToken && <button className="invite-copy" type="button" onClick={() => onCopyInvite(application.inviteToken!)}>Copiar link individual de cadastro</button>}
         </section>

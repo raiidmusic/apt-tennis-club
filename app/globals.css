@@ -334,6 +334,7 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .success-page { min-height: calc(100dvh - 4.5rem); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
 .enrollment-page { min-height: calc(100dvh - 4.5rem); display: grid; background: var(--white); }
 .enrollment-intro { position: relative; min-height: 28rem; overflow: hidden; display: flex; align-items: flex-end; padding: 2rem 1rem; color: var(--white); }
+.enrollment-intro--plain { background: var(--navy-deep); }
 .enrollment-intro > img, .enrollment-intro__shade { position: absolute; inset: 0; width: 100%; height: 100%; }
 .enrollment-intro > img { object-fit: cover; object-position: center; animation: hero-settle 1200ms var(--ease-snap) both; }
 .enrollment-intro__shade { background: linear-gradient(0deg, oklch(13% 0.03 255 / 0.85), oklch(13% 0.03 255 / 0.06) 75%); }
@@ -348,6 +349,7 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .access-notice { display: grid; gap: 0.25rem; margin-top: 2rem; padding: 1rem; border: 1px solid oklch(72% 0.05 70); border-radius: var(--radius-sm); background: var(--warning-surface); }
 .access-notice span { color: var(--muted); }
 .enrollment-form { max-width: 56rem; margin-top: 2.5rem; }
+.form-helper { max-width: 48rem; margin: 1.5rem 0 0; color: var(--muted); font-size: 0.88rem; }
 .fields-grid { display: grid; gap: 1.5rem; }
 .field-label--compact input { min-height: 3.5rem; font-size: 1rem; }
 .field-label--compact input[readonly] { color: var(--muted); background: var(--surface-muted); cursor: not-allowed; }

@@ -10,7 +10,7 @@ type InviteRow = {
   used_at: string | null;
   revoked_at: string | null;
 };
-type ApplicationRow = { id: string; name: string; email: string; whatsapp: string; class_level: string; status: string };
+type ApplicationRow = { id: string; name: string; email: string; whatsapp: string; class_level: string | null; status: string };
 type MemberRow = {
   id: string;
   application_id: string | null;
@@ -26,6 +26,11 @@ type SubscriptionRow = {
   asaas_checkout_id: string | null;
   asaas_checkout_url: string | null;
   checkout_attempted_at: string | null;
+};
+type GroupRegistrationLinkRow = {
+  id: string;
+  expires_at: string;
+  revoked_at: string | null;
 };
 
 async function findInvite(inviteToken: string) {
@@ -53,10 +58,124 @@ async function findMember(id: string) {
   }))[0];
 }
 
+async function findGroupRegistrationLink(groupToken: string) {
+  const tokenHash = await sha256(groupToken);
+  const links = await supabaseAdmin<GroupRegistrationLinkRow[]>("group_registration_links", {
+    query: {
+      select: "id,expires_at,revoked_at",
+      token_hash: `eq.${tokenHash}`,
+      revoked_at: "is.null",
+      limit: "1",
+    },
+  });
+  const link = links[0];
+  if (!link || new Date(link.expires_at).getTime() <= Date.now()) return null;
+  return link;
+}
+
+async function qualifyGroupRegistration(input: {
+  groupLink: GroupRegistrationLinkRow;
+  name: string;
+  email: string;
+  phone: string;
+}) {
+  const memberSelect = "id,application_id,auth_user_id,name,email,whatsapp,cpf_hash,participation_status";
+  const [sameEmail, samePhone] = await Promise.all([
+    supabaseAdmin<MemberRow[]>("members", { query: { select: memberSelect, email: `eq.${input.email}`, limit: "1" } }),
+    supabaseAdmin<MemberRow[]>("members", { query: { select: memberSelect, whatsapp: `eq.${input.phone}`, limit: "1" } }),
+  ]);
+  const emailMember = sameEmail[0];
+  const phoneMember = samePhone[0];
+  const member = emailMember && phoneMember && emailMember.id === phoneMember.id ? emailMember : undefined;
+
+  if (member?.auth_user_id && member.cpf_hash) {
+    return Response.json({ alreadyRegistered: true });
+  }
+
+  if (member && member.participation_status === "awaiting_payment") {
+    await supabaseAdmin("invites", {
+      method: "PATCH",
+      query: { member_id: `eq.${member.id}`, used_at: "is.null", revoked_at: "is.null" },
+      body: { revoked_at: new Date().toISOString() },
+    });
+    const inviteToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll("-", "");
+    await supabaseAdmin("invites", {
+      method: "POST",
+      body: {
+        id: crypto.randomUUID(),
+        member_id: member.id,
+        token_hash: await sha256(inviteToken),
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      },
+    });
+    await supabaseAdmin("audit_logs", {
+      method: "POST",
+      body: {
+        actor: input.email,
+        action: "member.group_recadastro_qualified",
+        entity_type: "member",
+        entity_id: member.id,
+        metadata: { group_registration_link_id: input.groupLink.id },
+      },
+    });
+    return Response.json({ inviteUrl: `/cadastro?convite=${inviteToken}` });
+  }
+
+  const existingApplication = (await supabaseAdmin<Array<{ id: string }>>("applications", {
+    query: { select: "id", email: `eq.${input.email}`, status: "in.(new,in_review,awaiting_info,approved,invite_sent)", limit: "1" },
+  }))[0];
+  if (existingApplication) return Response.json({ pendingApproval: true }, { status: 202 });
+
+  const created = await supabaseAdmin<Array<{ id: string }>>("applications", {
+    method: "POST",
+    prefer: "return=representation",
+    body: {
+      name: input.name,
+      email: input.email,
+      whatsapp: input.phone,
+      age: null,
+      city: null,
+      profession: null,
+      class_level: null,
+      referrer: null,
+      answers: {
+        nome: input.name,
+        email: input.email,
+        whatsapp: input.phone,
+        origem: "Recadastro pelo link da comunidade",
+        consent: "Autorizado para análise e contato",
+      },
+      consent_at: new Date().toISOString(),
+      status: "in_review",
+      email_status: "not_requested",
+    },
+  });
+  const applicationId = created[0]?.id;
+  if (!applicationId) throw new SupabaseRequestError("Não foi possível registrar a aprovação rápida.", 500);
+  await supabaseAdmin("audit_logs", {
+    method: "POST",
+    body: {
+      actor: input.email,
+      action: "application.quick_recadastro_submitted",
+      entity_type: "application",
+      entity_id: applicationId,
+      metadata: { group_registration_link_id: input.groupLink.id, consent: true },
+    },
+  }).catch(() => undefined);
+  return Response.json({ pendingApproval: true }, { status: 202 });
+}
+
 export async function GET(request: Request) {
   try {
-    const inviteToken = new URL(request.url).searchParams.get("convite")?.trim() || "";
-    if (!inviteToken) return Response.json({ error: "Convite ausente." }, { status: 400 });
+    const searchParams = new URL(request.url).searchParams;
+    const inviteToken = searchParams.get("convite")?.trim() || "";
+    const groupToken = searchParams.get("grupo")?.trim() || "";
+    if (!inviteToken && !groupToken) return Response.json({ error: "Link de cadastro ausente." }, { status: 400 });
+    if (groupToken) {
+      const groupLink = await findGroupRegistrationLink(groupToken);
+      if (!groupLink) return Response.json({ error: "Este link de recadastro não é válido ou já expirou." }, { status: 403 });
+      return Response.json({ name: "", email: "", phone: "", recadastro: true, groupRegistration: true });
+    }
     const invite = await findInvite(inviteToken);
     if (!invite) return Response.json({ error: "Este convite não é válido ou já expirou." }, { status: 403 });
 
@@ -95,6 +214,8 @@ export async function POST(request: Request) {
   try {
     const payload = await request.json() as {
       inviteToken?: string;
+      groupToken?: string;
+      action?: string;
       name?: string;
       cpf?: string;
       email?: string;
@@ -103,13 +224,22 @@ export async function POST(request: Request) {
       consent?: boolean;
     };
     const inviteToken = payload.inviteToken?.trim() || "";
+    const groupToken = payload.groupToken?.trim() || "";
     const name = payload.name?.trim() || "";
     const cpf = payload.cpf?.replace(/\D/g, "") || "";
     const email = payload.email?.trim().toLowerCase() || "";
     const phone = payload.phone?.replace(/\D/g, "") || "";
     const password = payload.password || "";
-    if (!inviteToken || !name || !isValidCpf(cpf) || !email || phone.length < 10 || phone.length > 13 || password.length < 8 || payload.consent !== true) {
-      return Response.json({ error: "Confira o convite, os dados e a senha de acesso." }, { status: 400 });
+    if (payload.action === "qualify_group") {
+      if (!groupToken || name.length < 2 || name.length > 100 || email.length > 254 || !/^\S+@\S+\.\S+$/.test(email) || phone.length < 10 || phone.length > 13 || payload.consent !== true) {
+        return Response.json({ error: "Confira seu nome, e-mail e WhatsApp." }, { status: 400 });
+      }
+      const groupLink = await findGroupRegistrationLink(groupToken);
+      if (!groupLink) return Response.json({ error: "Este link de recadastro não é válido ou já expirou." }, { status: 403 });
+      return qualifyGroupRegistration({ groupLink, name, email, phone });
+    }
+    if (!inviteToken || groupToken || !name || !isValidCpf(cpf) || !email || phone.length < 10 || phone.length > 13 || password.length < 8 || payload.consent !== true) {
+      return Response.json({ error: "Confira o link, os dados e a senha de acesso." }, { status: 400 });
     }
 
     const invite = await findInvite(inviteToken);
@@ -166,7 +296,11 @@ export async function POST(request: Request) {
       if (sameEmail[0] && sameCpf[0] && sameEmail[0].id !== sameCpf[0].id) {
         return Response.json({ error: "Já existe um cadastro associado a este e-mail ou CPF." }, { status: 409 });
       }
-      if (existingMember && (existingMember.application_id !== application?.id || existingMember.participation_status !== "awaiting_payment")) {
+      if (existingMember?.cpf_hash && existingMember.cpf_hash !== cpfHash) {
+        return Response.json({ error: "Já existe um cadastro associado a este e-mail ou CPF." }, { status: 409 });
+      }
+      const canResumeApplicationRegistration = Boolean(application && existingMember?.application_id === application.id && existingMember?.participation_status === "awaiting_payment");
+      if (existingMember && !canResumeApplicationRegistration) {
         return Response.json({ error: "Já existe um cadastro associado a este e-mail ou CPF." }, { status: 409 });
       }
       member = existingMember;
@@ -335,7 +469,13 @@ export async function POST(request: Request) {
         : Promise.resolve(),
       supabaseAdmin("audit_logs", {
         method: "POST",
-        body: { actor: email, action: "member.recadastro_completed", entity_type: "member", entity_id: memberId, metadata: { consent_version: "2026-08" } },
+        body: {
+          actor: email,
+          action: "member.recadastro_completed",
+          entity_type: "member",
+          entity_id: memberId,
+          metadata: { consent_version: "2026-08" },
+        },
       }),
     ]);
 

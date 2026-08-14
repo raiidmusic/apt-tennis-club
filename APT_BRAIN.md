@@ -422,6 +422,7 @@ A task is `DONE` only when:
 - The registration screen now tells the member that address and card are entered only in Asaas. A focused regression check prevents partial `customerData` from returning.
 - Deterministic-rejection recovery remains intact: `checkout_attempted_at` is cleared after an Asaas 4xx response, so the same invitation can safely retry without creating another member or Auth user.
 - Verification: 21/21 focused tests pass; TypeScript passes; lint has zero errors and the same 20 non-blocking warnings; the Next 16.2.6 production build compiled, typechecked and generated all 24 pages. The first two build attempts were environment-only failures (sandbox port restriction, then missing child-process PATH); the same build passed with the bundled Node runtime available to Turbopack workers.
+- Source commit `a4e6697` was published to `origin/main`. The official `https://www.apttennis.com.br/cadastro` HTML then rendered the new hosted-boundary copy, proving the corrected source-backed deployment is live; a real Checkout remains deliberately unexecuted by the agent.
 - Remaining production proof: the owner must retry the existing invitation and personally complete hosted Checkout because that action can create a real recurring charge.
 - `ponytail-review`: Lean already. Removing one optional payload object uses provider-hosted data collection and avoids new address fields, CEP lookup, schema storage and privacy surface. The whole-repository audit was not repeated because no structure or dependency changed.
 

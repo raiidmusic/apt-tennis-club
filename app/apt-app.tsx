@@ -534,7 +534,7 @@ export function EnrollmentPage() {
   return <div className="apt-app"><RouteHeader label="Cadastro do aprovado" /><main className="enrollment-page" id="main-content">
     <aside className="enrollment-intro"><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Jogador segura uma bola e uma raquete junto à rede" /><div className="enrollment-intro__shade" /><div><span>Link privado</span><h1>{recadastro ? "Atualize seus dados. Ative sua recorrência." : "Você foi aprovado. Agora, vamos ativar sua participação."}</h1><p>O APT guarda somente a proteção criptográfica do CPF e os quatro últimos dígitos. O cartão fica no Asaas.</p></div></aside>
     <section className="enrollment-content">
-      <header><span>{recadastro ? "Recadastro e assinatura" : "Cadastro e assinatura"}</span><h2>Confirme os dados usados na cobrança.</h2><p>O cartão será informado somente no ambiente seguro do Asaas.</p></header>
+      <header><span>{recadastro ? "Recadastro e assinatura" : "Cadastro e assinatura"}</span><h2>Confirme os dados da sua participação.</h2><p>Endereço e cartão serão informados somente no ambiente seguro do Asaas.</p></header>
       {!profileLoading && !hasInvite && <div className="access-notice"><strong>Este cadastro precisa de um convite aprovado.</strong><span>Abra o link individual enviado pela gestão do APT.</span></div>}
       {!profileLoading && hasInvite && !monthlyValue && !error && <div className="access-notice"><strong>A mensalidade ainda não foi liberada.</strong><span>A gestão precisa confirmar o valor antes de gerar a recorrência.</span></div>}
       {profileLoading && <div className="loading-state"><i /><span>Validando seu convite…</span></div>}

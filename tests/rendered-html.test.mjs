@@ -80,6 +80,15 @@ test("revokes earlier invitations and validates applications on the server", asy
   assert.match(enrollmentRoute, /revoked_at: "is\.null"/);
 });
 
+test("lets hosted Asaas Checkout collect the complete billing address", async () => {
+  const [enrollmentRoute, client] = await Promise.all([
+    readFile(new URL("../app/api/cadastros/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(enrollmentRoute, /customerData:/);
+  assert.match(client, /Endereço e cartão serão informados somente no ambiente seguro do Asaas\./);
+});
+
 test("keeps paid access after recurring billing is cancelled", async () => {
   const [portalRoute, client] = await Promise.all([
     readFile(new URL("../app/api/portal/route.ts", import.meta.url), "utf8"),

@@ -271,7 +271,6 @@ export async function POST(request: Request) {
             expiredUrl: `${origin}/cadastro?status=expirado`,
           },
           items: [{ name: "Participação mensal APT", description: "Mensalidade do APT Tennis Club", quantity: 1, value: monthlyValue }],
-          customerData: { name, cpfCnpj: cpf, email, phone },
           subscription: { cycle: "MONTHLY", nextDueDate: `${nextDueDate} 12:00:00` },
         }),
       });

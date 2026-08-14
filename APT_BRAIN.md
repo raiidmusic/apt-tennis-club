@@ -1,7 +1,7 @@
 # APT Brain
 
-Last audited: 2026-08-13
-State: APT-022 in progress; official login and required recadastro schema work, but a controlled billing-and-member proof remains a release blocker
+Last audited: 2026-08-14
+State: APT-022 billing reconciliation is live for the controlled member; remaining V1 gates stay tracked and UI/design work is deferred
 Rule: plan, review and audit before construction
 
 ## Purpose
@@ -449,7 +449,7 @@ A task is `DONE` only when:
 
 ## Next decision
 
-Publish the exact reviewed APT-022 source, identify the resulting Vercel production deployment, verify an authenticated owner session on `/gestao` and the controlled member on `/membros`, and confirm that the existing paid Checkout is reconciled into the canonical subscription/payment rows. The Asaas webhook configuration must include the handled payment events plus `CHECKOUT_CREATED`, `CHECKOUT_CANCELED`, `CHECKOUT_EXPIRED` and `CHECKOUT_PAID`; do not invite the full roster until one signed production event and its duplicate delivery are verified without a second business effect.
+Close this billing-reconciliation cycle. In a future owner-authorized task, resume the remaining V1 gates from the queue; keep UI/design refinements separate as explicitly requested. Before inviting the full roster, verify one signed production webhook event and its duplicate delivery without a second business effect.
 
 ## APT-022 production billing correction — 2026-08-14
 
@@ -467,3 +467,7 @@ Publish the exact reviewed APT-022 source, identify the resulting Vercel product
 - Future `CHECKOUT_PAID` deliveries now preserve `checkout.customer` on the exact local subscription whose saved Checkout ID matched the signed event. This keeps subsequent subscription/payment lookups deterministic even when the Checkout was paid with a different contact e-mail.
 - Security boundary: the one-time recovery row must start as `RECONCILING`; inserting the provider reference is not payment approval. The member becomes active only after the production server retrieves that exact payment from the configured Asaas account and observes a paid state such as `CONFIRMED` or `RECEIVED`. No card data, broad customer search or manual status override is allowed.
 - Local verification for this final path: 23/23 focused tests pass, lint has zero errors and the same 20 pre-existing warnings, and the Next 16.2.6 production build compiles, typechecks and generates all 24 routes. `ponytail-review`: lean; two exact-identifier fallbacks reuse the existing reconciliation helper and webhook table, with no schema, dependency, polling job or parallel billing state.
+- Production proof completed: commit `a4fcadc` was pushed to `origin/main` and Vercel deployment `47DchCAumJ5ZSqaz93pFejJS3Bos` reached `Ready` from that exact Git commit. The controlled historical payment reference was inserted only as `RECONCILING`; an authenticated production refresh then retrieved the exact payment from Asaas and changed it to `CONFIRMED` without a manual access override.
+- Canonical state after provider verification: member `active`, subscription `active`, provider customer and subscription identifiers present, next due date `2026-09-14`, payment value 2290 cents, payment due date `2026-08-14` and provider paid timestamp present. The member portal visibly reports `Mensalidade em dia`, `Pago`, automatic renewal and the next date.
+- Authenticated browser proof on the official `/membros` route confirms both protected shortcuts are now links: the canonical Tweener group and the canonical APT WhatsApp community. The Payments view shows one R$ 22,90 charge with a hosted Asaas invoice link; the APT UI still never receives card number, validity or CVV.
+- APT-022 billing reconciliation for the controlled member is `LIVE`. UI/design refinements are explicitly deferred by the owner to a future work cycle; do not continue design tasks in this cycle.

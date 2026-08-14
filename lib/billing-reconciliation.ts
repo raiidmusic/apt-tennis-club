@@ -28,6 +28,7 @@ type LocalSubscription = {
   id: string;
   asaas_customer_id: string | null;
   asaas_subscription_id: string | null;
+  asaas_checkout_id: string | null;
   status: string;
   amount_cents: number;
   next_due_date: string | null;
@@ -46,7 +47,7 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
       query: { select: "id,participation_status,joined_at", id: `eq.${memberId}`, limit: "1" },
     }).then((rows) => rows[0]),
     supabaseAdmin<LocalSubscription[]>("subscriptions", {
-      query: { select: "id,asaas_customer_id,asaas_subscription_id,status,amount_cents,next_due_date,current_period_end", member_id: `eq.${memberId}`, limit: "1" },
+      query: { select: "id,asaas_customer_id,asaas_subscription_id,asaas_checkout_id,status,amount_cents,next_due_date,current_period_end", member_id: `eq.${memberId}`, limit: "1" },
     }).then((rows) => rows[0]),
   ]);
   if (!member || !localSubscription) throw new SupabaseRequestError("Cadastro financeiro não encontrado.", 404);
@@ -62,10 +63,11 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
     const response = await asaasRequest(`/subscriptions?${query}`);
     providerSubscription = (await readJson<Collection<AsaasSubscriptionSnapshot>>(response, "O Asaas não respondeu à busca da assinatura.")).data?.[0] || null;
   }
+  const checkoutId = hints.checkoutId || localSubscription.asaas_checkout_id || undefined;
   const paymentPath = providerSubscription?.id
     ? `/subscriptions/${encodeURIComponent(providerSubscription.id)}/payments`
-    : `/payments?${new URLSearchParams(hints.checkoutId
-      ? { checkoutSession: hints.checkoutId, limit: "24" }
+    : `/payments?${new URLSearchParams(checkoutId
+      ? { checkoutSession: checkoutId, limit: "24" }
       : { externalReference: memberId, limit: "24" })}`;
   const paymentResponse = await asaasRequest(paymentPath);
   const payments = (await readJson<Collection<AsaasPaymentSnapshot>>(paymentResponse, "O Asaas não respondeu à conciliação das cobranças.")).data || [];

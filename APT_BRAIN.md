@@ -450,3 +450,10 @@ A task is `DONE` only when:
 ## Next decision
 
 Publish the exact reviewed APT-022 source, identify the resulting Vercel production deployment, verify an authenticated owner session on `/gestao` and the controlled member on `/membros`, and confirm that the existing paid Checkout is reconciled into the canonical subscription/payment rows. The Asaas webhook configuration must include the handled payment events plus `CHECKOUT_CREATED`, `CHECKOUT_CANCELED`, `CHECKOUT_EXPIRED` and `CHECKOUT_PAID`; do not invite the full roster until one signed production event and its duplicate delivery are verified without a second business effect.
+
+## APT-022 production billing correction — 2026-08-14
+
+- Production source commit `0dd61f9` is visible on the official `/membros` route. In the controlled member session, the Asaas hosted Checkout displayed a confirmed payment, but the portal's explicit `Atualizar situação` action still returned no local payment and kept access pending.
+- The end-to-end trace isolated the mismatch: the registration flow persisted `subscriptions.asaas_checkout_id`, while manual reconciliation selected neither that column nor its `checkoutSession` filter. It could therefore miss a paid Checkout before a provider subscription ID or member `externalReference` became discoverable.
+- The smallest correction selects the already persisted `asaas_checkout_id` and uses it as the payment lookup fallback. No schema, dependency, polling, card surface or duplicate billing path was added. Production publication and a second controlled refresh are required before this correction is `LIVE`.
+- Owner verification in the Asaas dashboard confirms the controlled card payment is `CONFIRMED` and already charged, while provider settlement is not yet `RECEIVED`. APT intentionally treats both `CONFIRMED` and `RECEIVED` as paid access states; settlement timing must never delay member access.

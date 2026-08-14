@@ -35,6 +35,7 @@ type LocalSubscription = {
   current_period_end: string | null;
 };
 type LocalMember = { id: string; participation_status: string; joined_at: string | null };
+type LocalPaymentReference = { asaas_payment_id: string };
 
 async function readJson<T>(response: Response, message: string) {
   if (!response.ok) throw new SupabaseRequestError(message, 502);
@@ -42,12 +43,15 @@ async function readJson<T>(response: Response, message: string) {
 }
 
 export async function reconcileMemberBilling(memberId: string, hints: { checkoutId?: string } = {}) {
-  const [member, localSubscription] = await Promise.all([
+  const [member, localSubscription, localPayment] = await Promise.all([
     supabaseAdmin<LocalMember[]>("members", {
       query: { select: "id,participation_status,joined_at", id: `eq.${memberId}`, limit: "1" },
     }).then((rows) => rows[0]),
     supabaseAdmin<LocalSubscription[]>("subscriptions", {
       query: { select: "id,asaas_customer_id,asaas_subscription_id,asaas_checkout_id,status,amount_cents,next_due_date,current_period_end", member_id: `eq.${memberId}`, limit: "1" },
+    }).then((rows) => rows[0]),
+    supabaseAdmin<LocalPaymentReference[]>("payments", {
+      query: { select: "asaas_payment_id", member_id: `eq.${memberId}`, order: "created_at.desc", limit: "1" },
     }).then((rows) => rows[0]),
   ]);
   if (!member || !localSubscription) throw new SupabaseRequestError("Cadastro financeiro não encontrado.", 404);
@@ -63,6 +67,11 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
     const response = await asaasRequest(`/subscriptions?${query}`);
     providerSubscription = (await readJson<Collection<AsaasSubscriptionSnapshot>>(response, "O Asaas não respondeu à busca da assinatura.")).data?.[0] || null;
   }
+  if (!providerSubscription && localSubscription.asaas_customer_id) {
+    const query = new URLSearchParams({ customer: localSubscription.asaas_customer_id, limit: "1", sort: "dateCreated", order: "desc" });
+    const response = await asaasRequest(`/subscriptions?${query}`);
+    providerSubscription = (await readJson<Collection<AsaasSubscriptionSnapshot>>(response, "O Asaas não respondeu à busca da assinatura do cliente.")).data?.[0] || null;
+  }
   const checkoutId = hints.checkoutId || localSubscription.asaas_checkout_id || undefined;
   const paymentPaths = providerSubscription?.id
     ? [`/subscriptions/${encodeURIComponent(providerSubscription.id)}/payments`]
@@ -75,6 +84,11 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
     const paymentResponse = await asaasRequest(paymentPath);
     payments = (await readJson<Collection<AsaasPaymentSnapshot>>(paymentResponse, "O Asaas não respondeu à conciliação das cobranças.")).data || [];
     if (payments.length) break;
+  }
+  if (!payments.length && localPayment?.asaas_payment_id) {
+    const paymentResponse = await asaasRequest(`/payments/${encodeURIComponent(localPayment.asaas_payment_id)}`);
+    if (paymentResponse.ok) payments = [await paymentResponse.json() as AsaasPaymentSnapshot];
+    else if (paymentResponse.status !== 404) throw new SupabaseRequestError("O Asaas não respondeu à cobrança conciliada.", 502);
   }
 
   if (!providerSubscription && payments[0]?.subscription) {

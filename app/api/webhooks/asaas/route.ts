@@ -89,6 +89,13 @@ export async function POST(request: Request) {
           }).then((rows) => rows[0]),
         ]);
         if (!verifiedSubscription || !member) throw new SupabaseRequestError("Checkout pago não pertence a um membro do APT.", 409);
+        if (payload.checkout?.customer) {
+          await supabaseAdmin("subscriptions", {
+            method: "PATCH",
+            query: { id: `eq.${verifiedSubscription.id}` },
+            body: { asaas_customer_id: payload.checkout.customer, updated_at: new Date().toISOString() },
+          });
+        }
         const reconciliation = await reconcileMemberBilling(memberId, { checkoutId });
         if (!reconciliation.active) {
           const now = new Date().toISOString();

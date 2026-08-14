@@ -13,5 +13,7 @@ test("application review exposes answers and records internal notes without fals
   assert.match(route, /Não foi possível carregar os requerimentos/);
   assert.doesNotMatch(route, /return Response\.json\(\{ applications: \[\] \}\)/);
   assert.match(app, /ApplicationReviewDetail/);
-  assert.match(app, /contato ainda deve ser feito pela gestão/);
+  assert.match(app, /Mova o lead com uma decisão clara/);
+  assert.match(app, /Aprovar e gerar convite/);
+  assert.match(app, /Copiar link individual de cadastro/);
 });

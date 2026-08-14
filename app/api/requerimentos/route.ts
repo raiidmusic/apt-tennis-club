@@ -180,7 +180,7 @@ export async function PATCH(request: Request) {
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
   try {
     const payload = await request.json() as { id?: string; status?: ApplicationStatus; note?: string };
-    const allowed = new Set<ApplicationStatus>(["in_review", "awaiting_info", "approved", "rejected", "invite_sent"]);
+    const allowed = new Set<ApplicationStatus>(["new", "in_review", "awaiting_info", "approved", "rejected", "invite_sent"]);
     const note = payload.note?.trim() || "";
     if (!payload.id || !uuidPattern.test(payload.id) || (payload.status && !allowed.has(payload.status)) || (!payload.status && !note) || note.length > 1_200 || (payload.status === "awaiting_info" && !note)) {
       return Response.json({ error: "Decisão inválida." }, { status: 400 });

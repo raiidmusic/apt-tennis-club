@@ -38,6 +38,53 @@ type ApplicationDetail = ApplicationRecord & {
   notes: AdminNote[];
 };
 
+const applicationStatusLabels: Record<ApplicationRecord["status"], string> = {
+  new: "Novo",
+  in_review: "Em análise",
+  awaiting_info: "Aguardando retorno",
+  approved: "Aprovado",
+  invite_sent: "Convite enviado",
+  registered: "Cadastrado",
+  rejected: "Não aprovado",
+};
+
+const memberStatusLabels: Record<string, string> = {
+  active: "Ativo",
+  awaiting_payment: "Aguardando pagamento",
+  pending_payment: "Pagamento pendente",
+  delinquent: "Inadimplente",
+  courtesy: "Cortesia",
+  cancellation_requested: "Cancelamento solicitado",
+  cancelled: "Cancelado",
+  inactive: "Inativo",
+};
+
+const subscriptionStatusLabels: Record<string, string> = {
+  active: "Ativa",
+  pending: "Pendente",
+  overdue: "Em atraso",
+  cancelled: "Cancelada",
+  inactive: "Inativa",
+  courtesy: "Cortesia",
+  none: "Não iniciada",
+};
+
+function readableStatus(status: string, labels: Record<string, string>) {
+  return labels[status] || status.replaceAll("_", " ");
+}
+
+function paymentStatusLabel(status: string) {
+  if (status.includes("RECEIVED") || status.includes("CONFIRMED")) return "Pago";
+  if (status.includes("OVERDUE")) return "Vencido";
+  if (status.includes("REFUND")) return "Estornado";
+  if (status.includes("CANCEL") || status.includes("DELETE")) return "Cancelado";
+  return status.includes("PENDING") ? "Pendente" : readableStatus(status, {});
+}
+
+function shortDate(value?: string | null) {
+  return value ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`)) : "A definir";
+}
+
 const questions: Question[] = [
   { id: "nome", title: "Como você gosta de ser chamado?", helper: "Comece pelo seu nome completo.", type: "text" },
   { id: "email", title: "Qual é o seu melhor e-mail?", helper: "É por aqui que você recebe as próximas etapas.", type: "email" },
@@ -70,8 +117,13 @@ type MemberRecord = {
   amountCents: number;
   nextDueDate?: string | null;
   overdueDays: number;
+  cancelAtPeriodEnd?: boolean;
+  joinedAt?: string | null;
+  createdAt?: string;
   twinnerUrl?: string | null;
   whatsappCommunityUrl?: string | null;
+  payments?: Array<{ id: string; status: string; value_cents: number; due_date?: string | null; paid_at?: string | null; invoice_url?: string | null; created_at: string }>;
+  notes?: AdminNote[];
 };
 
 type PortalPayload = {
@@ -137,7 +189,7 @@ function HeroRotatingStatement() {
 }
 
 function RouteHeader({ label }: { label: string }) {
-  return <header className="route-header"><a href="/" aria-label="Voltar para o site do APT"><Brand /></a><span>{label}</span></header>;
+  return <header className="route-header"><a href="/" aria-label="Voltar para o site do APT"><Brand /></a><span>{label}</span><i aria-hidden="true" /></header>;
 }
 
 function SignOutButton({ className = "side-link" }: { className?: string }) {
@@ -189,7 +241,7 @@ export function LoginPage() {
     } catch (magicLinkError) { setError(magicLinkError instanceof Error ? magicLinkError.message : "Não foi possível enviar o link de acesso."); }
     finally { setSendingMagicLink(false); }
   }
-  return <div className="apt-app"><RouteHeader label="Acesso seguro" /><main className="login-page" id="main-content"><section><span>Área reservada</span><h1>Entre para cuidar da sua participação.</h1><p>Use o e-mail e a senha definidos no cadastro aprovado.</p><form onSubmit={submit}><label className="field-label field-label--compact"><span>E-mail</span><input required name="email" type="email" autoComplete="email" /></label><label className="field-label field-label--compact"><span>Senha</span><input required name="password" type="password" minLength={8} autoComplete="current-password" /></label>{error && <p className="field-error" role="alert">{error}</p>}{magicLinkNotice && <p className="recovery-notice" role="status">{magicLinkNotice}</p>}<button className="primary-button primary-button--wide" type="submit" disabled={submitting}>{submitting ? "Entrando…" : "Entrar"}<span aria-hidden="true">→</span></button>{nextPath === "/gestao" && <button className="text-button" type="button" onClick={(event) => requestMagicLink(event.currentTarget.form!)} disabled={sendingMagicLink}>{sendingMagicLink ? "Enviando link…" : "Receber link de acesso da gestão"}</button>}<a className="text-button" href="/recuperar-senha">Esqueci minha senha</a></form></section><aside><img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Movimento de um jogador em uma quadra de tênis" /><div /></aside></main></div>;
+  return <div className="apt-app"><RouteHeader label="Acesso seguro" /><main className="login-page" id="main-content"><section><span>Área reservada</span><h1>Entre para cuidar da sua participação.</h1><p>Use o e-mail e a senha definidos no cadastro aprovado.</p><form onSubmit={submit}><label className="field-label field-label--compact"><span>E-mail</span><input required name="email" type="email" autoComplete="email" spellCheck={false} /></label><label className="field-label field-label--compact"><span>Senha</span><input required name="password" type="password" minLength={8} autoComplete="current-password" /></label>{error && <p className="field-error" role="alert">{error}</p>}{magicLinkNotice && <p className="recovery-notice" role="status">{magicLinkNotice}</p>}<button className="primary-button primary-button--wide" type="submit" disabled={submitting}>{submitting ? "Entrando…" : "Entrar"}<span aria-hidden="true">→</span></button>{nextPath === "/gestao" && <button className="text-button" type="button" onClick={(event) => requestMagicLink(event.currentTarget.form!)} disabled={sendingMagicLink}>{sendingMagicLink ? "Enviando link…" : "Receber link de acesso da gestão"}</button>}<a className="text-button" href="/recuperar-senha">Esqueci minha senha</a></form></section><aside><img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Movimento de um jogador em uma quadra de tênis" /><div /></aside></main></div>;
 }
 
 export function MagicLinkAccessPage() {
@@ -416,13 +468,13 @@ export function CandidatePage() {
     <aside className="form-visual"><img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Jogador em movimento na quadra" /><div className="form-visual__shade" /><a href="/" aria-label="Voltar ao site"><Brand inverse large /></a><p>Não é só sobre jogar.<br />É sobre com quem você joga.</p></aside>
     <section className="question-stage">
       <header className="form-topbar"><button type="button" onClick={previous} disabled={step === 0} aria-label="Voltar para a pergunta anterior">←</button><div className="progress-track" role="progressbar" aria-label="Progresso do requerimento" aria-valuemin={1} aria-valuemax={visibleQuestions.length} aria-valuenow={step + 1} aria-valuetext={`Pergunta ${step + 1} de ${visibleQuestions.length}`}><span style={{ transform: `scaleX(${progress / 100})` }} /></div><span>{String(step + 1).padStart(2, "0")} / {String(visibleQuestions.length).padStart(2, "0")}</span></header>
-      <div className="question-content">
-        <div className="question-copy" key={question.id}><span>{question.optional ? "Resposta opcional" : "Conte do seu jeito"}</span><h1>{question.title}</h1>{question.helper && <p>{question.helper}</p>}</div>
+      <div className="question-content" key={question.id}>
+        <div className="question-copy"><span>{question.optional ? "Resposta opcional" : "Conte do seu jeito"}</span><h1>{question.title}</h1>{question.helper && <p>{question.helper}</p>}</div>
         <div className="answer-area">
-          {(["text", "email", "tel", "number"] as QuestionType[]).includes(question.type) && <label className="field-label"><span>Sua resposta</span><input type={question.type} min={question.type === "number" ? 25 : undefined} max={question.type === "number" ? 45 : undefined} value={answers[question.id] as string || ""} onChange={(event) => setAnswer(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") next(); }} placeholder={question.type === "email" ? "nome@exemplo.com" : question.type === "tel" ? "(61) 99999-9999" : "Digite aqui…"} aria-describedby={error ? "question-error" : undefined} /></label>}
-          {question.type === "textarea" && <label className="field-label"><span>Sua resposta</span><textarea rows={4} value={answers[question.id] as string || ""} onChange={(event) => setAnswer(event.target.value)} placeholder="Escreva aqui…" aria-describedby={error ? "question-error" : undefined} /></label>}
+          {(["text", "email", "tel", "number"] as QuestionType[]).includes(question.type) && <label className="field-label"><span>Sua resposta</span><input name={question.id} type={question.type} inputMode={question.type === "tel" ? "tel" : question.type === "number" ? "numeric" : undefined} autoComplete={question.id === "nome" ? "name" : question.type === "email" ? "email" : question.type === "tel" ? "tel" : "off"} spellCheck={question.type !== "email" && question.type !== "tel"} min={question.type === "number" ? 25 : undefined} max={question.type === "number" ? 45 : undefined} value={answers[question.id] as string || ""} onChange={(event) => setAnswer(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") next(); }} placeholder={question.type === "email" ? "nome@exemplo.com" : question.type === "tel" ? "(61) 99999-9999" : "Digite aqui…"} aria-invalid={Boolean(error)} aria-describedby={error ? "question-error" : undefined} /></label>}
+          {question.type === "textarea" && <label className="field-label"><span>Sua resposta</span><textarea name={question.id} rows={4} value={answers[question.id] as string || ""} onChange={(event) => setAnswer(event.target.value)} placeholder="Escreva aqui…" aria-invalid={Boolean(error)} aria-describedby={error ? "question-error" : undefined} /></label>}
           {question.type === "choice" && <fieldset className="choice-list"><legend className="sr-only">Escolha uma opção</legend>{question.options?.map((option, index) => <label className={answers[question.id] === option ? "choice choice--selected" : "choice"} key={option}><input type="radio" name={question.id} checked={answers[question.id] === option} onChange={() => setAnswer(option)} /><span className="choice-key">{String.fromCharCode(65 + index)}</span><span>{option}</span><i aria-hidden="true">{answers[question.id] === option ? "✓" : ""}</i></label>)}</fieldset>}
-          {question.type === "multi" && <fieldset className="choice-list choice-list--two"><legend className="sr-only">Escolha até três opções</legend>{question.options?.map((option) => { const selected = Array.isArray(answers[question.id]) && (answers[question.id] as string[]).includes(option); return <label className={selected ? "choice choice--selected" : "choice"} key={option}><input type="checkbox" checked={Boolean(selected)} onChange={() => toggleMulti(option)} /><span className="choice-check">{selected ? "✓" : ""}</span><span>{option}</span></label>; })}</fieldset>}
+          {question.type === "multi" && <fieldset className="choice-list choice-list--two"><legend className="sr-only">Escolha até três opções</legend>{question.options?.map((option) => { const selected = Array.isArray(answers[question.id]) && (answers[question.id] as string[]).includes(option); return <label className={selected ? "choice choice--selected" : "choice"} key={option}><input type="checkbox" name={question.id} checked={Boolean(selected)} onChange={() => toggleMulti(option)} /><span className="choice-check">{selected ? "✓" : ""}</span><span>{option}</span></label>; })}</fieldset>}
           {error && <p className="field-error" id="question-error" role="alert">{error}</p>}
         </div>
       </div>
@@ -487,7 +539,7 @@ export function EnrollmentPage() {
       {!profileLoading && hasInvite && !monthlyValue && !error && <div className="access-notice"><strong>A mensalidade ainda não foi liberada.</strong><span>A gestão precisa confirmar o valor antes de gerar a recorrência.</span></div>}
       {profileLoading && <div className="loading-state"><i /><span>Validando seu convite…</span></div>}
       <form className="enrollment-form" onSubmit={submit}>
-        <div className="fields-grid"><label className="field-label field-label--compact"><span>Nome completo</span><input required name="name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome e sobrenome" /></label><label className="field-label field-label--compact"><span>CPF</span><input required inputMode="numeric" autoComplete="off" value={formatCpf(cpf)} onChange={(event) => setCpf(event.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="000.000.000-00" /></label><label className="field-label field-label--compact"><span>E-mail do convite</span><input required readOnly={Boolean(email)} name="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@exemplo.com" /></label><label className="field-label field-label--compact"><span>WhatsApp</span><input required name="phone" type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(61) 99999-9999" /></label><label className="field-label field-label--compact"><span>Crie uma senha</span><input required name="password" type="password" minLength={8} autoComplete="new-password" placeholder="Mínimo de 8 caracteres" /></label></div>
+        <div className="fields-grid"><label className="field-label field-label--compact"><span>Nome completo</span><input required name="name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome e sobrenome" /></label><label className="field-label field-label--compact"><span>CPF</span><input required name="cpf" inputMode="numeric" autoComplete="off" spellCheck={false} value={formatCpf(cpf)} onChange={(event) => setCpf(event.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="000.000.000-00" /></label><label className="field-label field-label--compact"><span>E-mail do convite</span><input required readOnly={Boolean(email)} name="email" type="email" autoComplete="email" spellCheck={false} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@exemplo.com" /></label><label className="field-label field-label--compact"><span>WhatsApp</span><input required name="phone" type="tel" autoComplete="tel" inputMode="tel" spellCheck={false} value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(61) 99999-9999" /></label><label className="field-label field-label--compact"><span>Crie uma senha</span><input required name="password" type="password" minLength={8} autoComplete="new-password" placeholder="Mínimo de 8 caracteres" /></label></div>
         <div className="plan-row"><div><span>Participação mensal APT</span><strong>{monthlyValue ? `${monthlyValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por mês` : "Valor ainda não configurado"}</strong><small>Renovação automática · cartão de crédito</small></div><span className="status-chip status-chip--ok">Checkout seguro</span></div>
         <label className="consent-row"><input required name="consent" type="checkbox" /><span>Autorizo o uso destes dados para administrar minha participação, comunicação e cobrança recorrente no APT.</span></label>
         {error && <p className="field-error" role="alert">{error}</p>}
@@ -544,9 +596,9 @@ export function PortalPage() {
       {notice && <div className="toast" role="status">{notice}</div>}
       {tab === "inicio" && <><header className="member-welcome"><div><p>Olá, {member.name.split(" ")[0]}.</p><h1>Sua vida no APT, sem ruído.</h1></div></header><section className="membership-hero"><div><span>Próxima mensalidade</span><strong>{nextDue}</strong><small>{courtesy ? "Acesso liberado pela gestão" : "Renovação automática no cartão"}</small></div><div><span>Situação</span><strong>{active ? "Em dia" : "Aguardando regularização"}</strong><small>{courtesy ? "Participação cortesia" : subscription?.status || "Em configuração"}</small></div>{!courtesy && <button className="primary-button" onClick={() => setTab("pagamentos")}>Gerenciar pagamento</button>}</section>{active && <section className="member-list"><header><h2>Acessos rápidos</h2><span>Participação ativa</span></header>{member.twinnerUrl && <div className="movement-row"><i className="movement-dot movement-dot--ok" /><div><strong>Cadastro no Tweener</strong><span>Entre para fazer parte da migração e acompanhar o APT.</span></div><a href={member.twinnerUrl} target="_blank" rel="noreferrer">Fazer cadastro</a></div>}{member.whatsappCommunityUrl && <div className="movement-row"><i className="movement-dot movement-dot--ok" /><div><strong>Comunidade APT no WhatsApp</strong><span>Receba os avisos e a organização do clube.</span></div><a href={member.whatsappCommunityUrl} target="_blank" rel="noreferrer">Entrar</a></div>}</section>}<section className="member-list"><header><h2>Últimos movimentos</h2><span>{payments.length} registros</span></header>{payments.slice(0, 3).map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>Mensalidade APT</strong><span>{payment.due_date ? `Vencimento em ${new Intl.DateTimeFormat("pt-BR").format(new Date(`${payment.due_date}T12:00:00`))}` : "Cobrança registrada"}</span></div><strong>{payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "Pago" : "Pendente"}</strong></div>)}{payments.length === 0 && <div className="empty-state"><strong>Nenhuma cobrança registrada.</strong><span>O histórico aparece após o primeiro evento do Asaas.</span></div>}</section></>}
       {tab === "pagamentos" && <><header className="member-welcome"><div><p>Pagamentos</p><h1>Assinatura e cobranças.</h1></div></header><section className="payment-method"><div><span className="card-glyph">••••</span><div><strong>Cartão protegido pelo Asaas</strong><span>Os dados completos nunca ficam no APT.</span></div></div><p>Para trocar o cartão, a gestão envia um novo checkout seguro do Asaas. A troca nunca é feita nesta página.</p></section><section className="member-list"><header><h2>Histórico</h2><span>{payments.length} cobranças</span></header>{payments.map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>{(payment.value_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong><span>{payment.due_date || "Sem vencimento informado"}</span></div>{payment.invoice_url ? <a href={payment.invoice_url} target="_blank" rel="noreferrer">Abrir cobrança</a> : <strong>{payment.status}</strong>}</div>)}</section></>}
-      {tab === "perfil" && <><header className="member-welcome"><div><p>Meu cadastro</p><h1>Dados da participação.</h1></div></header><section className="profile-data"><div><span>Nome</span><strong>{member.name}</strong></div><div><span>E-mail</span><strong>{member.email}</strong></div><div><span>WhatsApp</span><strong>{member.whatsapp}</strong></div><div><span>CPF</span><strong>{member.cpfMasked}</strong></div></section><section className="exit-section"><h2>Encerrar participação</h2><p>O encerramento interrompe novas cobranças. O acesso segue até o fim do período já pago.</p>{!exitRequested && <><button className="text-button text-button--danger" onClick={() => setExitOpen((open) => !open)}>{exitOpen ? "Voltar" : "Quero sair do ranking"}</button>{exitOpen && <div className="exit-confirm"><p>Ao confirmar, nenhuma nova mensalidade será criada.</p><button className="danger-button" onClick={requestCancellation} disabled={cancelling}>{cancelling ? "Cancelando no Asaas…" : "Cancelar renovação"}</button></div>}</>}{exitRequested && <p className="success-message" role="status">Renovação cancelada. Nenhuma nova cobrança será criada.</p>}</section></>}
+      {tab === "perfil" && <><header className="member-welcome"><div><p>Meu cadastro</p><h1>Dados da participação.</h1></div></header><section className="profile-data"><div><span>Nome</span><strong>{member.name}</strong></div><div><span>E-mail</span><strong>{member.email}</strong></div><div><span>WhatsApp</span><strong>{member.whatsapp}</strong></div><div><span>Classe</span><strong>{member.classLevel || "A confirmar"}</strong></div><div><span>CPF</span><strong>{member.cpfMasked}</strong></div></section><section className="exit-section"><h2>Encerrar participação</h2><p>O encerramento interrompe novas cobranças. O acesso segue até o fim do período já pago.</p>{!exitRequested && <><button className="text-button text-button--danger" onClick={() => setExitOpen((open) => !open)}>{exitOpen ? "Voltar" : "Quero sair do ranking"}</button>{exitOpen && <div className="exit-confirm"><p>Ao confirmar, nenhuma nova mensalidade será criada.</p><button className="danger-button" onClick={requestCancellation} disabled={cancelling}>{cancelling ? "Cancelando no Asaas…" : "Cancelar renovação"}</button></div>}</>}{exitRequested && <p className="success-message" role="status">Renovação cancelada. Nenhuma nova cobrança será criada.</p>}</section></>}
     </section>
-    <nav className="mobile-tabbar" aria-label="Área do membro"><button className={tab === "inicio" ? "active" : ""} onClick={() => setTab("inicio")}>Início</button><button className={tab === "pagamentos" ? "active" : ""} onClick={() => setTab("pagamentos")}>Pagamentos</button><button className={tab === "perfil" ? "active" : ""} onClick={() => setTab("perfil")}>Cadastro</button></nav>
+    <nav className="mobile-tabbar" aria-label="Área do membro"><button className={tab === "inicio" ? "active" : ""} aria-current={tab === "inicio" ? "page" : undefined} onClick={() => setTab("inicio")}>Início</button><button className={tab === "pagamentos" ? "active" : ""} aria-current={tab === "pagamentos" ? "page" : undefined} onClick={() => setTab("pagamentos")}>Pagamentos</button><button className={tab === "perfil" ? "active" : ""} aria-current={tab === "perfil" ? "page" : undefined} onClick={() => setTab("perfil")}>Cadastro</button></nav>
   </main></div>;
 }
 
@@ -639,54 +691,99 @@ function ApplicationReviewDetail({
   onNoteChange,
   onClose,
   onSave,
+  onCopyInvite,
+  saving,
 }: {
   application: ApplicationDetail | null;
   loading: boolean;
   note: string;
   onNoteChange: (value: string) => void;
   onClose: () => void;
-  onSave: (status?: "in_review" | "awaiting_info" | "approved" | "rejected") => void;
+  onSave: (status?: "new" | "in_review" | "awaiting_info" | "approved" | "rejected") => void;
+  onCopyInvite: (token: string) => void;
+  saving: boolean;
 }) {
-  return <section className="application-review" aria-live="polite">
-    <header><div><span>Requerimento</span><h3>{application?.name || "Carregando…"}</h3></div><button type="button" onClick={onClose}>Fechar</button></header>
-    {loading && <div className="loading-state"><i /><span>Carregando respostas…</span></div>}
-    {application && !loading && <div className="application-review__grid">
-      <dl className="application-answers">
-        {questions.filter((question) => answerText(application.answers[question.id])).map((question) => <div key={question.id}><dt>{question.title}</dt><dd>{answerText(application.answers[question.id])}</dd></div>)}
-      </dl>
-      <aside className="application-notes">
-        <div><span>Notas internas</span><p>O pedido de informação é apenas registrado aqui; o contato ainda deve ser feito pela gestão.</p></div>
-        {application.notes.map((item) => <article key={item.id}><p>{item.body}</p><small>{item.created_by} · {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.created_at))}</small></article>)}
-        <label className="field-label field-label--compact"><span>Nova nota ou informação solicitada</span><textarea rows={4} value={note} maxLength={1200} onChange={(event) => onNoteChange(event.target.value)} placeholder="Registre contexto, decisão ou o que precisa ser solicitado." /></label>
-        <div className="application-review__actions"><button type="button" onClick={() => onSave()} disabled={!note.trim()}>Registrar nota</button><button type="button" onClick={() => onSave("rejected")}>Não aprovar</button><button type="button" onClick={() => onSave("awaiting_info")} disabled={!note.trim()}>Registrar pedido de informação</button><button className="small-primary" type="button" onClick={() => onSave("approved")}>Aprovar e gerar convite</button></div>
-      </aside>
-    </div>}
-  </section>;
+  const initialStatus = application?.status === "new" || application?.status === "awaiting_info" || application?.status === "rejected" ? application.status : "in_review";
+  const [nextStatus, setNextStatus] = useState<"new" | "in_review" | "awaiting_info" | "rejected">(initialStatus);
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) { if (event.key === "Escape") onClose(); }
+    document.addEventListener("keydown", closeOnEscape);
+    document.body.classList.add("drawer-open");
+    return () => { document.removeEventListener("keydown", closeOnEscape); document.body.classList.remove("drawer-open"); };
+  }, [onClose]);
+  const whatsappUrl = application ? paymentReminderUrl({ name: application.name, whatsapp: application.whatsapp })?.replace(/\?text=.*/, "") : null;
+  const statusLocked = application?.status === "registered";
+  return <div className="crm-drawer-shell">
+    <button className="crm-drawer-backdrop" type="button" tabIndex={-1} onClick={onClose} aria-label="Fechar ficha do requerimento" />
+    <section className="crm-drawer" role="dialog" aria-modal="true" aria-labelledby="application-drawer-title" aria-busy={loading}>
+      <header className="crm-drawer__header"><div><span>Ficha do requerimento</span><h3 id="application-drawer-title">{application?.name || "Carregando…"}</h3>{application && <p>{application.email}</p>}</div><button className="crm-drawer__close" type="button" autoFocus onClick={onClose} aria-label="Fechar ficha">×</button></header>
+      {loading && <div className="loading-state"><i /><span>Carregando ficha completa…</span></div>}
+      {application && !loading && <div className="crm-drawer__body">
+        <section className="crm-contact-card">
+          <div><span className={`status-chip status-chip--${["approved", "invite_sent", "registered"].includes(application.status) ? "ok" : application.status === "rejected" ? "inactive" : "pending"}`}>{applicationStatusLabels[application.status]}</span><small>Recebido em {new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date(application.createdAt))}</small></div>
+          <div className="crm-contact-actions"><a href={`mailto:${application.email}`}>E-mail</a>{whatsappUrl && <a href={whatsappUrl} target="_blank" rel="noreferrer">WhatsApp</a>}</div>
+        </section>
+        <section className="crm-stage-card" aria-labelledby="crm-stage-title">
+          <div><span>Etapa do CRM</span><h4 id="crm-stage-title">Mova o lead com uma decisão clara.</h4></div>
+          {statusLocked ? <p>Esta ficha já chegou a <strong>{applicationStatusLabels[application.status]}</strong>. O cadastro e a cobrança seguem no fluxo do membro.</p> : <><label><span>Próxima etapa</span><select value={nextStatus} onChange={(event) => setNextStatus(event.target.value as typeof nextStatus)}><option value="new">Novo</option><option value="in_review">Em análise</option><option value="awaiting_info">Aguardando retorno</option><option value="rejected">Não aprovado</option></select></label><button className="secondary-button" type="button" onClick={() => onSave(nextStatus)} disabled={saving || nextStatus === application.status || (nextStatus === "awaiting_info" && !note.trim())}>{saving ? "Salvando…" : "Aplicar etapa"}</button><button className="primary-button" type="button" onClick={() => onSave("approved")} disabled={saving}>{saving ? "Processando…" : "Aprovar e gerar convite"}<span aria-hidden="true">→</span></button></>}
+          {application.inviteToken && <button className="invite-copy" type="button" onClick={() => onCopyInvite(application.inviteToken!)}>Copiar link individual de cadastro</button>}
+        </section>
+        <section className="crm-notes" aria-labelledby="crm-notes-title">
+          <div><span>Histórico interno</span><h4 id="crm-notes-title">Notas e próximos passos</h4><p>Para mover para “Aguardando retorno”, registre abaixo o que precisa ser solicitado.</p></div>
+          <div className="crm-notes__history">{application.notes.length ? application.notes.map((item) => <article key={item.id}><p>{item.body}</p><small>{item.created_by} · {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.created_at))}</small></article>) : <p className="crm-notes__empty">Nenhuma nota registrada.</p>}</div>
+          <label className="field-label field-label--compact"><span>Nova nota</span><textarea name="application-note" rows={4} value={note} maxLength={1200} onChange={(event) => onNoteChange(event.target.value)} placeholder="Registre contexto, decisão ou o próximo contato." /></label>
+          <button className="secondary-button" type="button" onClick={() => onSave()} disabled={saving || !note.trim()}>Registrar nota</button>
+        </section>
+        <details className="crm-answers" open><summary>Respostas do requerimento <span>{Object.keys(application.answers).length}</span></summary><dl className="application-answers">{questions.filter((question) => answerText(application.answers[question.id])).map((question) => <div key={question.id}><dt>{question.title}</dt><dd>{answerText(application.answers[question.id])}</dd></div>)}</dl></details>
+      </div>}
+    </section>
+  </div>;
 }
 
-function MemberManagementDetail({ member, saving, error, onClose, onSave }: {
-  member: MemberRecord;
+function MemberManagementDetail({ member, loading, saving, error, onClose, onSave }: {
+  member: MemberRecord | null;
+  loading: boolean;
   saving: boolean;
   error: string;
   onClose: () => void;
-  onSave: (changes: { participationStatus?: string; twinnerUrl?: string; whatsappCommunityUrl?: string }) => void;
+  onSave: (changes: { participationStatus?: string; twinnerUrl?: string; whatsappCommunityUrl?: string; note?: string }) => Promise<boolean>;
 }) {
   const [participationStatus, setParticipationStatus] = useState("");
-  const [twinnerUrl, setTwinnerUrl] = useState(member.twinnerUrl || "");
-  const [whatsappCommunityUrl, setWhatsappCommunityUrl] = useState(member.whatsappCommunityUrl || "");
-  const initialTweenerUrl = member.twinnerUrl || "";
-  const initialWhatsappUrl = member.whatsappCommunityUrl || "";
-  const reminderUrl = paymentReminderUrl(member);
-  return <section className="member-management" aria-labelledby="member-management-title">
-    <header><div><span>Integrante</span><h3 id="member-management-title">{member.name}</h3><p>{member.email}</p></div><button type="button" onClick={onClose}>Fechar</button></header>
-    <form onSubmit={(event) => { event.preventDefault(); onSave({ participationStatus: participationStatus || undefined, twinnerUrl: twinnerUrl === initialTweenerUrl ? undefined : twinnerUrl, whatsappCommunityUrl: whatsappCommunityUrl === initialWhatsappUrl ? undefined : whatsappCommunityUrl }); }}>
-      {error && <p className="field-error" role="alert">{error}</p>}
-      <label className="field-label field-label--compact"><span>Participação</span><select name="participation-status" value={participationStatus} onChange={(event) => setParticipationStatus(event.target.value)}><option value="">Manter: {member.participationStatus}</option><option value="pending_payment">Aguardando pagamento</option><option value="courtesy">Cortesia</option><option value="inactive">Inativo</option></select><small>Ativo e inadimplente são atualizados pelo fluxo financeiro.</small></label>
-      <label className="field-label field-label--compact"><span>Link individual do Tweener</span><input name="tweener-url" type="url" inputMode="url" autoComplete="off" value={twinnerUrl} onChange={(event) => setTwinnerUrl(event.target.value)} placeholder="https://app.tweener.club/…" /><small>Em branco, usa o acesso padrão do clube.</small></label>
-      <label className="field-label field-label--compact"><span>Convite individual do WhatsApp</span><input name="whatsapp-community-url" type="url" inputMode="url" autoComplete="off" value={whatsappCommunityUrl} onChange={(event) => setWhatsappCommunityUrl(event.target.value)} placeholder="https://chat.whatsapp.com/…" /><small>Em branco, usa a comunidade padrão do APT.</small></label>
-      <div className="member-management__actions"><button className="small-primary" type="submit" disabled={saving}>{saving ? "Salvando…" : "Salvar acessos"}</button>{reminderUrl && <a className="table-action" href={reminderUrl} target="_blank" rel="noreferrer">Cobrar no WhatsApp</a>}</div>
-    </form>
-  </section>;
+  const [twinnerUrl, setTwinnerUrl] = useState(member?.twinnerUrl || "");
+  const [whatsappCommunityUrl, setWhatsappCommunityUrl] = useState(member?.whatsappCommunityUrl || "");
+  const [note, setNote] = useState("");
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) { if (event.key === "Escape") onClose(); }
+    document.addEventListener("keydown", closeOnEscape); document.body.classList.add("drawer-open");
+    return () => { document.removeEventListener("keydown", closeOnEscape); document.body.classList.remove("drawer-open"); };
+  }, [onClose]);
+  const initialTweenerUrl = member?.twinnerUrl || "";
+  const initialWhatsappUrl = member?.whatsappCommunityUrl || "";
+  const reminderUrl = member ? paymentReminderUrl(member) : null;
+  const directWhatsappUrl = reminderUrl?.replace(/\?text=.*/, "");
+  const statusClass = member && ["active", "courtesy"].includes(member.participationStatus) ? "ok" : member?.participationStatus === "pending_payment" ? "pending" : "inactive";
+  return <div className="crm-drawer-shell">
+    <button className="crm-drawer-backdrop" type="button" tabIndex={-1} onClick={onClose} aria-label="Fechar ficha do integrante" />
+    <section className="crm-drawer" role="dialog" aria-modal="true" aria-labelledby="member-management-title" aria-busy={loading}>
+      <header className="crm-drawer__header"><div><span>Ficha do integrante</span><h3 id="member-management-title">{member?.name || "Carregando…"}</h3>{member && <p>{member.email}</p>}</div><button className="crm-drawer__close" type="button" autoFocus onClick={onClose} aria-label="Fechar ficha">×</button></header>
+      {loading && <div className="loading-state"><i /><span>Carregando histórico do integrante…</span></div>}
+      {member && !loading && <div className="crm-drawer__body">
+        <section className="crm-contact-card"><div><span className={`status-chip status-chip--${statusClass}`}>{readableStatus(member.participationStatus, memberStatusLabels)}</span><small>{member.classLevel || "Classe não informada"}</small></div><div className="crm-contact-actions"><a href={`mailto:${member.email}`}>E-mail</a>{directWhatsappUrl && <a href={directWhatsappUrl} target="_blank" rel="noreferrer">WhatsApp</a>}{reminderUrl && <a href={reminderUrl} target="_blank" rel="noreferrer">Cobrar no WhatsApp</a>}</div></section>
+        <section className="member-financial-summary"><div><span>Assinatura</span><strong>{readableStatus(member.subscriptionStatus, subscriptionStatusLabels)}</strong></div><div><span>Mensalidade</span><strong>{(member.amountCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></div><div><span>Próximo vencimento</span><strong>{shortDate(member.nextDueDate)}</strong></div><div><span>Atraso</span><strong>{member.overdueDays ? `${member.overdueDays} dias` : "Em dia"}</strong></div></section>
+        <form className="member-management-form" onSubmit={async (event) => { event.preventDefault(); const saved = await onSave({ participationStatus: participationStatus || undefined, twinnerUrl: twinnerUrl === initialTweenerUrl ? undefined : twinnerUrl, whatsappCommunityUrl: whatsappCommunityUrl === initialWhatsappUrl ? undefined : whatsappCommunityUrl, note: note || undefined }); if (saved) { setParticipationStatus(""); setNote(""); } }}>
+          <div><span>Gestão do integrante</span><h4>Participação, acessos e nota interna</h4></div>
+          {error && <p className="field-error" role="alert">{error}</p>}
+          <label className="field-label field-label--compact"><span>Participação</span><select name="participation-status" value={participationStatus} onChange={(event) => setParticipationStatus(event.target.value)}><option value="">Manter: {readableStatus(member.participationStatus, memberStatusLabels)}</option><option value="pending_payment">Aguardando pagamento</option><option value="courtesy">Cortesia</option><option value="inactive">Inativo</option></select><small>Ativo e inadimplente são atualizados pelo fluxo financeiro.</small></label>
+          <label className="field-label field-label--compact"><span>Link individual do Tweener</span><input name="tweener-url" type="url" inputMode="url" autoComplete="off" spellCheck={false} value={twinnerUrl} onChange={(event) => setTwinnerUrl(event.target.value)} placeholder="https://app.tweener.club/…" /></label>
+          <label className="field-label field-label--compact"><span>Convite individual do WhatsApp</span><input name="whatsapp-community-url" type="url" inputMode="url" autoComplete="off" spellCheck={false} value={whatsappCommunityUrl} onChange={(event) => setWhatsappCommunityUrl(event.target.value)} placeholder="https://chat.whatsapp.com/…" /></label>
+          <label className="field-label field-label--compact"><span>Nova nota interna</span><textarea name="member-note" rows={3} maxLength={1200} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Registre contexto ou o próximo acompanhamento." /></label>
+          <button className="primary-button" type="submit" disabled={saving}>{saving ? "Salvando…" : "Salvar ficha"}<span aria-hidden="true">→</span></button>
+        </form>
+        <section className="crm-notes"><div><span>Histórico interno</span><h4>Notas da gestão</h4></div><div className="crm-notes__history">{member.notes?.length ? member.notes.map((item) => <article key={item.id}><p>{item.body}</p><small>{item.created_by} · {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.created_at))}</small></article>) : <p className="crm-notes__empty">Nenhuma nota registrada.</p>}</div></section>
+        <details className="crm-answers" open><summary>Histórico financeiro <span>{member.payments?.length || 0}</span></summary><div className="member-payment-history">{member.payments?.length ? member.payments.map((payment) => <article key={payment.id}><div><strong>{(payment.value_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong><span>{payment.due_date ? shortDate(payment.due_date) : "Sem vencimento"}</span></div><span className={`status-chip status-chip--${payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "ok" : "pending"}`}>{paymentStatusLabel(payment.status)}</span>{payment.invoice_url && <a href={payment.invoice_url} target="_blank" rel="noreferrer">Abrir cobrança</a>}</article>) : <p className="crm-notes__empty">Nenhuma cobrança registrada.</p>}</div></details>
+      </div>}
+    </section>
+  </div>;
 }
 
 function PaymentReminderQueue({ members }: { members: MemberRecord[] }) {
@@ -700,7 +797,7 @@ function PaymentReminderQueue({ members }: { members: MemberRecord[] }) {
 }
 
 function MemberManagementList({ members, onManage }: { members: MemberRecord[]; onManage: (member: MemberRecord) => void }) {
-  return <div className="member-management-list">{members.map((member) => { const reminderUrl = paymentReminderUrl(member); return <article key={member.id} className="member-management-card"><div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.email} · {member.classLevel || "Sem classe"}</small></div></div><div className="member-management-card__status"><span className={["active", "courtesy"].includes(member.participationStatus) ? "status-chip status-chip--ok" : member.participationStatus === "pending_payment" ? "status-chip status-chip--pending" : "status-chip status-chip--inactive"}>{member.participationStatus}</span><small>{member.nextDueDate ? `Vence ${member.nextDueDate}` : member.subscriptionStatus}</small></div>{reminderUrl && <a className="table-action" href={reminderUrl} target="_blank" rel="noreferrer">Cobrar no WhatsApp</a>}<button className="table-action" type="button" onClick={() => onManage(member)}>Gerenciar integrante</button></article>; })}</div>;
+  return <div className="member-management-list">{members.map((member) => <button key={member.id} className="member-management-card" type="button" onClick={() => onManage(member)}><div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.email} · {member.classLevel || "Sem classe"}</small></div></div><div className="member-management-card__status"><span className={["active", "courtesy"].includes(member.participationStatus) ? "status-chip status-chip--ok" : member.participationStatus === "pending_payment" ? "status-chip status-chip--pending" : "status-chip status-chip--inactive"}>{readableStatus(member.participationStatus, memberStatusLabels)}</span><small>{member.nextDueDate ? `Vence ${shortDate(member.nextDueDate)}` : readableStatus(member.subscriptionStatus, subscriptionStatusLabels)}</small></div><span className="member-management-card__open">Abrir ficha completa <i aria-hidden="true">→</i></span></button>)}</div>;
 }
 
 const crmColumns: Array<{ status: ApplicationRecord["status"]; label: string }> = [
@@ -716,7 +813,7 @@ const crmColumns: Array<{ status: ApplicationRecord["status"]; label: string }> 
 function CrmKanban({ applications, onOpen }: { applications: ApplicationRecord[]; onOpen: (id: string) => void }) {
   return <section className="crm-kanban" aria-label="Pipeline de requerimentos">{crmColumns.map((column) => {
     const cards = applications.filter((application) => application.status === column.status);
-    return <section className="crm-column" key={column.status}><header><strong>{column.label}</strong><span>{cards.length}</span></header><div>{cards.map((application) => <button type="button" className="crm-card" key={application.id} onClick={() => onOpen(application.id)}><strong>{application.name}</strong><small>{application.city || "Cidade não informada"}</small><small>{application.classLevel || "Classe não informada"}</small></button>)}{cards.length === 0 && <p>Sem requerimentos.</p>}</div></section>;
+    return <section className="crm-column" key={column.status}><header><strong>{column.label}</strong><span>{cards.length}</span></header><div>{cards.map((application) => <button type="button" className="crm-card" key={application.id} onClick={() => onOpen(application.id)}><span className="crm-card__top"><strong>{application.name}</strong><i aria-hidden="true">→</i></span><small>{application.city || "Cidade não informada"}</small><small>{application.classLevel || "Classe não informada"}</small><span className="crm-card__meta">{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(new Date(application.createdAt))}</span></button>)}{cards.length === 0 && <p>Sem requerimentos.</p>}</div></section>;
   })}</section>;
 }
 
@@ -729,8 +826,10 @@ export function AdminPage() {
   const [notice, setNotice] = useState("");
   const [selectedApplication, setSelectedApplication] = useState<ApplicationDetail | null>(null);
   const [applicationLoading, setApplicationLoading] = useState(false);
+  const [applicationSaving, setApplicationSaving] = useState(false);
   const [reviewNote, setReviewNote] = useState("");
   const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
+  const [memberLoading, setMemberLoading] = useState(false);
   const [memberSaving, setMemberSaving] = useState(false);
   const [memberError, setMemberError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -756,7 +855,7 @@ export function AdminPage() {
     }).catch(() => setNotice("Não foi possível atualizar os dados agora.")).finally(() => { setLoading(false); setAuthChecking(false); });
   }, []);
   async function openApplication(id: string) {
-    setApplicationLoading(true); setReviewNote("");
+    setApplicationLoading(true); setSelectedApplication(null); setReviewNote("");
     try {
       const response = await fetch(`/api/requerimentos?id=${encodeURIComponent(id)}`);
       const payload = await response.json() as { application?: ApplicationDetail; error?: string };
@@ -765,7 +864,8 @@ export function AdminPage() {
     } catch (error) { setNotice(error instanceof Error ? error.message : "Não foi possível abrir o requerimento."); }
     finally { setApplicationLoading(false); }
   }
-  async function updateApplication(id: string, status?: "in_review" | "awaiting_info" | "approved" | "rejected") {
+  async function updateApplication(id: string, status?: "new" | "in_review" | "awaiting_info" | "approved" | "rejected") {
+    setApplicationSaving(true);
     try {
       const response = await fetch("/api/requerimentos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status, note: reviewNote }) });
       const payload = await response.json() as { application?: ApplicationRecord; note?: AdminNote; error?: string; inviteDelivery?: "sent" | "manual" };
@@ -775,20 +875,37 @@ export function AdminPage() {
       setReviewNote("");
       setNotice(status === "approved" ? payload.inviteDelivery === "sent" ? "Convite enviado por e-mail." : "Aprovado. Copie o link individual de cadastro." : status === "awaiting_info" ? "Pedido de informação registrado. O contato ainda precisa ser feito pela gestão." : status ? "Decisão registrada." : "Nota registrada.");
     } catch (error) { setNotice(error instanceof Error ? error.message : "Não foi possível registrar a decisão."); }
+    finally { setApplicationSaving(false); }
   }
-  async function updateMember(changes: { participationStatus?: string; twinnerUrl?: string; whatsappCommunityUrl?: string }) {
-    if (!selectedMember || Object.values(changes).every((value) => value === undefined)) { setMemberError("Faça ao menos uma alteração antes de salvar."); return; }
+  async function openMember(member: MemberRecord) {
+    setMemberError(""); setSelectedMember(member); setMemberLoading(true);
+    try {
+      const response = await fetch(`/api/membros?id=${encodeURIComponent(member.id)}`);
+      const payload = await response.json() as { member?: MemberRecord; error?: string };
+      if (!response.ok || !payload.member) throw new Error(payload.error || "Não foi possível abrir o integrante.");
+      setSelectedMember(payload.member);
+    } catch (error) { setMemberError(error instanceof Error ? error.message : "Não foi possível abrir o integrante."); }
+    finally { setMemberLoading(false); }
+  }
+  async function updateMember(changes: { participationStatus?: string; twinnerUrl?: string; whatsappCommunityUrl?: string; note?: string }) {
+    if (!selectedMember || Object.values(changes).every((value) => value === undefined)) { setMemberError("Faça ao menos uma alteração antes de salvar."); return false; }
     setMemberError("");
     setMemberSaving(true);
     try {
       const response = await fetch("/api/membros", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: selectedMember.id, ...changes }) });
-      const payload = await response.json() as { member?: Pick<MemberRecord, "id" | "participationStatus" | "twinnerUrl" | "whatsappCommunityUrl">; error?: string };
+      const payload = await response.json() as { member?: Pick<MemberRecord, "id" | "participationStatus" | "twinnerUrl" | "whatsappCommunityUrl">; note?: AdminNote; error?: string };
       if (!response.ok || !payload.member) throw new Error(payload.error);
       setMembers((current) => current.map((member) => member.id === payload.member!.id ? { ...member, ...payload.member! } : member));
-      setSelectedMember((current) => current ? { ...current, ...payload.member! } : current);
-      setNotice("Acessos do integrante atualizados.");
-    } catch (error) { setMemberError(error instanceof Error ? error.message : "Não foi possível atualizar o integrante."); }
+      setSelectedMember((current) => current ? { ...current, ...payload.member!, notes: payload.note ? [...(current.notes || []), payload.note] : current.notes } : current);
+      setNotice("Ficha do integrante atualizada.");
+      return true;
+    } catch (error) { setMemberError(error instanceof Error ? error.message : "Não foi possível atualizar o integrante."); return false; }
     finally { setMemberSaving(false); }
+  }
+  async function copyInvite(token: string) {
+    const url = `${window.location.origin}/cadastro?convite=${encodeURIComponent(token)}`;
+    try { await navigator.clipboard.writeText(url); setNotice("Link individual copiado."); }
+    catch { window.prompt("Copie o link individual de cadastro:", url); }
   }
   async function refreshMembers() { const response = await fetch("/api/membros"); const payload = await response.json() as { members?: MemberRecord[] }; if (response.ok) setMembers(payload.members || []); }
   if (authChecking) return <div className="apt-app"><RouteHeader label="Gestão APT" /><main className="access-state"><span>Acesso administrativo</span><h1>Verificando acesso.</h1><p>A gestão é carregada somente para contas autorizadas.</p></main></div>;
@@ -800,9 +917,9 @@ export function AdminPage() {
     <aside className="admin-sidebar"><Brand inverse /><div><span>Gestão APT</span><h1>Clube em movimento.</h1></div><nav aria-label="Gestão"><button className={tab === "resumo" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("resumo")}>CRM e visão geral</button><button className={tab === "membros" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("membros")}>Membros e cobranças</button><SignOutButton /></nav><div className="sidebar-footer"><span>Integração financeira</span><strong>{asaasConnected ? "Asaas conectado" : "Asaas pendente"}</strong></div></aside>
     <section className="admin-content">
       {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice("")}>Fechar</button></div>}
-      {tab === "resumo" && <><header className="admin-heading"><div><span>CRM e visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section>{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state empty-state--bordered"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{!loading && applications.length > 0 && <CrmKanban applications={applications} onOpen={openApplication} />}{(selectedApplication || applicationLoading) && <ApplicationReviewDetail application={selectedApplication} loading={applicationLoading} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} />}</>}
-      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Uma base única para saber quem está ativo.</h2></div><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome…" /></label></header><MemberImportPanel onImported={refreshMembers} /><PaymentReminderQueue members={members} /><MemberManagementList members={filteredMembers} onManage={(member) => { setMemberError(""); setSelectedMember(member); }} /><div className="table-wrap table-wrap--members"><table><thead><tr><th>Integrante</th><th>Participação</th><th>Assinatura</th><th>Próximo vencimento</th><th>Atraso</th><th><span className="sr-only">Ações</span></th></tr></thead><tbody>{filteredMembers.map((member) => { const reminderUrl = paymentReminderUrl(member); return <tr key={member.id}><td><div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.email} · {member.classLevel || "Sem classe"}</small></div></div></td><td><span className={["active", "courtesy"].includes(member.participationStatus) ? "status-chip status-chip--ok" : member.participationStatus === "pending_payment" ? "status-chip status-chip--pending" : "status-chip status-chip--inactive"}>{member.participationStatus}</span></td><td>{member.subscriptionStatus}</td><td>{member.nextDueDate || "—"}</td><td>{member.overdueDays ? `${member.overdueDays} dias` : "—"}</td><td><div className="row-actions">{reminderUrl && <a className="table-action" href={reminderUrl} target="_blank" rel="noreferrer">Cobrar</a>}<button className="table-action" type="button" onClick={() => { setMemberError(""); setSelectedMember(member); }}>Gerenciar</button></div></td></tr>; })}</tbody></table></div>{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Tente outro nome.</span></div>}{selectedMember && <MemberManagementDetail key={selectedMember.id} member={selectedMember} saving={memberSaving} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} />}</>}
+      {tab === "resumo" && <><header className="admin-heading"><div><span>CRM e visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section>{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state empty-state--bordered"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{!loading && applications.length > 0 && <CrmKanban applications={applications} onOpen={openApplication} />}{(selectedApplication || applicationLoading) && <ApplicationReviewDetail key={selectedApplication?.id || "loading-application"} application={selectedApplication} loading={applicationLoading} saving={applicationSaving} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} onCopyInvite={copyInvite} />}</>}
+      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Uma base única para saber quem está ativo.</h2></div><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome…" /></label></header><MemberImportPanel onImported={refreshMembers} /><PaymentReminderQueue members={members} /><MemberManagementList members={filteredMembers} onManage={openMember} />{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Tente outro nome.</span></div>}{(selectedMember || memberLoading) && <MemberManagementDetail member={selectedMember} loading={memberLoading} saving={memberSaving} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} />}</>}
     </section>
-    <nav className="admin-mobile-nav" aria-label="Gestão"><button className={tab === "resumo" ? "active" : ""} onClick={() => setTab("resumo")}>CRM</button><button className={tab === "membros" ? "active" : ""} onClick={() => setTab("membros")}>Membros</button></nav>
+    <nav className="admin-mobile-nav" aria-label="Gestão"><button className={tab === "resumo" ? "active" : ""} aria-current={tab === "resumo" ? "page" : undefined} onClick={() => setTab("resumo")}>CRM</button><button className={tab === "membros" ? "active" : ""} aria-current={tab === "membros" ? "page" : undefined} onClick={() => setTab("membros")}>Membros</button></nav>
   </main></div>;
 }

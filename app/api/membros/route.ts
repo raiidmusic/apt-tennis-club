@@ -1,4 +1,5 @@
 import { requireAdmin } from "../../../lib/auth";
+import { reconcileMemberBilling } from "../../../lib/billing-reconciliation";
 import { supabaseAdmin } from "../../../lib/supabase-server";
 
 type MemberRow = {
@@ -78,6 +79,25 @@ export async function GET(request: Request) {
     return Response.json({ members: result });
   } catch {
     return Response.json({ error: "Não foi possível carregar os integrantes." }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  const admin = await requireAdmin(request).catch(() => null);
+  if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
+  try {
+    const payload = await request.json() as { id?: string; action?: string };
+    if (payload.action !== "refresh_billing" || !payload.id || !uuidPattern.test(payload.id)) {
+      return Response.json({ error: "Atualização financeira inválida." }, { status: 400 });
+    }
+    const result = await reconcileMemberBilling(payload.id);
+    await supabaseAdmin("audit_logs", {
+      method: "POST",
+      body: { actor: admin.email, action: "member.billing_reconciled", entity_type: "member", entity_id: payload.id, metadata: result },
+    });
+    return Response.json({ reconciled: true, ...result });
+  } catch {
+    return Response.json({ error: "Não foi possível conciliar este integrante com o Asaas." }, { status: 502 });
   }
 }
 

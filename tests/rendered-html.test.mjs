@@ -110,8 +110,27 @@ test("keeps Tweener and community access inside an active member portal", async 
   assert.match(portalRoute, /chat\.whatsapp\.com\/EJOW47yPnwM0q9Zfm6CaUH/);
   assert.match(portalRoute, /accessActive \? member\.twinner_url \|\| clubLinks\.tweenerUrl : null/);
   assert.match(client, /Acessos rápidos/);
-  assert.match(client, /Cadastro no Tweener/);
-  assert.match(client, /Comunidade APT no WhatsApp/);
+  assert.match(client, /Ranking no Tweener/);
+  assert.match(client, /Comunidade APT/);
+  assert.match(client, /Liberado após confirmação/);
+});
+
+test("reconciles billing without collecting card data in the APT portal", async () => {
+  const [portalRoute, reconciliation, webhook, client] = await Promise.all([
+    readFile(new URL("../app/api/portal/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/billing-reconciliation.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/webhooks/asaas/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(portalRoute, /refresh_billing/);
+  assert.match(portalRoute, /request_card_change/);
+  assert.match(reconciliation, /externalReference/);
+  assert.match(webhook, /asaas_checkout_id/);
+  assert.match(reconciliation, /checkoutSession/);
+  assert.match(reconciliation, /subscriptions\/\$\{encodeURIComponent\(providerSubscription\.id\)\}\/payments/);
+  assert.doesNotMatch(portalRoute, /creditCardHolderInfo|creditCardToken|\bcvv\b/i);
+  assert.doesNotMatch(client, /<input[^>]+(?:card|cvv)/i);
+  assert.match(client, /APT não recebe número, validade ou CVV/);
 });
 
 test("offers a safe session exit in protected areas", async () => {

@@ -62,6 +62,9 @@ const memberStatusLabels: Record<string, string> = {
 const subscriptionStatusLabels: Record<string, string> = {
   active: "Ativa",
   pending: "Pendente",
+  pending_configuration: "Em configuração",
+  awaiting_payment: "Aguardando confirmação",
+  past_due: "Em atraso",
   overdue: "Em atraso",
   cancelled: "Cancelada",
   inactive: "Inativa",
@@ -131,8 +134,8 @@ type PortalPayload = {
     name: string; email: string; whatsapp: string; cpfMasked: string; classLevel?: string | null;
     participationStatus: string; accessActive: boolean; twinnerUrl?: string | null; whatsappCommunityUrl?: string | null; joinedAt?: string | null;
   };
-  subscription: { status?: string; amount_cents?: number; next_due_date?: string; current_period_end?: string; cancel_at_period_end?: boolean } | null;
-  payments: Array<{ id: string; status: string; value_cents: number; due_date?: string; paid_at?: string; invoice_url?: string }>;
+  subscription: { status?: string; amount_cents?: number; next_due_date?: string; current_period_end?: string; cancel_at_period_end?: boolean; asaas_checkout_url?: string } | null;
+  payments: Array<{ id: string; status: string; value_cents: number; due_date?: string; paid_at?: string; invoice_url?: string; created_at?: string }>;
 };
 
 type MemberImportSummary = {
@@ -558,15 +561,66 @@ export function PortalPage() {
   const [data, setData] = useState<PortalPayload | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [billingRefreshing, setBillingRefreshing] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [cardRequesting, setCardRequesting] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileWhatsapp, setProfileWhatsapp] = useState("");
   useEffect(() => {
     fetch("/api/portal").then(async (response) => {
       if (response.status === 401) { setAuthRequired(true); return null; }
       const payload = await response.json() as PortalPayload & { error?: string };
       if (!response.ok) throw new Error(payload.error || "Não foi possível carregar sua participação.");
       return payload;
-    }).then((payload) => { if (payload) setData(payload); }).catch((error) => setNotice(error instanceof Error ? error.message : "Não foi possível carregar sua participação.")).finally(() => setLoading(false));
+    }).then(async (payload) => {
+      if (!payload) return;
+      setData(payload); setProfileName(payload.member.name); setProfileWhatsapp(payload.member.whatsapp);
+      if (!payload.member.accessActive && payload.subscription && payload.payments.length === 0) {
+        setBillingRefreshing(true);
+        const response = await fetch("/api/portal", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "refresh_billing" }) });
+        const refreshed = await response.json() as { portal?: PortalPayload };
+        if (response.ok && refreshed.portal) { setData(refreshed.portal); setProfileName(refreshed.portal.member.name); setProfileWhatsapp(refreshed.portal.member.whatsapp); }
+        setBillingRefreshing(false);
+      }
+    }).catch((error) => setNotice(error instanceof Error ? error.message : "Não foi possível carregar sua participação.")).finally(() => setLoading(false));
   }, []);
   function showNotice(message: string) { setNotice(message); window.setTimeout(() => setNotice(""), 3600); }
+  async function refreshBilling() {
+    if (billingRefreshing) return;
+    setBillingRefreshing(true);
+    try {
+      const response = await fetch("/api/portal", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "refresh_billing" }) });
+      const payload = await response.json() as { portal?: PortalPayload; found?: boolean; error?: string };
+      if (!response.ok || !payload.portal) throw new Error(payload.error || "Não foi possível atualizar agora.");
+      setData(payload.portal); showNotice(payload.found ? "Situação financeira atualizada com o Asaas." : "O Asaas ainda não confirmou uma cobrança para este cadastro.");
+    } catch (error) { showNotice(error instanceof Error ? error.message : "Não foi possível atualizar agora."); }
+    finally { setBillingRefreshing(false); }
+  }
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (profileSaving) return;
+    setProfileSaving(true);
+    try {
+      const response = await fetch("/api/portal", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "update_profile", name: profileName, whatsapp: profileWhatsapp }) });
+      const payload = await response.json() as { member?: { name: string; whatsapp: string }; error?: string };
+      if (!response.ok || !payload.member) throw new Error(payload.error || "Não foi possível salvar seu cadastro.");
+      setData((current) => current ? { ...current, member: { ...current.member, ...payload.member } } : current);
+      showNotice("Cadastro atualizado.");
+    } catch (error) { showNotice(error instanceof Error ? error.message : "Não foi possível salvar seu cadastro."); }
+    finally { setProfileSaving(false); }
+  }
+  async function requestCardChange() {
+    if (cardRequesting) return;
+    setCardRequesting(true);
+    try {
+      const response = await fetch("/api/portal", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "request_card_change" }) });
+      const payload = await response.json() as { requested?: boolean; checkoutUrl?: string; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Não foi possível iniciar a troca do cartão.");
+      if (payload.checkoutUrl) { window.location.assign(payload.checkoutUrl); return; }
+      showNotice("Solicitação registrada. A gestão enviará o novo checkout seguro do Asaas.");
+    } catch (error) { showNotice(error instanceof Error ? error.message : "Não foi possível iniciar a troca do cartão."); }
+    finally { setCardRequesting(false); }
+  }
   async function requestCancellation() {
     if (cancelling) return;
     setCancelling(true);
@@ -590,15 +644,21 @@ export function PortalPage() {
   const courtesy = member.participationStatus === "courtesy";
   const nextDue = courtesy ? "Cortesia" : subscription?.next_due_date ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long" }).format(new Date(`${subscription.next_due_date}T12:00:00`)) : "A definir";
   const active = member.accessActive;
+  const amount = ((subscription?.amount_cents || 2290) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const lastPaid = payments.find((payment) => payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED"));
+  const accessLabel = courtesy ? "Cortesia ativa" : active ? "Mensalidade em dia" : member.participationStatus === "pending_payment" ? "Pagamento pendente" : "Confirmação em andamento";
+  const rankingLink = member.twinnerUrl;
+  const communityLink = member.whatsappCommunityUrl;
+  const openLockedRanking = () => showNotice("O acesso ao Tweener é liberado assim que o Asaas confirma a mensalidade.");
   return <div className="apt-app"><RouteHeader label="Área do membro" /><main className="member-page" id="main-content">
-    <aside className="member-rail"><Brand inverse large /><div className="member-profile"><span>{initials}</span><div><strong>{member.name}</strong><small>{member.classLevel || "Classe a confirmar"}</small></div></div><nav aria-label="Área do membro"><button className={tab === "inicio" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("inicio")}>Início</button><button className={tab === "pagamentos" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("pagamentos")}>Pagamentos</button><button className={tab === "perfil" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("perfil")}>Meu cadastro</button><SignOutButton /></nav><div className="rail-status"><i /> {active ? "Participação ativa" : "Participação em atualização"}</div></aside>
+    <aside className="member-rail"><Brand inverse large /><div className="member-profile"><span>{initials}</span><div><strong>{member.name}</strong><small>{member.classLevel || "Classe a confirmar"}</small></div></div><nav aria-label="Área do membro"><button className={tab === "inicio" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("inicio")}>Início</button>{rankingLink ? <a className="side-link" href={rankingLink} target="_blank" rel="noreferrer">Ranking no Tweener ↗</a> : <button className="side-link" onClick={openLockedRanking}>Ranking no Tweener</button>}<button className={tab === "pagamentos" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("pagamentos")}>Pagamentos</button><button className={tab === "perfil" ? "side-link side-link--active" : "side-link"} onClick={() => setTab("perfil")}>Meu cadastro</button><SignOutButton /></nav><div className="rail-status"><i /> {accessLabel}</div></aside>
     <section className="member-content">
       {notice && <div className="toast" role="status">{notice}</div>}
-      {tab === "inicio" && <><header className="member-welcome"><div><p>Olá, {member.name.split(" ")[0]}.</p><h1>Sua vida no APT, sem ruído.</h1></div></header><section className="membership-hero"><div><span>Próxima mensalidade</span><strong>{nextDue}</strong><small>{courtesy ? "Acesso liberado pela gestão" : "Renovação automática no cartão"}</small></div><div><span>Situação</span><strong>{active ? "Em dia" : "Aguardando regularização"}</strong><small>{courtesy ? "Participação cortesia" : subscription?.status || "Em configuração"}</small></div>{!courtesy && <button className="primary-button" onClick={() => setTab("pagamentos")}>Gerenciar pagamento</button>}</section>{active && <section className="member-list"><header><h2>Acessos rápidos</h2><span>Participação ativa</span></header>{member.twinnerUrl && <div className="movement-row"><i className="movement-dot movement-dot--ok" /><div><strong>Cadastro no Tweener</strong><span>Entre para fazer parte da migração e acompanhar o APT.</span></div><a href={member.twinnerUrl} target="_blank" rel="noreferrer">Fazer cadastro</a></div>}{member.whatsappCommunityUrl && <div className="movement-row"><i className="movement-dot movement-dot--ok" /><div><strong>Comunidade APT no WhatsApp</strong><span>Receba os avisos e a organização do clube.</span></div><a href={member.whatsappCommunityUrl} target="_blank" rel="noreferrer">Entrar</a></div>}</section>}<section className="member-list"><header><h2>Últimos movimentos</h2><span>{payments.length} registros</span></header>{payments.slice(0, 3).map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>Mensalidade APT</strong><span>{payment.due_date ? `Vencimento em ${new Intl.DateTimeFormat("pt-BR").format(new Date(`${payment.due_date}T12:00:00`))}` : "Cobrança registrada"}</span></div><strong>{payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "Pago" : "Pendente"}</strong></div>)}{payments.length === 0 && <div className="empty-state"><strong>Nenhuma cobrança registrada.</strong><span>O histórico aparece após o primeiro evento do Asaas.</span></div>}</section></>}
-      {tab === "pagamentos" && <><header className="member-welcome"><div><p>Pagamentos</p><h1>Assinatura e cobranças.</h1></div></header><section className="payment-method"><div><span className="card-glyph">••••</span><div><strong>Cartão protegido pelo Asaas</strong><span>Os dados completos nunca ficam no APT.</span></div></div><p>Para trocar o cartão, a gestão envia um novo checkout seguro do Asaas. A troca nunca é feita nesta página.</p></section><section className="member-list"><header><h2>Histórico</h2><span>{payments.length} cobranças</span></header>{payments.map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>{(payment.value_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong><span>{payment.due_date || "Sem vencimento informado"}</span></div>{payment.invoice_url ? <a href={payment.invoice_url} target="_blank" rel="noreferrer">Abrir cobrança</a> : <strong>{payment.status}</strong>}</div>)}</section></>}
-      {tab === "perfil" && <><header className="member-welcome"><div><p>Meu cadastro</p><h1>Dados da participação.</h1></div></header><section className="profile-data"><div><span>Nome</span><strong>{member.name}</strong></div><div><span>E-mail</span><strong>{member.email}</strong></div><div><span>WhatsApp</span><strong>{member.whatsapp}</strong></div><div><span>Classe</span><strong>{member.classLevel || "A confirmar"}</strong></div><div><span>CPF</span><strong>{member.cpfMasked}</strong></div></section><section className="exit-section"><h2>Encerrar participação</h2><p>O encerramento interrompe novas cobranças. O acesso segue até o fim do período já pago.</p>{!exitRequested && <><button className="text-button text-button--danger" onClick={() => setExitOpen((open) => !open)}>{exitOpen ? "Voltar" : "Quero sair do ranking"}</button>{exitOpen && <div className="exit-confirm"><p>Ao confirmar, nenhuma nova mensalidade será criada.</p><button className="danger-button" onClick={requestCancellation} disabled={cancelling}>{cancelling ? "Cancelando no Asaas…" : "Cancelar renovação"}</button></div>}</>}{exitRequested && <p className="success-message" role="status">Renovação cancelada. Nenhuma nova cobrança será criada.</p>}</section></>}
+      {tab === "inicio" && <><header className="member-welcome"><div><p>Olá, {member.name.split(" ")[0]}.</p><h1>Seu APT em um só lugar.</h1></div><span className={`status-chip ${active ? "status-chip--ok" : "status-chip--pending"}`}>{accessLabel}</span></header><section className="membership-hero"><div><span>Mensalidade</span><strong>{amount}</strong><small>{courtesy ? "Acesso liberado pela gestão" : `Próxima data: ${nextDue}`}</small></div><div><span>Último pagamento</span><strong>{lastPaid?.paid_at ? shortDate(lastPaid.paid_at.slice(0, 10)) : "Ainda não confirmado"}</strong><small>{billingRefreshing ? "Consultando o Asaas…" : readableStatus(subscription?.status || "pending", subscriptionStatusLabels)}</small></div>{!courtesy && <button className="secondary-button" onClick={refreshBilling} disabled={billingRefreshing}>{billingRefreshing ? "Atualizando…" : "Atualizar situação"}</button>}</section><section className="portal-shortcuts" aria-label="Acessos rápidos"><article><div><span className="shortcut-mark">T</span><div><strong>Ranking no Tweener</strong><small>{active ? "Ranking, jogos e evolução" : "Liberado após confirmação"}</small></div></div>{rankingLink ? <a href={rankingLink} target="_blank" rel="noreferrer">Abrir Tweener <span aria-hidden="true">↗</span></a> : <button type="button" onClick={openLockedRanking}>Ver situação</button>}</article><article><div><span className="shortcut-mark shortcut-mark--whatsapp">W</span><div><strong>Comunidade APT</strong><small>{active ? "Avisos e conversas do clube" : "Liberada com a participação"}</small></div></div>{communityLink ? <a href={communityLink} target="_blank" rel="noreferrer">Abrir WhatsApp <span aria-hidden="true">↗</span></a> : <button type="button" onClick={openLockedRanking}>Ver situação</button>}</article></section><section className="member-list"><header><h2>Últimos movimentos</h2><span>{payments.length} registros</span></header>{payments.slice(0, 3).map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>Mensalidade APT</strong><span>{payment.due_date ? `Vencimento em ${shortDate(payment.due_date)}` : "Cobrança registrada"}</span></div><strong>{paymentStatusLabel(payment.status)}</strong></div>)}{payments.length === 0 && <div className="empty-state"><strong>Aguardando o primeiro retorno do Asaas.</strong><span>Use “Atualizar situação” se você acabou de concluir o checkout.</span></div>}</section></>}
+      {tab === "pagamentos" && <><header className="member-welcome"><div><p>Pagamentos</p><h1>Mensalidade sem surpresa.</h1></div><span className={`status-chip ${active ? "status-chip--ok" : "status-chip--pending"}`}>{accessLabel}</span></header><section className="payment-overview"><div><span>Valor mensal</span><strong>{amount}</strong></div><div><span>Próxima data</span><strong>{nextDue}</strong></div><div><span>Renovação</span><strong>{subscription?.cancel_at_period_end ? "Cancelada" : "Automática"}</strong></div></section><section className="payment-method"><div><span className="card-glyph">••••</span><div><strong>Cartão protegido pelo Asaas</strong><span>APT não recebe número, validade ou CVV.</span></div></div><div className="payment-method__action"><p>{subscription?.asaas_checkout_url && !subscription?.status?.includes("active") ? "Conclua o checkout hospedado para ativar sua recorrência." : "Precisa usar outro cartão? A solicitação entra direto na ficha da gestão."}</p><button className="secondary-button" type="button" onClick={requestCardChange} disabled={cardRequesting}>{cardRequesting ? "Registrando…" : subscription?.asaas_checkout_url && !subscription?.status?.includes("active") ? "Concluir no Asaas" : "Solicitar troca de cartão"}</button></div></section><section className="member-list"><header><h2>Histórico</h2><span>{payments.length} cobranças</span></header>{payments.map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>{(payment.value_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong><span>{payment.due_date ? shortDate(payment.due_date) : "Sem vencimento informado"}</span></div>{payment.invoice_url ? <a href={payment.invoice_url} target="_blank" rel="noreferrer">{paymentStatusLabel(payment.status)} ↗</a> : <strong>{paymentStatusLabel(payment.status)}</strong>}</div>)}{payments.length === 0 && <div className="empty-state"><strong>Nenhuma cobrança registrada.</strong><span>O histórico será preenchido assim que o Asaas confirmar o primeiro evento.</span></div>}</section></>}
+      {tab === "perfil" && <><header className="member-welcome"><div><p>Meu cadastro</p><h1>Seus dados, sob seu controle.</h1></div></header><form className="profile-form" onSubmit={saveProfile}><label className="field-label"><span>Nome completo</span><input name="member-name" value={profileName} minLength={2} maxLength={100} onChange={(event) => setProfileName(event.target.value)} /></label><label className="field-label"><span>WhatsApp com DDD</span><input name="member-whatsapp" type="tel" inputMode="tel" value={profileWhatsapp} minLength={10} maxLength={18} onChange={(event) => setProfileWhatsapp(event.target.value)} /></label><div className="profile-readonly"><div><span>E-mail de acesso</span><strong>{member.email}</strong></div><div><span>Classe</span><strong>{member.classLevel || "A confirmar"}</strong></div><div><span>CPF protegido</span><strong>{member.cpfMasked}</strong></div></div><div className="profile-actions"><button className="primary-button" type="submit" disabled={profileSaving}>{profileSaving ? "Salvando…" : "Salvar alterações"}</button><a className="secondary-button" href="/recuperar-senha">Alterar senha</a><a className="text-button" href="mailto:apttennisexclusive@gmail.com">Falar com o APT</a></div></form><section className="exit-section"><h2>Cancelar renovação</h2><p>Interrompe novas mensalidades. Se houver período já pago, o acesso segue até o final dele.</p>{!exitRequested && <><button className="text-button text-button--danger" onClick={() => setExitOpen((open) => !open)}>{exitOpen ? "Manter renovação" : "Cancelar minha renovação"}</button>{exitOpen && <div className="exit-confirm"><p>Ao confirmar, nenhuma nova mensalidade será criada.</p><button className="danger-button" onClick={requestCancellation} disabled={cancelling}>{cancelling ? "Cancelando no Asaas…" : "Confirmar cancelamento"}</button></div>}</>}{exitRequested && <p className="success-message" role="status">Renovação cancelada. Nenhuma nova cobrança será criada.</p>}</section></>}
     </section>
-    <nav className="mobile-tabbar" aria-label="Área do membro"><button className={tab === "inicio" ? "active" : ""} aria-current={tab === "inicio" ? "page" : undefined} onClick={() => setTab("inicio")}>Início</button><button className={tab === "pagamentos" ? "active" : ""} aria-current={tab === "pagamentos" ? "page" : undefined} onClick={() => setTab("pagamentos")}>Pagamentos</button><button className={tab === "perfil" ? "active" : ""} aria-current={tab === "perfil" ? "page" : undefined} onClick={() => setTab("perfil")}>Cadastro</button></nav>
+    <nav className="mobile-tabbar" aria-label="Área do membro"><button className={tab === "inicio" ? "active" : ""} aria-current={tab === "inicio" ? "page" : undefined} onClick={() => setTab("inicio")}>Início</button>{rankingLink ? <a href={rankingLink} target="_blank" rel="noreferrer">Ranking</a> : <button onClick={openLockedRanking}>Ranking</button>}<button className={tab === "pagamentos" ? "active" : ""} aria-current={tab === "pagamentos" ? "page" : undefined} onClick={() => setTab("pagamentos")}>Pagamentos</button><button className={tab === "perfil" ? "active" : ""} aria-current={tab === "perfil" ? "page" : undefined} onClick={() => setTab("perfil")}>Perfil</button></nav>
   </main></div>;
 }
 
@@ -740,13 +800,15 @@ function ApplicationReviewDetail({
   </div>;
 }
 
-function MemberManagementDetail({ member, loading, saving, error, onClose, onSave }: {
+function MemberManagementDetail({ member, loading, saving, refreshing, error, onClose, onSave, onRefresh }: {
   member: MemberRecord | null;
   loading: boolean;
   saving: boolean;
+  refreshing: boolean;
   error: string;
   onClose: () => void;
   onSave: (changes: { participationStatus?: string; twinnerUrl?: string; whatsappCommunityUrl?: string; note?: string }) => Promise<boolean>;
+  onRefresh: () => Promise<void>;
 }) {
   const [participationStatus, setParticipationStatus] = useState("");
   const [twinnerUrl, setTwinnerUrl] = useState(member?.twinnerUrl || "");
@@ -769,7 +831,7 @@ function MemberManagementDetail({ member, loading, saving, error, onClose, onSav
       {loading && <div className="loading-state"><i /><span>Carregando histórico do integrante…</span></div>}
       {member && !loading && <div className="crm-drawer__body">
         <section className="crm-contact-card"><div><span className={`status-chip status-chip--${statusClass}`}>{readableStatus(member.participationStatus, memberStatusLabels)}</span><small>{member.classLevel || "Classe não informada"}</small></div><div className="crm-contact-actions"><a href={`mailto:${member.email}`}>E-mail</a>{directWhatsappUrl && <a href={directWhatsappUrl} target="_blank" rel="noreferrer">WhatsApp</a>}{reminderUrl && <a href={reminderUrl} target="_blank" rel="noreferrer">Cobrar no WhatsApp</a>}</div></section>
-        <section className="member-financial-summary"><div><span>Assinatura</span><strong>{readableStatus(member.subscriptionStatus, subscriptionStatusLabels)}</strong></div><div><span>Mensalidade</span><strong>{(member.amountCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></div><div><span>Próximo vencimento</span><strong>{shortDate(member.nextDueDate)}</strong></div><div><span>Atraso</span><strong>{member.overdueDays ? `${member.overdueDays} dias` : "Em dia"}</strong></div></section>
+        <section className="member-financial-summary"><div><span>Assinatura</span><strong>{readableStatus(member.subscriptionStatus, subscriptionStatusLabels)}</strong></div><div><span>Mensalidade</span><strong>{(member.amountCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></div><div><span>Próximo vencimento</span><strong>{shortDate(member.nextDueDate)}</strong></div><div><span>Atraso</span><strong>{member.overdueDays ? `${member.overdueDays} dias` : "Em dia"}</strong></div><button className="secondary-button member-financial-refresh" type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? "Consultando Asaas…" : "Atualizar no Asaas"}</button></section>
         <form className="member-management-form" onSubmit={async (event) => { event.preventDefault(); const saved = await onSave({ participationStatus: participationStatus || undefined, twinnerUrl: twinnerUrl === initialTweenerUrl ? undefined : twinnerUrl, whatsappCommunityUrl: whatsappCommunityUrl === initialWhatsappUrl ? undefined : whatsappCommunityUrl, note: note || undefined }); if (saved) { setParticipationStatus(""); setNote(""); } }}>
           <div><span>Gestão do integrante</span><h4>Participação, acessos e nota interna</h4></div>
           {error && <p className="field-error" role="alert">{error}</p>}
@@ -787,7 +849,7 @@ function MemberManagementDetail({ member, loading, saving, error, onClose, onSav
 }
 
 function PaymentReminderQueue({ members }: { members: MemberRecord[] }) {
-  const contacts = members.filter((member) => member.participationStatus !== "inactive" && paymentReminderUrl(member));
+  const contacts = members.filter((member) => ["awaiting_payment", "pending_payment", "delinquent"].includes(member.participationStatus) && paymentReminderUrl(member));
   const [current, setCurrent] = useState(0);
   if (!contacts.length) return null;
   const member = contacts[current] || contacts[0];
@@ -820,6 +882,7 @@ function CrmKanban({ applications, onOpen }: { applications: ApplicationRecord[]
 export function AdminPage() {
   const [tab, setTab] = useState<"resumo" | "membros">("resumo");
   const [query, setQuery] = useState("");
+  const [memberFilter, setMemberFilter] = useState<"all" | "attention" | "active" | "inactive">("all");
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
   const [members, setMembers] = useState<MemberRecord[]>([]);
   const [asaasConnected, setAsaasConnected] = useState(false);
@@ -831,11 +894,19 @@ export function AdminPage() {
   const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
   const [memberLoading, setMemberLoading] = useState(false);
   const [memberSaving, setMemberSaving] = useState(false);
+  const [memberRefreshing, setMemberRefreshing] = useState(false);
   const [memberError, setMemberError] = useState("");
   const [loading, setLoading] = useState(true);
   const [authChecking, setAuthChecking] = useState(true);
   const [authRequired, setAuthRequired] = useState(false);
-  const filteredMembers = members.filter((member) => member.name.toLowerCase().includes(query.toLowerCase()));
+  const filteredMembers = members.filter((member) => {
+    const matchesQuery = `${member.name} ${member.email} ${member.whatsapp}`.toLowerCase().includes(query.toLowerCase());
+    const matchesStatus = memberFilter === "all" ||
+      (memberFilter === "attention" && ["awaiting_payment", "pending_payment", "delinquent"].includes(member.participationStatus)) ||
+      (memberFilter === "active" && ["active", "courtesy"].includes(member.participationStatus)) ||
+      (memberFilter === "inactive" && ["inactive", "cancelled", "cancellation_requested"].includes(member.participationStatus));
+    return matchesQuery && matchesStatus;
+  });
   useEffect(() => {
     fetch("/api/auth/session").then(async (sessionResponse) => {
       const sessionPayload = await sessionResponse.json() as { user?: { role?: string } };
@@ -902,6 +973,20 @@ export function AdminPage() {
     } catch (error) { setMemberError(error instanceof Error ? error.message : "Não foi possível atualizar o integrante."); return false; }
     finally { setMemberSaving(false); }
   }
+  async function refreshMemberBilling() {
+    if (!selectedMember || memberRefreshing) return;
+    setMemberRefreshing(true); setMemberError("");
+    try {
+      const response = await fetch("/api/membros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: selectedMember.id, action: "refresh_billing" }) });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Não foi possível consultar o Asaas.");
+      const current = selectedMember;
+      await refreshMembers();
+      await openMember(current);
+      setNotice("Situação financeira atualizada no Asaas.");
+    } catch (error) { setMemberError(error instanceof Error ? error.message : "Não foi possível consultar o Asaas."); }
+    finally { setMemberRefreshing(false); }
+  }
   async function copyInvite(token: string) {
     const url = `${window.location.origin}/cadastro?convite=${encodeURIComponent(token)}`;
     try { await navigator.clipboard.writeText(url); setNotice("Link individual copiado."); }
@@ -918,7 +1003,7 @@ export function AdminPage() {
     <section className="admin-content">
       {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice("")}>Fechar</button></div>}
       {tab === "resumo" && <><header className="admin-heading"><div><span>CRM e visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section>{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state empty-state--bordered"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{!loading && applications.length > 0 && <CrmKanban applications={applications} onOpen={openApplication} />}{(selectedApplication || applicationLoading) && <ApplicationReviewDetail key={selectedApplication?.id || "loading-application"} application={selectedApplication} loading={applicationLoading} saving={applicationSaving} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} onCopyInvite={copyInvite} />}</>}
-      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Uma base única para saber quem está ativo.</h2></div><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome…" /></label></header><MemberImportPanel onImported={refreshMembers} /><PaymentReminderQueue members={members} /><MemberManagementList members={filteredMembers} onManage={openMember} />{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Tente outro nome.</span></div>}{(selectedMember || memberLoading) && <MemberManagementDetail member={selectedMember} loading={memberLoading} saving={memberSaving} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} />}</>}
+      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Quem está em dia e quem precisa de ação.</h2></div></header><div className="admin-toolbar"><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar nome, e-mail ou WhatsApp" /></label><label className="filter-field"><span className="sr-only">Filtrar membros</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value as typeof memberFilter)}><option value="all">Todos</option><option value="attention">Precisa de ação</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select></label><span>{filteredMembers.length} de {members.length}</span></div><PaymentReminderQueue members={members} /><MemberManagementList members={filteredMembers} onManage={openMember} /><MemberImportPanel onImported={refreshMembers} />{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Ajuste a busca ou o filtro.</span></div>}{(selectedMember || memberLoading) && <MemberManagementDetail member={selectedMember} loading={memberLoading} saving={memberSaving} refreshing={memberRefreshing} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} onRefresh={refreshMemberBilling} />}</>}
     </section>
     <nav className="admin-mobile-nav" aria-label="Gestão"><button className={tab === "resumo" ? "active" : ""} aria-current={tab === "resumo" ? "page" : undefined} onClick={() => setTab("resumo")}>CRM</button><button className={tab === "membros" ? "active" : ""} aria-current={tab === "membros" ? "page" : undefined} onClick={() => setTab("membros")}>Membros</button></nav>
   </main></div>;

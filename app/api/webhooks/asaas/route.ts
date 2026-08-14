@@ -1,4 +1,5 @@
 import { asaasRequest } from "../../../../lib/asaas";
+import { reconcileMemberBilling } from "../../../../lib/billing-reconciliation";
 import { runtimeEnv, supabaseAdmin, SupabaseRequestError } from "../../../../lib/supabase-server";
 
 type AsaasPayment = {
@@ -13,9 +14,15 @@ type AsaasPayment = {
   invoiceUrl?: string;
 };
 
-type AsaasEvent = { id?: string; event?: string; payment?: AsaasPayment; subscription?: { id?: string; externalReference?: string } };
+type AsaasEvent = {
+  id?: string;
+  event?: string;
+  payment?: AsaasPayment;
+  subscription?: { id?: string; externalReference?: string };
+  checkout?: { id?: string; status?: string; externalReference?: string; customer?: string };
+};
 type StoredEvent = { id: string; processed_at: string | null };
-type SubscriptionRow = { id: string };
+type SubscriptionRow = { id: string; member_id?: string };
 type MemberRow = { id: string; joined_at: string | null };
 
 const receivedEvents = new Set(["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]);
@@ -59,6 +66,28 @@ export async function POST(request: Request) {
         prefer: "resolution=ignore-duplicates,return=minimal",
         body: { id: payload.id, event_type: payload.event, payload, processed_at: null },
       });
+    }
+
+    if (payload.event.startsWith("CHECKOUT_")) {
+      const checkoutId = payload.checkout?.id;
+      let memberId = payload.checkout?.externalReference;
+      if (!memberId && checkoutId) {
+        const subscription = (await supabaseAdmin<SubscriptionRow[]>("subscriptions", {
+          query: { select: "id,member_id", asaas_checkout_id: `eq.${checkoutId}`, limit: "1" },
+        }))[0];
+        memberId = subscription?.member_id;
+      }
+      if (!memberId) throw new SupabaseRequestError("Checkout sem referência do membro.", 409);
+      if (payload.event === "CHECKOUT_PAID") {
+        const reconciliation = await reconcileMemberBilling(memberId, { checkoutId });
+        if (!reconciliation.found) throw new SupabaseRequestError("Checkout pago ainda sem assinatura conciliável.", 409);
+      }
+      await supabaseAdmin("webhook_events", {
+        method: "PATCH",
+        query: { id: `eq.${payload.id}` },
+        body: { event_type: payload.event, payload, processed_at: new Date().toISOString(), processing_error: null },
+      });
+      return Response.json({ received: true, reconciled: payload.event === "CHECKOUT_PAID" });
     }
 
     let payment = payload.payment;

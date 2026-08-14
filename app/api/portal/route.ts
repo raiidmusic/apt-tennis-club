@@ -1,6 +1,7 @@
 import { getSession } from "../../../lib/auth";
 import { asaasRequest } from "../../../lib/asaas";
-import { supabaseAdmin } from "../../../lib/supabase-server";
+import { reconcileMemberBilling } from "../../../lib/billing-reconciliation";
+import { supabaseAdmin, SupabaseRequestError } from "../../../lib/supabase-server";
 
 type MemberRow = {
   id: string; name: string; email: string; whatsapp: string; cpf_last4: string;
@@ -13,29 +14,26 @@ const clubLinks = {
   whatsappCommunityUrl: "https://chat.whatsapp.com/EJOW47yPnwM0q9Zfm6CaUH?s=cl&p=i&ilr=2",
 };
 
-export async function GET(request: Request) {
-  const session = await getSession(request).catch(() => null);
-  if (!session?.memberId) return Response.json({ error: "Faça login para acessar sua participação." }, { status: 401 });
-  try {
+async function portalPayload(memberId: string) {
     const [members, subscriptions, payments] = await Promise.all([
       supabaseAdmin<MemberRow[]>("members", {
-        query: { select: "id,name,email,whatsapp,cpf_last4,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at", id: `eq.${session.memberId}`, limit: "1" },
+        query: { select: "id,name,email,whatsapp,cpf_last4,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at", id: `eq.${memberId}`, limit: "1" },
       }),
       supabaseAdmin<Array<Record<string, unknown>>>("subscriptions", {
-        query: { select: "id,status,amount_cents,next_due_date,current_period_end,cancel_at_period_end,asaas_subscription_id", member_id: `eq.${session.memberId}`, limit: "1" },
+        query: { select: "id,status,amount_cents,next_due_date,current_period_end,cancel_at_period_end,asaas_subscription_id,asaas_checkout_url", member_id: `eq.${memberId}`, limit: "1" },
       }),
       supabaseAdmin<Array<Record<string, unknown>>>("payments", {
-        query: { select: "id,status,value_cents,due_date,paid_at,invoice_url,created_at", member_id: `eq.${session.memberId}`, order: "created_at.desc", limit: "24" },
+        query: { select: "id,status,value_cents,due_date,paid_at,invoice_url,created_at", member_id: `eq.${memberId}`, order: "created_at.desc", limit: "24" },
       }),
     ]);
     const member = members[0];
-    if (!member) return Response.json({ error: "Cadastro não encontrado." }, { status: 404 });
+    if (!member) throw new SupabaseRequestError("Cadastro não encontrado.", 404);
     const subscription = subscriptions[0] || null;
     const currentPeriodEnd = typeof subscription?.current_period_end === "string" ? subscription.current_period_end : null;
     const paidAccessRemains = member.participation_status === "cancellation_requested" &&
       Boolean(currentPeriodEnd && currentPeriodEnd >= new Date().toISOString().slice(0, 10));
     const accessActive = member.participation_status === "active" || member.participation_status === "courtesy" || paidAccessRemains;
-    return Response.json({
+    return {
       member: {
         id: member.id, name: member.name, email: member.email, whatsapp: member.whatsapp,
         cpfMasked: `***.***.***-${member.cpf_last4}`, classLevel: member.class_level,
@@ -47,18 +45,68 @@ export async function GET(request: Request) {
       },
       subscription,
       payments,
-    });
-  } catch {
-    return Response.json({ error: "Não foi possível carregar sua participação." }, { status: 500 });
+    };
+}
+
+export async function GET(request: Request) {
+  const session = await getSession(request).catch(() => null);
+  if (!session?.memberId) return Response.json({ error: "Faça login para acessar sua participação." }, { status: 401 });
+  try {
+    return Response.json(await portalPayload(session.memberId));
+  } catch (error) {
+    const status = error instanceof SupabaseRequestError ? error.status : 500;
+    return Response.json({ error: error instanceof SupabaseRequestError ? error.message : "Não foi possível carregar sua participação." }, { status });
   }
 }
 
 export async function PATCH(request: Request) {
   const session = await getSession(request).catch(() => null);
   if (!session?.memberId) return Response.json({ error: "Faça login para continuar." }, { status: 401 });
-  const payload = await request.json() as { action?: string };
-  if (payload.action !== "request_cancellation") return Response.json({ error: "Ação inválida." }, { status: 400 });
+  const payload = await request.json() as { action?: string; name?: string; whatsapp?: string };
   try {
+    if (payload.action === "refresh_billing") {
+      const result = await reconcileMemberBilling(session.memberId);
+      return Response.json({ reconciled: true, ...result, portal: await portalPayload(session.memberId) });
+    }
+
+    if (payload.action === "update_profile") {
+      const name = payload.name?.trim().replace(/\s+/g, " ") || "";
+      const whatsapp = payload.whatsapp?.replace(/\D/g, "") || "";
+      if (name.length < 2 || name.length > 100 || whatsapp.length < 10 || whatsapp.length > 13) {
+        return Response.json({ error: "Confira o nome e o WhatsApp com DDD." }, { status: 400 });
+      }
+      const rows = await supabaseAdmin<MemberRow[]>("members", {
+        method: "PATCH",
+        query: { id: `eq.${session.memberId}` },
+        prefer: "return=representation",
+        body: { name, whatsapp, updated_at: new Date().toISOString() },
+      });
+      if (!rows[0]) return Response.json({ error: "Cadastro não encontrado." }, { status: 404 });
+      await supabaseAdmin("audit_logs", {
+        method: "POST",
+        body: { actor: session.email, action: "member.profile_updated", entity_type: "member", entity_id: session.memberId, metadata: { changed: ["name", "whatsapp"] } },
+      });
+      return Response.json({ updated: true, member: { name: rows[0].name, whatsapp: rows[0].whatsapp } });
+    }
+
+    if (payload.action === "request_card_change") {
+      const subscriptions = await supabaseAdmin<Array<{ asaas_subscription_id: string | null; asaas_checkout_url: string | null; status: string }>>("subscriptions", {
+        query: { select: "asaas_subscription_id,asaas_checkout_url,status", member_id: `eq.${session.memberId}`, limit: "1" },
+      });
+      const subscription = subscriptions[0];
+      if (!subscription) return Response.json({ error: "Assinatura não encontrada." }, { status: 404 });
+      if (!subscription.asaas_subscription_id && subscription.asaas_checkout_url) {
+        return Response.json({ requested: false, checkoutUrl: subscription.asaas_checkout_url });
+      }
+      const message = "Solicitação do membro: trocar o cartão da assinatura por um novo checkout hospedado do Asaas.";
+      await Promise.all([
+        supabaseAdmin("admin_notes", { method: "POST", body: { member_id: session.memberId, body: message, created_by: session.email } }),
+        supabaseAdmin("audit_logs", { method: "POST", body: { actor: session.email, action: "membership.card_change_requested", entity_type: "member", entity_id: session.memberId } }),
+      ]);
+      return Response.json({ requested: true });
+    }
+
+    if (payload.action !== "request_cancellation") return Response.json({ error: "Ação inválida." }, { status: 400 });
     const subscriptions = await supabaseAdmin<Array<{ id: string; asaas_subscription_id: string | null; status: string; current_period_end: string | null }>>("subscriptions", {
       query: { select: "id,asaas_subscription_id,status,current_period_end", member_id: `eq.${session.memberId}`, limit: "1" },
     });
@@ -92,7 +140,15 @@ export async function PATCH(request: Request) {
       }),
     ]);
     return Response.json({ cancelled: true, accessUntil: accessRemains ? accessUntil : null });
-  } catch {
-    return Response.json({ error: "Não foi possível cancelar a renovação agora." }, { status: 500 });
+  } catch (error) {
+    const status = error instanceof SupabaseRequestError ? error.status : 500;
+    const fallback = payload.action === "refresh_billing"
+      ? "Não foi possível atualizar sua situação financeira agora."
+      : payload.action === "update_profile"
+        ? "Não foi possível salvar seu cadastro agora."
+        : payload.action === "request_card_change"
+          ? "Não foi possível registrar a troca do cartão agora."
+          : "Não foi possível cancelar a renovação agora.";
+    return Response.json({ error: error instanceof SupabaseRequestError ? error.message : fallback }, { status });
   }
 }

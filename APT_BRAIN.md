@@ -218,7 +218,8 @@ Only one task may be `IN_PROGRESS`. Construction starts only after the user sele
 
 ### Current hard blockers observed on the official domain
 
-- Production Asaas API key, monthly amount and live signed webhook proof are absent; the saved webhook remains disabled.
+- `CPF_HASH_SECRET` was generated and saved as a Sensitive Vercel variable for Production and Preview on 2026-08-14. Production redeploy `dpl_6Fa8JU9hMe3J7VgZb4CvGB9oC7Wu` is Ready on source `f7b4329`; the previous visible CPF-configuration block is cleared at runtime only by this deployment. The secret value was not recorded, displayed or committed.
+- Production Asaas API key and monthly amount are present as Sensitive variables; live signed webhook proof is still absent and the saved webhook remains disabled.
 - A valid invited registration, authenticated management data load and member portal have not yet been proved against the exact production runtime. That controlled test must happen before importing the roster or activating recurring charges.
 
 ## Recommended execution sequence
@@ -404,6 +405,14 @@ A task is `DONE` only when:
 
 - The final CRM/member-card source commit `f7b4329` (`feat: deliver operational crm and member cards`) was published to `raiidmusic/apt-tennis-club` `main` through the authenticated GitHub Desktop client. The remote `main` SHA was read back and matches `f7b4329`; the local branch has no pending source changes relative to `origin/main`.
 - Vercel reported a successful deployment for that commit. The official host `https://www.apttennis.com.br/` and `https://www.apttennis.com.br/gestao` each returned HTTPS 200 from Vercel after the deployment. This proves source publication, platform deployment and hostname routing; authenticated visual verification of the management workflow remains a separate launch check.
+
+## Production Auth signup correction — 2026-08-14
+
+- A controlled invited registration reached Supabase Auth after the CPF secret deployment and returned `Database error creating new user`. Auth logs identified the exact database cause on `POST /admin/users`: legacy trigger `on_auth_user_created` called `public.handle_new_user`, whose unqualified `user_status` cast failed in the Auth execution context and aborted the transaction.
+- The current APT registration route owns member creation in canonical `public.members`; no application code reads or writes the legacy `public.profiles` automation. Production migration `20260814193323_remove_legacy_auth_trigger` therefore removed only that custom trigger and its sole function. It did not delete users, profiles or any table row. Read-back confirms zero custom triggers on `auth.users` and zero remaining `public.handle_new_user` functions.
+- The failed attempt created no Auth user, hosted checkout or recurring charge. Database reconciliation reports zero inconclusive checkout attempts and zero configured checkouts. The invitation remains available for the owner-controlled retry; that retry is the remaining end-to-end Auth/Asaas proof and must be completed by the owner because it can create a real recurring checkout.
+- Verification: Supabase recorded the migration; 20/20 focused tests pass; TypeScript passes; lint has zero errors and 20 existing non-blocking image/legacy-script warnings; the Next 16.2.6 production build compiled, typechecked and generated all 24 pages. Security and performance advisors were rerun. The canonical APT Hub tables remain intentionally server-only with RLS and no client policies; unrelated legacy-table exposure/search-path warnings remain scoped to APT-019 rather than being changed speculatively during an Auth incident.
+- Correctness/security review: removing the obsolete shared Auth side effect fixes every Auth-user creation caller at the root without weakening validation or RLS. Existing legacy profile rows were preserved. `ponytail-review`: lean; one obsolete trigger/function removal is smaller and safer than repairing enum casts and continuing to duplicate users into an unused model. The whole-repository `ponytail-audit` was not repeated because dependencies and application structure did not change.
 
 ## Next decision
 

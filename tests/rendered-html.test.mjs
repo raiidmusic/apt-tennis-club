@@ -47,6 +47,13 @@ test("Supabase migration protects the complete membership lifecycle", async () =
   assert.doesNotMatch(sql, /cpf\s+text/i);
 });
 
+test("keeps legacy profiles automation out of Supabase Auth signup", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20260814193323_remove_legacy_auth_trigger.sql", import.meta.url), "utf8");
+  assert.match(sql, /drop trigger if exists on_auth_user_created on auth\.users/);
+  assert.match(sql, /drop function if exists public\.handle_new_user/);
+  assert.doesNotMatch(sql, /drop table|delete from|truncate/i);
+});
+
 test("uses one canonical application record and renders the operational CRM", async () => {
   const [route, client] = await Promise.all([
     readFile(new URL("../app/api/requerimentos/route.ts", import.meta.url), "utf8"),

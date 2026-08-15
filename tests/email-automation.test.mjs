@@ -11,6 +11,9 @@ test("keeps transactional Resend mail server-only and idempotent", async () => {
   assert.match(email, /function emailHtml/);
   assert.match(email, /logo-apt1\.svg/);
   assert.doesNotMatch(email, /apt-logo-light\.png/);
+  assert.match(email, /supported-color-schemes/);
+  assert.match(email, /prefers-color-scheme:dark/);
+  assert.match(email, /max-width:600px/);
   assert.match(email, /APT Tennis Club · Brasília/);
   assert.match(email, /html: emailHtml\(input\.subject, input\.text, currentEnv\.APT_PUBLIC_URL\)/);
   assert.doesNotMatch(email, /cpf|card|cvv|ASAAS_API_KEY/i);

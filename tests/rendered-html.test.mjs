@@ -132,8 +132,11 @@ test("reconciles billing without collecting card data in the APT portal", async 
   assert.match(reconciliation, /externalReference: memberId/);
   assert.match(reconciliation, /localPayment\?\.asaas_payment_id/);
   assert.match(reconciliation, /customer: localSubscription\.asaas_customer_id/);
+  assert.match(reconciliation, /email: member\.email/);
+  assert.match(reconciliation, /normalizedEmail\(customer\.email\).*normalizedEmail\(member\.email\)/s);
   assert.match(reconciliation, /normalizedName\(customer\.name\).*normalizedName\(member\.name\)/s);
   assert.match(reconciliation, /cpfCnpj.*endsWith\(member\.cpf_last4/s);
+  assert.match(reconciliation, /customer: recoveredCustomerId/);
   assert.match(reconciliation, /sendBillingTransitionEmails/);
   assert.match(webhook, /payload\.event === "CHECKOUT_PAID"/);
   assert.match(webhook, /resolveMemberId/);

@@ -27,6 +27,7 @@ type AsaasSubscriptionSnapshot = {
 type AsaasCustomerSnapshot = {
   id?: string;
   name?: string;
+  email?: string;
   cpfCnpj?: string;
 };
 
@@ -60,6 +61,10 @@ function normalizedName(value = "") {
   return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function normalizedEmail(value = "") {
+  return value.trim().toLowerCase();
+}
+
 export async function reconcileMemberBilling(memberId: string, hints: { checkoutId?: string } = {}) {
   const [member, localSubscription, localPayment] = await Promise.all([
     supabaseAdmin<LocalMember[]>("members", {
@@ -91,16 +96,25 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
     providerSubscription = (await readJson<Collection<AsaasSubscriptionSnapshot>>(response, "O Asaas não respondeu à busca da assinatura do cliente.")).data?.[0] || null;
   }
   let recoveredCustomerId: string | undefined;
-  if (!providerSubscription && !localSubscription.asaas_customer_id && member.cpf_last4) {
-    const query = new URLSearchParams({ name: member.name, limit: "10" });
-    const response = await asaasRequest(`/customers?${query}`);
-    const customers = (await readJson<Collection<AsaasCustomerSnapshot>>(response, "O Asaas não respondeu à recuperação do cliente.")).data || [];
-    const matches = customers.filter((customer) => customer.id
-      && normalizedName(customer.name) === normalizedName(member.name)
-      && (customer.cpfCnpj || "").replace(/\D/g, "").endsWith(member.cpf_last4 || ""));
-    if (matches.length === 1) {
-      recoveredCustomerId = matches[0].id;
-      const subscriptionQuery = new URLSearchParams({ customer: recoveredCustomerId || "", limit: "1", sort: "dateCreated", order: "desc" });
+  if (!providerSubscription && !localSubscription.asaas_customer_id) {
+    const emailQuery = new URLSearchParams({ email: member.email, limit: "10" });
+    const emailResponse = await asaasRequest(`/customers?${emailQuery}`);
+    const emailCustomers = (await readJson<Collection<AsaasCustomerSnapshot>>(emailResponse, "O Asaas não respondeu à recuperação do cliente.")).data || [];
+    const emailMatches = emailCustomers.filter((customer) => customer.id && normalizedEmail(customer.email) === normalizedEmail(member.email));
+    if (emailMatches.length === 1) recoveredCustomerId = emailMatches[0].id;
+
+    if (!recoveredCustomerId && member.cpf_last4) {
+      const nameQuery = new URLSearchParams({ name: member.name, limit: "10" });
+      const nameResponse = await asaasRequest(`/customers?${nameQuery}`);
+      const nameCustomers = (await readJson<Collection<AsaasCustomerSnapshot>>(nameResponse, "O Asaas não respondeu à recuperação do cliente.")).data || [];
+      const nameMatches = nameCustomers.filter((customer) => customer.id
+        && normalizedName(customer.name) === normalizedName(member.name)
+        && (customer.cpfCnpj || "").replace(/\D/g, "").endsWith(member.cpf_last4 || ""));
+      if (nameMatches.length === 1) recoveredCustomerId = nameMatches[0].id;
+    }
+
+    if (recoveredCustomerId) {
+      const subscriptionQuery = new URLSearchParams({ customer: recoveredCustomerId, limit: "1", sort: "dateCreated", order: "desc" });
       const subscriptionResponse = await asaasRequest(`/subscriptions?${subscriptionQuery}`);
       providerSubscription = (await readJson<Collection<AsaasSubscriptionSnapshot>>(subscriptionResponse, "O Asaas não respondeu à assinatura recuperada.")).data?.[0] || null;
     }
@@ -110,6 +124,7 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
     ? [`/subscriptions/${encodeURIComponent(providerSubscription.id)}/payments`]
     : [
         ...(checkoutId ? [`/payments?${new URLSearchParams({ checkoutSession: checkoutId, limit: "24" })}`] : []),
+        ...(recoveredCustomerId ? [`/payments?${new URLSearchParams({ customer: recoveredCustomerId, limit: "24" })}`] : []),
         `/payments?${new URLSearchParams({ externalReference: memberId, limit: "24" })}`,
       ];
   let payments: AsaasPaymentSnapshot[] = [];

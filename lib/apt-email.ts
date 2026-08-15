@@ -20,7 +20,12 @@ function recipients(value: string | string[]) {
 }
 
 export function managementRecipients() {
-  return recipients(runtimeEnv().APT_APPLICATION_TO_EMAIL || "");
+  const currentEnv = runtimeEnv();
+  return recipients(currentEnv.APT_APPLICATION_TO_EMAIL || currentEnv.APT_ADMIN_EMAILS || "");
+}
+
+export function managementReplyTo() {
+  return managementRecipients()[0];
 }
 
 export async function sendAptEmail(input: EmailInput): Promise<EmailDeliveryStatus> {

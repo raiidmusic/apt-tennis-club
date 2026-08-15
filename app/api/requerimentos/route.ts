@@ -1,5 +1,5 @@
 import { requireAdmin } from "../../../lib/auth";
-import { sendManagementEmail, sendMemberEmail } from "../../../lib/apt-email";
+import { managementReplyTo, sendManagementEmail, sendMemberEmail } from "../../../lib/apt-email";
 import { runtimeEnv, sha256, supabaseAdmin, SupabaseRequestError } from "../../../lib/supabase-server";
 
 const labels: Record<string, string> = {
@@ -81,7 +81,7 @@ async function sendInviteEmail(application: InviteApplication, inviteToken: stri
   const inviteUrl = `${origin}/cadastro?convite=${encodeURIComponent(inviteToken)}`;
   return sendMemberEmail({
     to: application.email,
-    replyTo: currentEnv.APT_APPLICATION_TO_EMAIL,
+    replyTo: managementReplyTo(),
     subject: "Seu cadastro APT foi aprovado",
     text: `Olá, ${application.name}.\n\nSeu requerimento foi aprovado. Conclua seu cadastro e sua assinatura pelo link privado:\n${inviteUrl}\n\nO link expira em 7 dias.`,
     flow: "invite",

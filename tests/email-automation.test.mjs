@@ -7,7 +7,7 @@ test("keeps transactional Resend mail server-only and idempotent", async () => {
   assert.match(email, /https:\/\/api\.resend\.com\/emails/);
   assert.match(email, /"User-Agent": "APT-Tennis-Club\/1\.0"/);
   assert.match(email, /"Idempotency-Key": input\.idempotencyKey/);
-  assert.match(email, /APT_APPLICATION_TO_EMAIL/);
+  assert.match(email, /APT_APPLICATION_TO_EMAIL.*APT_ADMIN_EMAILS/);
   assert.doesNotMatch(email, /cpf|card|cvv|ASAAS_API_KEY/i);
 });
 

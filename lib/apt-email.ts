@@ -30,7 +30,7 @@ function linkedText(value: string) {
 
 function emailHtml(subject: string, text: string, publicUrl?: string) {
   const logo = publicUrl
-    ? `<img src="${escapeHtml(`${publicUrl.replace(/\/$/, "")}/apt-logo-light.png`)}" width="92" alt="APT Tennis Club" style="display:block;width:92px;height:auto;border:0;" />`
+    ? `<img src="${escapeHtml(`${publicUrl.replace(/\/$/, "")}/logo-apt1.svg`)}" width="92" alt="APT Tennis Club" style="display:block;width:92px;height:auto;border:0;" />`
     : `<strong style="font-family:Arial,sans-serif;font-size:24px;letter-spacing:-1px;">apt.</strong>`;
   const body = text.trim().split(/\n{2,}/).filter(Boolean)
     .map((paragraph) => `<p style="margin:0 0 18px;color:#25344a;font-family:Arial,sans-serif;font-size:16px;line-height:1.65;">${linkedText(paragraph).replace(/\n/g, "<br />")}</p>`)

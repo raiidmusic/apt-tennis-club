@@ -45,6 +45,11 @@ export function isAdminEmail(email: string) {
   ).has(normalizedEmail);
 }
 
+export function isValidNewPassword(password: string) {
+  return password.length >= 12 && password.length <= 128 &&
+    /[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password);
+}
+
 export async function getSession(request: Request): Promise<SessionUser | null> {
   const accessToken = parseCookies(request)[ACCESS_COOKIE];
   if (!accessToken) return null;

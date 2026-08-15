@@ -1,7 +1,10 @@
 import { accessCookie } from "../../../../lib/auth";
+import { requireTrustedOrigin } from "../../../../lib/request-security";
 import { signInWithPassword, SupabaseRequestError } from "../../../../lib/supabase-server";
 
 export async function POST(request: Request) {
+  const blocked = requireTrustedOrigin(request);
+  if (blocked) return blocked;
   try {
     const payload = await request.json() as { email?: string; password?: string };
     const email = payload.email?.trim().toLowerCase() || "";

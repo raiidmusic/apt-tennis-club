@@ -1,6 +1,8 @@
 import { asaasCheckoutUrl, asaasRequest } from "../../../lib/asaas";
 import { sendManagementEmail, sendMemberEmail } from "../../../lib/apt-email";
+import { isValidNewPassword } from "../../../lib/auth";
 import { isValidCpf } from "../../../lib/cpf";
+import { requireTrustedOrigin } from "../../../lib/request-security";
 import { createAuthUser, deleteAuthUser, runtimeEnv, sha256, supabaseAdmin, SupabaseRequestError } from "../../../lib/supabase-server";
 
 type InviteRow = {
@@ -224,6 +226,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const blocked = requireTrustedOrigin(request);
+  if (blocked) return blocked;
   try {
     const payload = await request.json() as {
       inviteToken?: string;
@@ -251,8 +255,8 @@ export async function POST(request: Request) {
       if (!groupLink) return Response.json({ error: "Este link de recadastro não é válido ou já expirou." }, { status: 403 });
       return qualifyGroupRegistration({ groupLink, name, email, phone });
     }
-    if (!inviteToken || groupToken || !name || !isValidCpf(cpf) || !email || phone.length < 10 || phone.length > 13 || password.length < 8 || payload.consent !== true) {
-      return Response.json({ error: "Confira o link, os dados e a senha de acesso." }, { status: 400 });
+    if (!inviteToken || groupToken || !name || !isValidCpf(cpf) || !email || phone.length < 10 || phone.length > 13 || !isValidNewPassword(password) || payload.consent !== true) {
+      return Response.json({ error: "Confira o link, os dados e a senha: use 12 caracteres, maiúscula, minúscula e número." }, { status: 400 });
     }
 
     const invite = await findInvite(inviteToken);

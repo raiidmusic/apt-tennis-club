@@ -1,5 +1,6 @@
 import { requireAdmin } from "../../../../lib/auth";
 import { AthleteImportInput, prepareAthleteImport } from "../../../../lib/member-import";
+import { requireTrustedOrigin } from "../../../../lib/request-security";
 import { runtimeEnv, sha256, supabaseAdmin } from "../../../../lib/supabase-server";
 
 type ExistingMember = {
@@ -12,6 +13,8 @@ type ExistingMember = {
 };
 
 export async function POST(request: Request) {
+  const blocked = requireTrustedOrigin(request);
+  if (blocked) return blocked;
   const admin = await requireAdmin(request).catch(() => null);
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
 

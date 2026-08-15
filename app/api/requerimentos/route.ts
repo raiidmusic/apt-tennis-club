@@ -1,5 +1,6 @@
 import { requireAdmin } from "../../../lib/auth";
 import { managementReplyTo, sendManagementEmail, sendMemberEmail } from "../../../lib/apt-email";
+import { requireTrustedOrigin } from "../../../lib/request-security";
 import { runtimeEnv, sha256, supabaseAdmin, SupabaseRequestError } from "../../../lib/supabase-server";
 
 const labels: Record<string, string> = {
@@ -90,6 +91,8 @@ async function sendInviteEmail(application: InviteApplication, inviteToken: stri
 }
 
 export async function POST(request: Request) {
+  const blocked = requireTrustedOrigin(request);
+  if (blocked) return blocked;
   try {
     const payload = await request.json() as { answers?: Record<string, AnswerValue>; consent?: boolean };
     const answers = payload.answers || {};
@@ -175,6 +178,8 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const blocked = requireTrustedOrigin(request);
+  if (blocked) return blocked;
   const admin = await requireAdmin(request).catch(() => null);
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
   try {

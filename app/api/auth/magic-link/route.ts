@@ -1,7 +1,10 @@
 import { accessCookie, isAdminEmail } from "../../../../lib/auth";
+import { requireTrustedOrigin } from "../../../../lib/request-security";
 import { getAuthUser, runtimeEnv, sendMagicLink, SupabaseRequestError } from "../../../../lib/supabase-server";
 
 export async function POST(request: Request) {
+  const blocked = requireTrustedOrigin(request);
+  if (blocked) return blocked;
   try {
     const payload = await request.json() as { action?: string; email?: string; accessToken?: string };
     if (payload.action === "request") {

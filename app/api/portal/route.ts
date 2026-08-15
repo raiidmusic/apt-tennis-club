@@ -2,6 +2,7 @@ import { getSession } from "../../../lib/auth";
 import { asaasRequest } from "../../../lib/asaas";
 import { sendManagementEmail, sendMemberEmail } from "../../../lib/apt-email";
 import { reconcileMemberBilling } from "../../../lib/billing-reconciliation";
+import { requireTrustedOrigin } from "../../../lib/request-security";
 import { supabaseAdmin, SupabaseRequestError } from "../../../lib/supabase-server";
 
 type MemberRow = {
@@ -61,6 +62,8 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const blocked = requireTrustedOrigin(request);
+  if (blocked) return blocked;
   const session = await getSession(request).catch(() => null);
   if (!session?.memberId) return Response.json({ error: "Faça login para continuar." }, { status: 401 });
   const payload = await request.json() as { action?: string; name?: string; whatsapp?: string };

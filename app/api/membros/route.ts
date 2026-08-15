@@ -1,5 +1,6 @@
 import { requireAdmin } from "../../../lib/auth";
 import { reconcileMemberBilling } from "../../../lib/billing-reconciliation";
+import { requireTrustedOrigin } from "../../../lib/request-security";
 import { supabaseAdmin } from "../../../lib/supabase-server";
 
 type MemberRow = {
@@ -83,6 +84,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const blocked = requireTrustedOrigin(request);
+  if (blocked) return blocked;
   const admin = await requireAdmin(request).catch(() => null);
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
   try {
@@ -102,6 +105,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const blocked = requireTrustedOrigin(request);
+  if (blocked) return blocked;
   const admin = await requireAdmin(request).catch(() => null);
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
   try {

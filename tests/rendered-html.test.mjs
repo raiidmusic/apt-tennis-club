@@ -192,6 +192,45 @@ test("uses only the new Supabase server secret for administrative calls", async 
   assert.match(supabase, /\.\.\.supabaseSecretHeaders\(secretKey\)/);
 });
 
+test("protects browser writes and sensitive API responses at the application boundary", async () => {
+  const [security, nextConfig, webhook, ...browserWriteRoutes] = await Promise.all([
+    readFile(new URL("../lib/request-security.ts", import.meta.url), "utf8"),
+    readFile(new URL("../next.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/webhooks/asaas/route.ts", import.meta.url), "utf8"),
+    ...[
+      "../app/api/requerimentos/route.ts", "../app/api/cadastros/route.ts", "../app/api/portal/route.ts",
+      "../app/api/membros/route.ts", "../app/api/membros/importacao/route.ts", "../app/api/auth/login/route.ts",
+      "../app/api/auth/logout/route.ts", "../app/api/auth/recovery/route.ts", "../app/api/auth/magic-link/route.ts",
+    ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  ]);
+  assert.match(security, /APT_PUBLIC_URL/);
+  assert.match(security, /VERCEL_URL/);
+  assert.match(security, /Origem da solicitação não autorizada/);
+  assert.match(nextConfig, /Content-Security-Policy/);
+  assert.match(nextConfig, /frame-ancestors 'none'/);
+  assert.match(nextConfig, /Strict-Transport-Security/);
+  assert.match(nextConfig, /Cache-Control.*no-store/);
+  for (const route of browserWriteRoutes) assert.match(route, /requireTrustedOrigin\(request\)/);
+  assert.doesNotMatch(webhook, /requireTrustedOrigin/);
+  assert.match(webhook, /asaas-access-token/);
+});
+
+test("publishes the official transparent identity in social previews and installable PWA metadata", async () => {
+  const [layout, manifest, landingSpec] = await Promise.all([
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/manifest.ts", import.meta.url), "utf8"),
+    readFile(new URL("../APT_LANDING_SPEC.md", import.meta.url), "utf8"),
+  ]);
+  assert.match(layout, /og-apt-social\.png/);
+  assert.doesNotMatch(layout, /apt-logo-(?:light|navy)\.png/);
+  assert.match(layout, /manifest: "\/manifest\.webmanifest"/);
+  assert.match(layout, /apple-touch-icon\.png/);
+  assert.match(manifest, /display: "standalone"/);
+  assert.match(manifest, /start_url: "\/membros"/);
+  assert.match(manifest, /icon-maskable-512\.png/);
+  assert.match(landingSpec, /logos obrigatórias: `logo-apt1\*\.svg`, `logo-apt2\*\.svg` e `logo-apt3\*\.svg`, sempre transparentes/);
+});
+
 test("renders a real checkout callback state instead of treating it as an invalid invitation", async () => {
   const client = await readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8");
   assert.match(client, /const \[checkoutStatus, setCheckoutStatus\]/);
@@ -211,7 +250,13 @@ test("keeps password recovery inside the official app and Supabase public-auth b
   assert.match(client, /Crie sua nova senha/);
   assert.match(route, /APT_PUBLIC_URL/);
   assert.match(route, /\/redefinir-senha/);
-  assert.match(route, /password\.length < 8/);
+  assert.match(route, /isValidNewPassword\(password\)/);
+  assert.match(client, /minLength=\{12\}/);
+  assert.match(client, /maiúscula, minúscula e número/);
+  const auth = await readFile(new URL("../lib/auth.ts", import.meta.url), "utf8");
+  assert.match(auth, /password\.length >= 12/);
+  assert.match(auth, /\[a-z\]/);
+  assert.match(auth, /\[A-Z\]/);
   assert.match(supabase, /auth\/v1\/recover/);
   assert.match(supabase, /auth\/v1\/user/);
   assert.doesNotMatch(route, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);

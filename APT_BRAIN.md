@@ -1,7 +1,7 @@
 # APT Brain
 
 Last audited: 2026-08-15
-State: APT-022 billing reconciliation is live for the controlled member; final responsive UI/design increment is coded and checked locally, with authenticated production visual proof still pending
+State: authenticated responsive UI and controlled-member billing are live; security hardening, official social preview and PWA identity pass every local gate and await publication; roster-wide billing remains gated by APT-018, APT-019 and signed Asaas Sandbox proof
 Rule: plan, review and audit before construction
 
 ## Purpose
@@ -200,6 +200,29 @@ Only one task may be `IN_PROGRESS`. Construction starts only after the user sele
 | APT-022 | P0 | IN_PROGRESS | Release the complete operational V1 on the official domain. | All eight release gates below pass with production-target evidence; no visible `not configured`, fake state or dead action remains in an authorized journey; first real member can complete recadastro and reach `/membros`; management sees the same application, member, subscription and payment truth. | Explicit user authorization 2026-08-13; gates retain their destructive and financial confirmations |
 
 ## APT-022 V1 release gates — authorized 2026-08-13
+
+### Execution increment authorized 2026-08-15 — cybersecurity baseline
+
+- The owner authorized a proportionate hardening pass focused on protecting personal data and reducing common web-attack exposure before the final release.
+- Source scope: production security headers, no-store API responses, and same-origin validation for browser-initiated writes. The signed Asaas webhook remains a server-to-server exception and continues to validate its own secret before parsing a business event.
+- Platform scope: inspect and stage Vercel Firewall rules for abusive public writes and common exploit probes. Rules must begin in log mode and be reviewed before a user-published production enforcement; no broad geographic, user-agent or webhook block is authorized.
+- Non-goals: no security theater through process-local rate limiting, no replacement auth/database/payment architecture, no new personal-data collection, and no destructive Supabase containment without its explicit backup and approval gate.
+- Acceptance: security headers and write-origin controls are covered by the focused tests; production build and lint pass; Vercel WAF draft and traffic review are separately evidenced before enforcement.
+
+### Progress — CODED, CHECKED LOCALLY; PUBLICATION PENDING
+
+- Every browser-initiated write route now rejects an unapproved `Origin` before parsing its body; the Asaas webhook is intentionally excluded because it is server-to-server and validates `asaas-access-token` first. The permitted origins are the request's exact origin, canonical `APT_PUBLIC_URL`, Vercel's deployment URL and explicit localhost defaults outside production; malformed deployment variables fail closed instead of breaking the boundary.
+- Production responses now use CSP, anti-framing, MIME/referrer/permission, cross-origin isolation and HSTS headers; `/api/*` is explicitly `no-store` to keep membership, application and financial JSON out of browser/CDN caches.
+- Local runtime evidence from the optimized build: `GET /api/auth/session` returned the full header set, explicit `no-store` and `401`; an untrusted login POST returned `403`; the same empty request from its exact local origin passed the boundary and reached the expected input validation with `400`. New registration and recovery passwords now require 12–128 characters with uppercase, lowercase and number; existing login remains compatible. Next and its ESLint config are pinned to `16.3.1`; TypeScript, production build, all 30 focused tests and `git diff --check` pass; lint has zero errors and 21 non-blocking warnings.
+- The Vercel connector available to this workspace exposes only `Guedes' projects`, not the authorized `gaagustavo` account. No Firewall draft was created in the wrong account. Once the authorized project is connected, stage public-write and exploit-probe rules in log mode, inspect traffic, test Preview, then have the owner publish enforcement.
+- `npm audit --omit=dev` after the Next 16.3.1 upgrade reports zero production vulnerabilities. The whole-repository `ponytail-audit` was rerun after the dependency update: the existing D1/Drizzle, Vinext/Cloudflare and design-generator deletion candidates remain task-scoped; no new cuttable complexity was added. Remaining release security work: complete the authorized legacy Supabase containment/reconciliation and obtain signed Asaas Sandbox evidence before production billing. `ponytail-review`: Lean already. Ship.
+
+### Execution increment authorized 2026-08-15 — official social preview and PWA identity
+
+- The owner identified that the live WhatsApp card embedded the obsolete square raster logo and requested the official transparent SVG plus an installable-app icon before the final publication. `APT_LANDING_SPEC.md` already forbids `apt-logo-light.png`/`apt-logo-navy.png` and requires the official transparent `logo-apt*.svg` assets.
+- The new 1200×630 social card is composed from the existing authorized court photograph and the official white `logo-apt1.svg` lockup with no colored box behind it. Metadata now points to the new `/og-apt-social.png` path for both Open Graph and Twitter, avoiding reuse of the obsolete image URL while preserving the raster delivery required by social clients.
+- `app/manifest.ts` publishes the native Next manifest at `/manifest.webmanifest` with standalone display, the protected mobile-first `/membros` start route, APT navy/mineral colors and official 192×192, 512×512, maskable 512×512 and Apple Touch 180×180 icons derived from `logo-apt3.svg`. No service worker, offline cache, dependency or unsupported offline claim was added.
+- Asset inspection confirms every declared dimension and a fully opaque app-icon canvas; the transparent identity is preserved inside the social composition. The optimized local runtime returned the manifest, social card and every declared icon with HTTP 200 and `image/png`; rendered metadata exposed the new social URL, manifest and Apple icon. The focused identity/PWA regression is included in the 30/30 passing suite. `ponytail-review`: Lean already. Ship.
 
 ### Execution increment authorized 2026-08-15 — final responsive product design
 

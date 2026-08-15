@@ -694,9 +694,9 @@ export function PortalPage() {
       profile={<div className="member-profile"><span>{initials}</span><div><strong>{member.name}</strong><small>{member.classLevel || "Classe a confirmar"}</small></div></div>}
       items={[
         { id: "inicio", label: "Início", icon: Home, active: tab === "inicio", onSelect: () => setTab("inicio") },
-        rankingLink ? { id: "ranking", label: "Ranking no Tweener", icon: Trophy, href: rankingLink, external: true } : { id: "ranking", label: "Ranking no Tweener", icon: Trophy, onSelect: openLockedRanking },
+        rankingLink ? { id: "ranking", label: "Ranking no Tweener", mobileLabel: "Ranking", icon: Trophy, href: rankingLink, external: true } : { id: "ranking", label: "Ranking no Tweener", mobileLabel: "Ranking", icon: Trophy, onSelect: openLockedRanking },
         { id: "pagamentos", label: "Pagamentos", icon: CreditCard, active: tab === "pagamentos", onSelect: () => setTab("pagamentos") },
-        { id: "perfil", label: "Meu cadastro", icon: UserRound, active: tab === "perfil", onSelect: () => setTab("perfil") },
+        { id: "perfil", label: "Meu cadastro", mobileLabel: "Perfil", icon: UserRound, active: tab === "perfil", onSelect: () => setTab("perfil") },
       ]}
       status={<div className="rail-status"><i /> <span>{accessLabel}</span></div>}
       footer={<SignOutButton />}
@@ -1053,8 +1053,8 @@ export function AdminPage() {
       eyebrow="Gestão APT"
       title="Clube em movimento"
       items={[
-        { id: "resumo", label: "CRM e visão geral", icon: ClipboardList, active: tab === "resumo", onSelect: () => setTab("resumo"), badge: attentionCount || undefined },
-        { id: "membros", label: "Membros e cobranças", icon: UsersRound, active: tab === "membros", onSelect: () => setTab("membros") },
+        { id: "resumo", label: "CRM e visão geral", mobileLabel: "Visão geral", icon: ClipboardList, active: tab === "resumo", onSelect: () => setTab("resumo"), badge: attentionCount || undefined },
+        { id: "membros", label: "Membros e cobranças", mobileLabel: "Membros", icon: UsersRound, active: tab === "membros", onSelect: () => setTab("membros") },
       ]}
       status={<div className="sidebar-footer"><span>Integração financeira</span><strong>{asaasConnected ? "Asaas conectado" : "Asaas pendente"}</strong></div>}
       footer={<SignOutButton />}

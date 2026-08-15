@@ -159,10 +159,15 @@ test("keeps protected navigation responsive and accessible", async () => {
   ]);
   assert.match(client, /<ProductSidebar/);
   assert.match(sidebar, /useReducedMotion/);
-  assert.match(sidebar, /role="dialog" aria-modal="true"/);
-  assert.match(sidebar, /event\.key !== "Tab"/);
-  assert.match(styles, /\.product-mobile-nav \{[^}]*display: flex/);
+  assert.match(sidebar, /className="product-mobile-appbar"/);
+  assert.match(sidebar, /className="product-mobile-tabbar"/);
+  assert.match(sidebar, /mobileLabel \|\| item\.label/);
+  assert.doesNotMatch(sidebar, /role="dialog"|aria-modal|mobileOpen|Menu aria-hidden/);
+  assert.match(styles, /\.product-mobile-tabbar \{[^}]*position: fixed/);
+  assert.match(styles, /\.product-mobile-tabbar \{[^}]*env\(safe-area-inset-bottom\)/);
+  assert.match(styles, /\.product-mobile-tabbar__item \{[^}]*min-height: 3\.65rem/);
   assert.match(styles, /@media \(min-width: 64rem\)[\s\S]*\.product-sidebar \{[^}]*display: flex/);
+  assert.match(styles, /@media \(min-width: 64rem\)[\s\S]*\.product-mobile-appbar, \.product-mobile-tabbar \{ display: none/);
   assert.match(styles, /\.product-sidebar__collapse[^}]*width: 2\.75rem; height: 2\.75rem/);
   assert.doesNotMatch(client, /className="(?:member-rail|admin-sidebar|mobile-tabbar|admin-mobile-nav)/);
 });

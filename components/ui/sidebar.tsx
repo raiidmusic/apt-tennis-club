@@ -1,14 +1,15 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import type { ReactNode } from "react";
+import { useState } from "react";
 
 export type ProductSidebarItem = {
   id: string;
   label: string;
+  mobileLabel?: string;
   icon: LucideIcon;
   active?: boolean;
   badge?: string | number;
@@ -49,34 +50,8 @@ function SidebarItems({ items, close }: { items: ProductSidebarItem[]; close?: (
 
 export function ProductSidebar({ ariaLabel, brand, eyebrow, title, items, profile, footer, status, className }: ProductSidebarProps) {
   const [expanded, setExpanded] = useState(true);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const mobileTriggerRef = useRef<HTMLButtonElement>(null);
-  const mobilePanelRef = useRef<HTMLElement>(null);
   const reduceMotion = useReducedMotion();
   const transition = reduceMotion ? { duration: 0 } : spring;
-
-  useEffect(() => {
-    if (!mobileOpen) return;
-    const mobileTrigger = mobileTriggerRef.current;
-    function closeOnEscape(event: KeyboardEvent) { if (event.key === "Escape") setMobileOpen(false); }
-    document.addEventListener("keydown", closeOnEscape);
-    document.body.classList.add("drawer-open");
-    return () => {
-      document.removeEventListener("keydown", closeOnEscape);
-      document.body.classList.remove("drawer-open");
-      mobileTrigger?.focus();
-    };
-  }, [mobileOpen]);
-
-  function keepFocusInSheet(event: ReactKeyboardEvent<HTMLElement>) {
-    if (event.key !== "Tab") return;
-    const focusable = mobilePanelRef.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
-    if (!focusable?.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-  }
 
   return <>
     <motion.aside
@@ -98,21 +73,18 @@ export function ProductSidebar({ ariaLabel, brand, eyebrow, title, items, profil
       <div className="product-sidebar__bottom">{status}{footer}</div>
     </motion.aside>
 
-    <div className="product-mobile-nav" aria-label={ariaLabel}>
+    <header className="product-mobile-appbar">
       <div>{brand}<span>{eyebrow}</span></div>
-      <button ref={mobileTriggerRef} type="button" onClick={() => setMobileOpen(true)} aria-label={`Abrir ${ariaLabel.toLowerCase()}`} aria-expanded={mobileOpen}><Menu aria-hidden="true" size={21} /></button>
-    </div>
-    <AnimatePresence initial={false}>
-      {mobileOpen && <motion.div className="product-mobile-sheet" role="dialog" aria-modal="true" aria-label={ariaLabel} initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={reduceMotion ? { duration: 0 } : { duration: 0.18 }}>
-        <button className="product-mobile-sheet__backdrop" type="button" onClick={() => setMobileOpen(false)} tabIndex={-1} aria-label="Fechar menu" />
-        <motion.aside ref={mobilePanelRef} onKeyDown={keepFocusInSheet} initial={reduceMotion ? false : { x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={transition}>
-          <header><div>{brand}<span>{eyebrow}</span></div><button type="button" autoFocus onClick={() => setMobileOpen(false)} aria-label="Fechar menu"><X aria-hidden="true" size={21} /></button></header>
-          {profile && <div className="product-sidebar__profile">{profile}</div>}
-          <div className="product-mobile-sheet__title"><strong>{title}</strong></div>
-          <SidebarItems items={items} close={() => setMobileOpen(false)} />
-          <div className="product-sidebar__bottom">{status}{footer}</div>
-        </motion.aside>
-      </motion.div>}
-    </AnimatePresence>
+      <div className="product-mobile-appbar__action">{footer}</div>
+    </header>
+    <nav className="product-mobile-tabbar" aria-label={ariaLabel}>
+      {items.map((item) => {
+        const Icon = item.icon;
+        const content = <><span className="product-mobile-tabbar__icon"><Icon aria-hidden="true" size={20} strokeWidth={item.active ? 2.2 : 1.8} />{item.badge !== undefined && <span>{item.badge}</span>}</span><span>{item.mobileLabel || item.label}</span></>;
+        const itemClass = ["product-mobile-tabbar__item", item.active && "product-mobile-tabbar__item--active"].filter(Boolean).join(" ");
+        if (item.href) return <a key={item.id} className={itemClass} href={item.href} target={item.external ? "_blank" : undefined} rel={item.external ? "noreferrer" : undefined} aria-label={item.label} aria-current={item.active ? "page" : undefined}>{content}</a>;
+        return <button key={item.id} className={itemClass} type="button" aria-label={item.label} aria-current={item.active ? "page" : undefined} onClick={item.onSelect}>{content}</button>;
+      })}
+    </nav>
   </>;
 }

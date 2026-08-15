@@ -1,7 +1,7 @@
 # APT Brain
 
-Last audited: 2026-08-14
-State: APT-022 billing reconciliation is live for the controlled member; remaining V1 gates stay tracked and UI/design work is deferred
+Last audited: 2026-08-15
+State: APT-022 billing reconciliation is live for the controlled member; final responsive UI/design increment is coded and checked locally, with authenticated production visual proof still pending
 Rule: plan, review and audit before construction
 
 ## Purpose
@@ -200,6 +200,25 @@ Only one task may be `IN_PROGRESS`. Construction starts only after the user sele
 | APT-022 | P0 | IN_PROGRESS | Release the complete operational V1 on the official domain. | All eight release gates below pass with production-target evidence; no visible `not configured`, fake state or dead action remains in an authorized journey; first real member can complete recadastro and reach `/membros`; management sees the same application, member, subscription and payment truth. | Explicit user authorization 2026-08-13; gates retain their destructive and financial confirmations |
 
 ## APT-022 V1 release gates — authorized 2026-08-13
+
+### Execution increment authorized 2026-08-15 — final responsive product design
+
+- The owner authorized a complete UX/UI review and implementation across every current route and breakpoint, explicitly including a replacement for the desktop sidebar and use of selected 21st.dev component prompts.
+- Design inputs: the existing `PRODUCT.md`/`DESIGN.md`, the `impeccable`, `mobile-app-ui-design` and `frontend-design` skills, the supplied `Design-da-Apple.pdf`, and the supplied 21st.dev sidebar integration prompt.
+- 21st.dev is a pattern and source reference, not permission to import demo content. No Acme data, external avatar, fake metrics, dead links or starter dashboard may enter APT. The official APT lockups, canonical routes and real state remain mandatory.
+- The supplied sidebar pattern may be adapted to the existing Next/TypeScript application. New dependencies must earn their place, preserve reduced-motion behavior and pass the structural review; no second UI framework or generic shadcn demo shell is approved.
+- Responsive acceptance: 375px mobile, intermediate tablet and 1440px desktop; no horizontal viewport overflow; 44px touch targets; readable placeholders and muted text; immediate press feedback; interruptible drawer/sidebar motion; consistent loading, empty, error, success and disabled states.
+- Scope is presentational and interaction-level only unless a discovered UX defect requires a separately recorded behavior decision. Supabase, Asaas, authentication, data boundaries and production-side effects remain unchanged.
+
+### Progress — CODED, CHECKED LOCALLY
+
+- The supplied 21st.dev sidebar prompt was adapted into `components/ui/sidebar.tsx` instead of copying its Acme demo. Member and management use the official APT lockup, canonical tabs/links, real profile/status/badge values and the existing secure logout. Desktop navigation is manually collapsible rather than hover-dependent; mobile uses a modal sheet with Escape dismissal, initial focus, focus containment, trigger restoration and safe-area padding.
+- The Apple motion reference informed immediate pressed feedback, reduced-motion behavior and interruptible spring movement. Framer Motion is limited to the responsive sidebar/sheet; Lucide supplies the coherent navigation icon set. No Tailwind/shadcn demo shell, generic dashboard data, remote avatar, gradient text, shimmer or multi-word hero rotation was introduced.
+- Product surfaces now share restrained radii, quieter typography, readable placeholders, less repetitive uppercase labelling and the existing APT navy/clay/mineral system. Public hero/navigation content is no longer hidden behind page-load animation. The member and management content grids use `minmax(0, 1fr)` and the previous fixed rail/mobile-tab CSS was deleted.
+- Responsive structure is mobile-first: the compact top navigation and full-height sheet are the default; at 64rem the sticky full-height desktop sidebar replaces them. The focused regression check asserts the sheet dialog/focus behavior, 44px controls, desktop breakpoint and absence of the retired navigation classes.
+- Verification: Next 16.2.6 Turbopack compiled, typechecked and generated all 24 routes; independent TypeScript passes after removing a corrupt interrupted `.next/dev` artifact; all 28 focused tests pass; lint has zero errors and the same 20 pre-existing image/legacy-generator warnings; `git diff --check` passes. Browser inspection rendered the landing, application, registration, login, recovery and protected-entry states and found no horizontal document overflow across all eight public/protected routes at the available 1280px viewport. The authenticated member/management redesign still requires a real-session visual pass at 375px, tablet and 1440px before production verification can be claimed.
+- Correctness/security review: no API, Supabase, Asaas, Auth, schema or financial transition changed. The new navigation only calls the existing tab setters, canonical external links and logout route. Production dependency audit attributes four high findings to the pre-existing Next 16.2.6 tree (`next`, bundled `postcss`/`sharp` and its `nanoid`); neither new UI dependency is named. Upgrading Next is a separate dependency task and was not auto-applied inside the design increment.
+- Refreshed `ponytail-audit`: the previously ranked deletion candidates remain unchanged. One new single-use class utility and unused compact flag were removed during review. `ponytail-review`: lean; the shared sidebar replaces two rails plus two bottom-navigation implementations, while Framer Motion earns its place through reduced-motion-aware spring/sheet lifecycle and Lucide replaces mixed text glyphs with one navigation icon system.
 
 ### Execution increment authorized 2026-08-14 — member portal and management completion
 

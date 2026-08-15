@@ -147,8 +147,24 @@ test("offers a safe session exit in protected areas", async () => {
   ]);
   assert.match(client, /function SignOutButton/);
   assert.match(client, /fetch\("\/api\/auth\/logout", \{ method: "POST" \}\)/);
-  assert.match(client, /<SignOutButton \/>/);
+  assert.match(client, /<SignOutButton(?:\s+[^>]*)?\s*\/>/);
   assert.match(logoutRoute, /clearAccessCookie\(\)/);
+});
+
+test("keeps protected navigation responsive and accessible", async () => {
+  const [client, sidebar, styles] = await Promise.all([
+    readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/ui/sidebar.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(client, /<ProductSidebar/);
+  assert.match(sidebar, /useReducedMotion/);
+  assert.match(sidebar, /role="dialog" aria-modal="true"/);
+  assert.match(sidebar, /event\.key !== "Tab"/);
+  assert.match(styles, /\.product-mobile-nav \{[^}]*display: flex/);
+  assert.match(styles, /@media \(min-width: 64rem\)[\s\S]*\.product-sidebar \{[^}]*display: flex/);
+  assert.match(styles, /\.product-sidebar__collapse[^}]*width: 2\.75rem; height: 2\.75rem/);
+  assert.doesNotMatch(client, /className="(?:member-rail|admin-sidebar|mobile-tabbar|admin-mobile-nav)/);
 });
 
 test("allows the master admin to authenticate before server-only operations are configured", async () => {

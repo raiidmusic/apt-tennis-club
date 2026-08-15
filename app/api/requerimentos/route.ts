@@ -1,4 +1,5 @@
 import { requireAdmin } from "../../../lib/auth";
+import { sendManagementEmail, sendMemberEmail } from "../../../lib/apt-email";
 import { runtimeEnv, sha256, supabaseAdmin, SupabaseRequestError } from "../../../lib/supabase-server";
 
 const labels: Record<string, string> = {
@@ -53,45 +54,39 @@ function toApplication(row: Record<string, unknown>, inviteToken?: string) {
 }
 
 async function sendApplicationEmail(id: string, answers: Record<string, AnswerValue>) {
-  const currentEnv = runtimeEnv();
-  const apiKey = currentEnv.RESEND_API_KEY;
-  const to = currentEnv.APT_APPLICATION_TO_EMAIL;
-  const from = currentEnv.APT_RESEND_FROM_EMAIL;
-  if (!apiKey || !to || !from) return "not_configured";
   const lines = Object.entries(answers).map(([key, value]) => `${labels[key] || key}: ${valueAsText(value)}`);
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Idempotency-Key": `apt-application-${id}` },
-    body: JSON.stringify({
-      from, to: [to], reply_to: valueAsText(answers.email),
-      subject: `Novo requerimento APT — ${valueAsText(answers.nome)}`,
-      text: `Um novo requerimento foi enviado ao APT Tennis Club.\n\n${lines.join("\n")}\n\nIdentificador: ${id}`,
-      tags: [{ name: "flow", value: "apt_application" }],
-    }),
+  return sendManagementEmail({
+    replyTo: valueAsText(answers.email),
+    subject: `Novo requerimento APT — ${valueAsText(answers.nome)}`,
+    text: `Um novo requerimento foi enviado ao APT Tennis Club.\n\n${lines.join("\n")}\n\nIdentificador: ${id}`,
+    flow: "application_management",
+    idempotencyKey: `apt-application-management-${id}`,
   });
-  return response.ok ? "sent" : "failed";
+}
+
+function sendApplicationReceipt(id: string, application: Pick<InviteApplication, "name" | "email">) {
+  return sendMemberEmail({
+    to: application.email,
+    subject: "Recebemos seu requerimento APT",
+    text: `Olá, ${application.name}.\n\nRecebemos seu requerimento para o APT Tennis Club. Nossa gestão analisará as informações e avisará você por este e-mail sobre os próximos passos.`,
+    flow: "application_receipt",
+    idempotencyKey: `apt-application-receipt-${id}`,
+  });
 }
 
 async function sendInviteEmail(application: InviteApplication, inviteToken: string, inviteId: string) {
   const currentEnv = runtimeEnv();
-  const apiKey = currentEnv.RESEND_API_KEY;
-  const to = currentEnv.APT_APPLICATION_TO_EMAIL;
-  const from = currentEnv.APT_RESEND_FROM_EMAIL;
-  if (!apiKey || !to || !from) return "not_configured";
   const origin = currentEnv.APT_PUBLIC_URL?.replace(/\/$/, "");
   if (!origin) return "not_configured";
   const inviteUrl = `${origin}/cadastro?convite=${encodeURIComponent(inviteToken)}`;
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Idempotency-Key": `apt-invite-${inviteId}` },
-    body: JSON.stringify({
-      from, to: [application.email], reply_to: to,
-      subject: "Seu cadastro APT foi aprovado",
-      text: `Olá, ${application.name}.\n\nSeu requerimento foi aprovado. Conclua seu cadastro e sua assinatura pelo link privado:\n${inviteUrl}\n\nO link expira em 7 dias.`,
-      tags: [{ name: "flow", value: "apt_invite" }],
-    }),
+  return sendMemberEmail({
+    to: application.email,
+    replyTo: currentEnv.APT_APPLICATION_TO_EMAIL,
+    subject: "Seu cadastro APT foi aprovado",
+    text: `Olá, ${application.name}.\n\nSeu requerimento foi aprovado. Conclua seu cadastro e sua assinatura pelo link privado:\n${inviteUrl}\n\nO link expira em 7 dias.`,
+    flow: "invite",
+    idempotencyKey: `apt-invite-${inviteId}`,
   });
-  return response.ok ? "sent" : "failed";
 }
 
 export async function POST(request: Request) {
@@ -131,13 +126,17 @@ export async function POST(request: Request) {
     });
     const application = rows[0];
     const id = String(application.id);
-    const emailStatus = await sendApplicationEmail(id, answers).catch(() => "failed");
+    const applicationContact = { name: valueAsText(answers.nome), email };
+    const [emailStatus, applicantEmailStatus] = await Promise.all([
+      sendApplicationEmail(id, answers),
+      sendApplicationReceipt(id, applicationContact),
+    ]);
     await supabaseAdmin("applications", {
       method: "PATCH", query: { id: `eq.${id}` }, body: { email_status: emailStatus, updated_at: new Date().toISOString() },
     });
     const auditStatus = await supabaseAdmin("audit_logs", {
       method: "POST",
-      body: { actor: email, action: "application.submitted", entity_type: "application", entity_id: id, metadata: { consent: true } },
+      body: { actor: email, action: "application.submitted", entity_type: "application", entity_id: id, metadata: { consent: true, management_email: emailStatus, applicant_email: applicantEmailStatus } },
     }).then(() => "recorded").catch(() => "unavailable");
     return Response.json({ id, status: "new", emailStatus, auditStatus }, { status: 201 });
   } catch (error) {
@@ -187,6 +186,8 @@ export async function PATCH(request: Request) {
     }
 
     let inviteToken: string | undefined;
+    let inviteId: string | undefined;
+    let inviteApplication: InviteApplication | undefined;
     let finalStatus: ApplicationStatus | undefined = payload.status;
     let inviteDelivery: "sent" | "manual" | undefined;
     if (payload.status === "approved") {
@@ -202,16 +203,12 @@ export async function PATCH(request: Request) {
         method: "POST", prefer: "return=representation",
         body: { application_id: payload.id, token_hash: tokenHash, expires_at: expiresAt },
       });
-      const inviteId = insertedInvites[0]?.id;
+      inviteId = insertedInvites[0]?.id;
       if (!inviteId) return Response.json({ error: "Não foi possível gerar o convite." }, { status: 500 });
-      const application = (await supabaseAdmin<InviteApplication[]>("applications", {
+      inviteApplication = (await supabaseAdmin<InviteApplication[]>("applications", {
         query: { select: "id,name,email", id: `eq.${payload.id}`, limit: "1" },
       }))[0];
-      const emailSent = application
-        ? await sendInviteEmail(application, inviteToken, inviteId).catch(() => "failed") === "sent"
-        : false;
-      inviteDelivery = emailSent ? "sent" : "manual";
-      finalStatus = inviteDelivery === "sent" ? "invite_sent" : "approved";
+      finalStatus = "approved";
     }
 
     let savedNote: AdminNote | undefined;
@@ -223,7 +220,7 @@ export async function PATCH(request: Request) {
         body: { application_id: payload.id, body: note, created_by: admin.email },
       }))[0];
     }
-    const rows = finalStatus
+    let rows = finalStatus
       ? await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
         method: "PATCH", query: { id: `eq.${payload.id}` }, prefer: "return=representation",
         body: { status: finalStatus, updated_at: new Date().toISOString() },
@@ -238,8 +235,33 @@ export async function PATCH(request: Request) {
         body: { application_id: payload.id, body: note, created_by: admin.email },
       }))[0]
       : undefined);
+    let decisionEmail: string | undefined;
+    if (payload.status === "approved" && inviteApplication && inviteToken && inviteId) {
+      const emailSent = await sendInviteEmail(inviteApplication, inviteToken, inviteId) === "sent";
+      inviteDelivery = emailSent ? "sent" : "manual";
+      decisionEmail = inviteDelivery;
+      if (emailSent) {
+        finalStatus = "invite_sent";
+        rows = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
+          method: "PATCH", query: { id: `eq.${payload.id}` }, prefer: "return=representation",
+          body: { status: finalStatus, updated_at: new Date().toISOString() },
+        });
+      }
+    }
+    if (payload.status === "rejected") {
+      const application = rows[0] as { name?: unknown; email?: unknown };
+      if (typeof application.name === "string" && typeof application.email === "string") {
+        decisionEmail = await sendMemberEmail({
+          to: application.email,
+          subject: "Atualização sobre seu requerimento APT",
+          text: `Olá, ${application.name}.\n\nAgradecemos seu interesse no APT Tennis Club. Neste momento, não seguiremos com o requerimento.`,
+          flow: "application_rejected",
+          idempotencyKey: `apt-application-rejected-${payload.id}`,
+        });
+      }
+    }
     await supabaseAdmin("audit_logs", {
-      method: "POST", body: { actor: admin.email, action: finalStatus ? `application.${finalStatus}` : "application.note_added", entity_type: "application", entity_id: payload.id, metadata: { invite_delivery: inviteDelivery, note_recorded: Boolean(savedNote) } },
+      method: "POST", body: { actor: admin.email, action: finalStatus ? `application.${finalStatus}` : "application.note_added", entity_type: "application", entity_id: payload.id, metadata: { invite_delivery: inviteDelivery, decision_email: decisionEmail, note_recorded: Boolean(savedNote) } },
     });
     return Response.json({ application: toApplication(rows[0], inviteToken), inviteDelivery, note: savedNote });
   } catch (error) {

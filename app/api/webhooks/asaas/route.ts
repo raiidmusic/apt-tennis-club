@@ -1,4 +1,5 @@
 import { asaasRequest } from "../../../../lib/asaas";
+import { sendManagementEmail, sendMemberEmail } from "../../../../lib/apt-email";
 import { reconcileMemberBilling } from "../../../../lib/billing-reconciliation";
 import { runtimeEnv, supabaseAdmin, SupabaseRequestError } from "../../../../lib/supabase-server";
 
@@ -23,7 +24,7 @@ type AsaasEvent = {
 };
 type StoredEvent = { id: string; processed_at: string | null };
 type SubscriptionRow = { id: string; member_id?: string };
-type MemberRow = { id: string; joined_at: string | null };
+type MemberRow = { id: string; name: string; email: string; joined_at: string | null };
 
 const receivedEvents = new Set(["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]);
 const failedEvents = new Set([
@@ -34,6 +35,19 @@ const failedEvents = new Set([
   "PAYMENT_REPROVED_BY_RISK_ANALYSIS",
   "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED",
 ]);
+const paidPaymentStatuses = new Set(["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"]);
+const failedPaymentStatuses = new Set([
+  "OVERDUE", "REFUNDED", "CHARGEBACK_REQUESTED", "CHARGEBACK_DISPUTE",
+  "REPROVED_BY_RISK_ANALYSIS", "CREDIT_CARD_CAPTURE_REFUSED", "DELETED",
+]);
+
+function paymentIsPaid(status: string | undefined) {
+  return paidPaymentStatuses.has((status || "").toUpperCase());
+}
+
+function paymentNeedsAttention(status: string | undefined) {
+  return failedPaymentStatuses.has((status || "").toUpperCase());
+}
 
 async function recordFailure(eventId: string, error: unknown) {
   const message = error instanceof Error ? error.message.slice(0, 500) : "Falha de reconciliação";
@@ -85,7 +99,7 @@ export async function POST(request: Request) {
             query: { select: "id,member_id", member_id: `eq.${memberId}`, asaas_checkout_id: `eq.${checkoutId}`, limit: "1" },
           }).then((rows) => rows[0]),
           supabaseAdmin<MemberRow[]>("members", {
-            query: { select: "id,joined_at", id: `eq.${memberId}`, limit: "1" },
+            query: { select: "id,name,email,joined_at", id: `eq.${memberId}`, limit: "1" },
           }).then((rows) => rows[0]),
         ]);
         if (!verifiedSubscription || !member) throw new SupabaseRequestError("Checkout pago não pertence a um membro do APT.", 409);
@@ -132,15 +146,15 @@ export async function POST(request: Request) {
     }
     const paymentState = payment?.status?.toUpperCase() || "";
     const paymentIsReceived = paymentState
-      ? ["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"].includes(paymentState)
+      ? paymentIsPaid(paymentState)
       : receivedEvents.has(payload.event);
     const paymentHasFailed = paymentState
-      ? ["OVERDUE", "REFUNDED", "CHARGEBACK_REQUESTED", "CHARGEBACK_DISPUTE"].includes(paymentState)
+      ? paymentNeedsAttention(paymentState)
       : failedEvents.has(payload.event);
     const memberId = payment?.externalReference || payload.subscription?.externalReference;
     if (!memberId) throw new SupabaseRequestError("Evento sem referência do membro.", 409);
     const member = (await supabaseAdmin<MemberRow[]>("members", {
-      query: { select: "id,joined_at", id: `eq.${memberId}`, limit: "1" },
+      query: { select: "id,name,email,joined_at", id: `eq.${memberId}`, limit: "1" },
     }))[0];
     if (!member) throw new SupabaseRequestError("Membro referenciado não existe.", 409);
     const subscription = (await supabaseAdmin<SubscriptionRow[]>("subscriptions", {
@@ -148,6 +162,12 @@ export async function POST(request: Request) {
     }))[0];
     if (!subscription) throw new SupabaseRequestError("Assinatura local não existe.", 409);
 
+    const paymentId = payment?.id;
+    const previousPayment = paymentId
+      ? (await supabaseAdmin<Array<{ status?: string }>>("payments", {
+        query: { select: "status", asaas_payment_id: `eq.${paymentId}`, limit: "1" },
+      }))[0]
+      : undefined;
     if (payment?.id) {
       await supabaseAdmin("payments", {
         method: "POST",
@@ -217,6 +237,47 @@ export async function POST(request: Request) {
           method: "PATCH",
           query: { id: `eq.${subscription.id}` },
           body: { status: "past_due", overdue_since: overdueSince, updated_at: new Date().toISOString() },
+        }),
+      ]);
+    }
+
+    const memberPaymentNotification = paymentId && paymentIsReceived && !paymentIsPaid(previousPayment?.status)
+      ? "confirmed"
+      : paymentId && paymentHasFailed && !paymentNeedsAttention(previousPayment?.status)
+        ? "attention"
+        : null;
+    if (memberPaymentNotification === "confirmed" && paymentId) {
+      await Promise.all([
+        sendMemberEmail({
+          to: member.email,
+          subject: "Pagamento confirmado — acesso APT liberado",
+          text: `Olá, ${member.name}.\n\nO Asaas confirmou sua mensalidade do APT. Seu acesso aos links e à área de membros está liberado.`,
+          flow: "payment_confirmed_member",
+          idempotencyKey: `apt-payment-confirmed-member-${paymentId}`,
+        }),
+        sendManagementEmail({
+          replyTo: member.email,
+          subject: `Pagamento confirmado — ${member.name}`,
+          text: `O Asaas confirmou a mensalidade de ${member.name}.\n\nE-mail: ${member.email}\nStatus do provedor: ${paymentState}\n\nA participação foi atualizada automaticamente no APT.`,
+          flow: "payment_confirmed_management",
+          idempotencyKey: `apt-payment-confirmed-management-${paymentId}`,
+        }),
+      ]);
+    } else if (memberPaymentNotification === "attention" && paymentId) {
+      await Promise.all([
+        sendMemberEmail({
+          to: member.email,
+          subject: "Atualização necessária na sua mensalidade APT",
+          text: `Olá, ${member.name}.\n\nO Asaas informou uma atualização na sua mensalidade. Acesse a área de membros para acompanhar a situação ou fale com a gestão do APT.`,
+          flow: "payment_attention_member",
+          idempotencyKey: `apt-payment-attention-member-${paymentId}`,
+        }),
+        sendManagementEmail({
+          replyTo: member.email,
+          subject: `Mensalidade requer atenção — ${member.name}`,
+          text: `O Asaas informou uma atualização que requer atenção na mensalidade de ${member.name}.\n\nE-mail: ${member.email}\nStatus do provedor: ${paymentState || payload.event}\n\nAcesse a gestão para conferir o histórico financeiro.`,
+          flow: "payment_attention_management",
+          idempotencyKey: `apt-payment-attention-management-${paymentId}`,
         }),
       ]);
     }

@@ -1,5 +1,6 @@
 import { getSession } from "../../../lib/auth";
 import { asaasRequest } from "../../../lib/asaas";
+import { sendManagementEmail, sendMemberEmail } from "../../../lib/apt-email";
 import { reconcileMemberBilling } from "../../../lib/billing-reconciliation";
 import { supabaseAdmin, SupabaseRequestError } from "../../../lib/supabase-server";
 
@@ -103,6 +104,13 @@ export async function PATCH(request: Request) {
         supabaseAdmin("admin_notes", { method: "POST", body: { member_id: session.memberId, body: message, created_by: session.email } }),
         supabaseAdmin("audit_logs", { method: "POST", body: { actor: session.email, action: "membership.card_change_requested", entity_type: "member", entity_id: session.memberId } }),
       ]);
+      await sendManagementEmail({
+        replyTo: session.email,
+        subject: "Solicitação de troca de cartão",
+        text: `Um membro solicitou a troca do cartão da assinatura.\n\nE-mail: ${session.email}\n\nAcesse a gestão para gerar e acompanhar um novo checkout hospedado do Asaas.`,
+        flow: "card_change_management",
+        idempotencyKey: `apt-card-change-management-${session.memberId}-${new Date().toISOString().slice(0, 10)}`,
+      });
       return Response.json({ requested: true });
     }
 
@@ -137,6 +145,22 @@ export async function PATCH(request: Request) {
       }),
       supabaseAdmin("audit_logs", {
         method: "POST", body: { actor: session.email, action: "membership.cancelled", entity_type: "member", entity_id: session.memberId },
+      }),
+    ]);
+    await Promise.all([
+      sendMemberEmail({
+        to: session.email,
+        subject: "Sua renovação APT foi encerrada",
+        text: `Olá. A renovação automática da sua participação foi encerrada.${accessRemains ? ` Seu acesso segue ativo até ${accessUntil}.` : ""}`,
+        flow: "cancellation_member",
+        idempotencyKey: `apt-cancellation-member-${session.memberId}`,
+      }),
+      sendManagementEmail({
+        replyTo: session.email,
+        subject: "Participação encerrada por membro",
+        text: `Um membro encerrou a renovação automática.\n\nE-mail: ${session.email}${accessRemains ? `\nAcesso vigente até: ${accessUntil}` : ""}`,
+        flow: "cancellation_management",
+        idempotencyKey: `apt-cancellation-management-${session.memberId}`,
       }),
     ]);
     return Response.json({ cancelled: true, accessUntil: accessRemains ? accessUntil : null });

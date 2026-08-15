@@ -1,4 +1,5 @@
 import { asaasCheckoutUrl, asaasRequest } from "../../../lib/asaas";
+import { sendManagementEmail, sendMemberEmail } from "../../../lib/apt-email";
 import { isValidCpf } from "../../../lib/cpf";
 import { createAuthUser, deleteAuthUser, runtimeEnv, sha256, supabaseAdmin, SupabaseRequestError } from "../../../lib/supabase-server";
 
@@ -161,6 +162,18 @@ async function qualifyGroupRegistration(input: {
       entity_id: applicationId,
       metadata: { group_registration_link_id: input.groupLink.id, consent: true },
     },
+  }).catch(() => undefined);
+  const managementEmail = await sendManagementEmail({
+    replyTo: input.email,
+    subject: `Novo recadastro para aprovar — ${input.name}`,
+    text: `Uma pessoa iniciou o recadastro pelo link da comunidade e não correspondeu à base já importada.\n\nNome: ${input.name}\nE-mail: ${input.email}\nWhatsApp: ${input.phone}\n\nAcesse a gestão para aprovar ou recusar o cadastro.`,
+    flow: "quick_recadastro_management",
+    idempotencyKey: `apt-quick-recadastro-management-${applicationId}`,
+  });
+  await supabaseAdmin("applications", {
+    method: "PATCH",
+    query: { id: `eq.${applicationId}` },
+    body: { email_status: managementEmail, updated_at: new Date().toISOString() },
   }).catch(() => undefined);
   return Response.json({ pendingApproval: true }, { status: 202 });
 }
@@ -476,6 +489,23 @@ export async function POST(request: Request) {
           entity_id: memberId,
           metadata: { consent_version: "2026-08" },
         },
+      }),
+    ]);
+
+    await Promise.all([
+      sendMemberEmail({
+        to: email,
+        subject: "Seu cadastro APT está pronto para a assinatura",
+        text: `Olá, ${name}.\n\nSeu acesso foi criado. Para concluir a participação mensal, finalize o pagamento no checkout seguro do Asaas:\n${checkoutUrl}\n\nO APT não recebe nem armazena os dados do seu cartão.`,
+        flow: "registration_checkout",
+        idempotencyKey: `apt-registration-member-${memberId}-${checkoutId}`,
+      }),
+      sendManagementEmail({
+        replyTo: email,
+        subject: `Cadastro concluído — aguardando pagamento de ${name}`,
+        text: `${name} concluiu o cadastro no APT e recebeu um checkout seguro do Asaas para a mensalidade.\n\nE-mail: ${email}\nWhatsApp: ${phone}\n\nA situação será atualizada automaticamente quando o Asaas confirmar o pagamento.`,
+        flow: "registration_management",
+        idempotencyKey: `apt-registration-management-${memberId}-${checkoutId}`,
       }),
     ]);
 

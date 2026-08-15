@@ -1,4 +1,5 @@
 import { asaasRequest } from "./asaas";
+import { sendBillingTransitionEmails } from "./apt-email";
 import { asaasPaymentState } from "./billing-state";
 import { supabaseAdmin, SupabaseRequestError } from "./supabase-server";
 
@@ -23,6 +24,12 @@ type AsaasSubscriptionSnapshot = {
   nextDueDate?: string;
 };
 
+type AsaasCustomerSnapshot = {
+  id?: string;
+  name?: string;
+  cpfCnpj?: string;
+};
+
 type Collection<T> = { data?: T[] };
 type LocalSubscription = {
   id: string;
@@ -34,7 +41,14 @@ type LocalSubscription = {
   next_due_date: string | null;
   current_period_end: string | null;
 };
-type LocalMember = { id: string; participation_status: string; joined_at: string | null };
+type LocalMember = {
+  id: string;
+  name: string;
+  email: string;
+  cpf_last4: string | null;
+  participation_status: string;
+  joined_at: string | null;
+};
 type LocalPaymentReference = { asaas_payment_id: string };
 
 async function readJson<T>(response: Response, message: string) {
@@ -42,10 +56,14 @@ async function readJson<T>(response: Response, message: string) {
   return response.json() as Promise<T>;
 }
 
+function normalizedName(value = "") {
+  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 export async function reconcileMemberBilling(memberId: string, hints: { checkoutId?: string } = {}) {
   const [member, localSubscription, localPayment] = await Promise.all([
     supabaseAdmin<LocalMember[]>("members", {
-      query: { select: "id,participation_status,joined_at", id: `eq.${memberId}`, limit: "1" },
+      query: { select: "id,name,email,cpf_last4,participation_status,joined_at", id: `eq.${memberId}`, limit: "1" },
     }).then((rows) => rows[0]),
     supabaseAdmin<LocalSubscription[]>("subscriptions", {
       query: { select: "id,asaas_customer_id,asaas_subscription_id,asaas_checkout_id,status,amount_cents,next_due_date,current_period_end", member_id: `eq.${memberId}`, limit: "1" },
@@ -72,6 +90,21 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
     const response = await asaasRequest(`/subscriptions?${query}`);
     providerSubscription = (await readJson<Collection<AsaasSubscriptionSnapshot>>(response, "O Asaas não respondeu à busca da assinatura do cliente.")).data?.[0] || null;
   }
+  let recoveredCustomerId: string | undefined;
+  if (!providerSubscription && !localSubscription.asaas_customer_id && member.cpf_last4) {
+    const query = new URLSearchParams({ name: member.name, limit: "10" });
+    const response = await asaasRequest(`/customers?${query}`);
+    const customers = (await readJson<Collection<AsaasCustomerSnapshot>>(response, "O Asaas não respondeu à recuperação do cliente.")).data || [];
+    const matches = customers.filter((customer) => customer.id
+      && normalizedName(customer.name) === normalizedName(member.name)
+      && (customer.cpfCnpj || "").replace(/\D/g, "").endsWith(member.cpf_last4 || ""));
+    if (matches.length === 1) {
+      recoveredCustomerId = matches[0].id;
+      const subscriptionQuery = new URLSearchParams({ customer: recoveredCustomerId || "", limit: "1", sort: "dateCreated", order: "desc" });
+      const subscriptionResponse = await asaasRequest(`/subscriptions?${subscriptionQuery}`);
+      providerSubscription = (await readJson<Collection<AsaasSubscriptionSnapshot>>(subscriptionResponse, "O Asaas não respondeu à assinatura recuperada.")).data?.[0] || null;
+    }
+  }
   const checkoutId = hints.checkoutId || localSubscription.asaas_checkout_id || undefined;
   const paymentPaths = providerSubscription?.id
     ? [`/subscriptions/${encodeURIComponent(providerSubscription.id)}/payments`]
@@ -97,6 +130,12 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
   }
 
   const snapshots = payments.filter((payment): payment is AsaasPaymentSnapshot & { id: string } => Boolean(payment.id));
+  const latest = [...snapshots].sort((a, b) => (b.dueDate || b.dateCreated || "").localeCompare(a.dueDate || a.dateCreated || ""))[0];
+  const previousLatest = latest
+    ? (await supabaseAdmin<Array<{ status?: string }>>("payments", {
+      query: { select: "status", asaas_payment_id: `eq.${latest.id}`, limit: "1" },
+    }))[0]
+    : undefined;
   await Promise.all(snapshots.map((payment) => {
     const state = asaasPaymentState(payment.status);
     return supabaseAdmin("payments", {
@@ -118,8 +157,8 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
     });
   }));
 
-  const latest = [...snapshots].sort((a, b) => (b.dueDate || b.dateCreated || "").localeCompare(a.dueDate || a.dateCreated || ""))[0];
   const latestState = asaasPaymentState(latest?.status);
+  const previousLatestState = asaasPaymentState(previousLatest?.status);
   const protectedManualState = ["courtesy", "inactive", "cancelled", "cancellation_requested"].includes(member.participation_status);
   const nextMemberStatus = protectedManualState
     ? member.participation_status
@@ -133,7 +172,7 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
       query: { id: `eq.${localSubscription.id}` },
       body: {
         asaas_subscription_id: providerSubscription?.id || localSubscription.asaas_subscription_id,
-        asaas_customer_id: providerSubscription?.customer || localSubscription.asaas_customer_id,
+        asaas_customer_id: providerSubscription?.customer || recoveredCustomerId || localSubscription.asaas_customer_id,
         status: nextSubscriptionStatus,
         amount_cents: providerSubscription?.value ? Math.round(providerSubscription.value * 100) : localSubscription.amount_cents,
         next_due_date: providerSubscription?.nextDueDate || localSubscription.next_due_date,
@@ -150,6 +189,12 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
       })
       : Promise.resolve(),
   ]);
+
+  if (latest?.id && latestState.paid && !previousLatestState.paid) {
+    await sendBillingTransitionEmails({ kind: "confirmed", member, paymentId: latest.id, providerStatus: latestState.normalized });
+  } else if (latest?.id && latestState.failed && !previousLatestState.failed) {
+    await sendBillingTransitionEmails({ kind: "attention", member, paymentId: latest.id, providerStatus: latestState.normalized });
+  }
 
   return { found: Boolean(providerSubscription || snapshots.length), paymentCount: snapshots.length, active: nextMemberStatus === "active" };
 }

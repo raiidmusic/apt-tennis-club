@@ -92,3 +92,32 @@ export function sendManagementEmail(input: Omit<EmailInput, "to">) {
 export function sendMemberEmail(input: Omit<EmailInput, "to"> & { to: string }) {
   return sendAptEmail(input);
 }
+
+export function sendBillingTransitionEmails(input: {
+  kind: "confirmed" | "attention";
+  member: { name: string; email: string };
+  paymentId: string;
+  providerStatus: string;
+}) {
+  const confirmed = input.kind === "confirmed";
+  return Promise.all([
+    sendMemberEmail({
+      to: input.member.email,
+      subject: confirmed ? "Pagamento confirmado — acesso APT liberado" : "Atualização necessária na sua mensalidade APT",
+      text: confirmed
+        ? `Olá, ${input.member.name}.\n\nO Asaas confirmou sua mensalidade do APT. Seu acesso aos links e à área de membros está liberado.`
+        : `Olá, ${input.member.name}.\n\nO Asaas informou uma atualização na sua mensalidade. Acesse a área de membros para acompanhar a situação ou fale com a gestão do APT.`,
+      flow: confirmed ? "payment_confirmed_member" : "payment_attention_member",
+      idempotencyKey: `apt-payment-${input.kind}-member-${input.paymentId}`,
+    }),
+    sendManagementEmail({
+      replyTo: input.member.email,
+      subject: confirmed ? `Pagamento confirmado — ${input.member.name}` : `Mensalidade requer atenção — ${input.member.name}`,
+      text: confirmed
+        ? `O Asaas confirmou a mensalidade de ${input.member.name}.\n\nE-mail: ${input.member.email}\nStatus do provedor: ${input.providerStatus}\n\nA participação foi atualizada automaticamente no APT.`
+        : `O Asaas informou uma atualização que requer atenção na mensalidade de ${input.member.name}.\n\nE-mail: ${input.member.email}\nStatus do provedor: ${input.providerStatus}\n\nAcesse a gestão para conferir o histórico financeiro.`,
+      flow: confirmed ? "payment_confirmed_management" : "payment_attention_management",
+      idempotencyKey: `apt-payment-${input.kind}-management-${input.paymentId}`,
+    }),
+  ]);
+}

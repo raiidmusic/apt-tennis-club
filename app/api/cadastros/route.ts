@@ -421,6 +421,7 @@ export async function POST(request: Request) {
             cancelUrl: `${origin}/cadastro?status=cancelado`,
             expiredUrl: `${origin}/cadastro?status=expirado`,
           },
+          customerData: { name, cpfCnpj: cpf, email, phone },
           items: [{ name: "Participação mensal APT", description: "Mensalidade do APT Tennis Club", quantity: 1, value: monthlyValue }],
           subscription: { cycle: "MONTHLY", nextDueDate: `${nextDueDate} 12:00:00` },
         }),

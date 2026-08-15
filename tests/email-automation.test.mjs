@@ -20,13 +20,15 @@ test("keeps transactional Resend mail server-only and idempotent", async () => {
 });
 
 test("wires member and management notices to completed canonical events", async () => {
-  const [applications, enrollment, portal, webhook] = await Promise.all([
+  const [applications, enrollment, portal, webhook, reconciliation, email] = await Promise.all([
     readFile(new URL("../app/api/requerimentos/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cadastros/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/portal/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/webhooks/asaas/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/billing-reconciliation.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/apt-email.ts", import.meta.url), "utf8"),
   ]);
-  for (const route of [applications, enrollment, portal, webhook]) {
+  for (const route of [applications, enrollment, portal]) {
     assert.match(route, /sendManagementEmail/);
     assert.match(route, /sendMemberEmail/);
   }
@@ -36,8 +38,12 @@ test("wires member and management notices to completed canonical events", async 
   assert.match(enrollment, /quick_recadastro_management/);
   assert.match(portal, /card_change_management/);
   assert.match(portal, /cancellation_member/);
-  assert.match(webhook, /payment_confirmed_member/);
-  assert.match(webhook, /payment_attention_member/);
+  assert.match(webhook, /sendBillingTransitionEmails/);
   assert.match(webhook, /!paymentIsPaid\(previousPayment\?\.status\)/);
   assert.match(webhook, /!paymentNeedsAttention\(previousPayment\?\.status\)/);
+  assert.match(reconciliation, /sendBillingTransitionEmails/);
+  assert.match(reconciliation, /!previousLatestState\.paid/);
+  assert.match(reconciliation, /!previousLatestState\.failed/);
+  assert.match(email, /payment_confirmed_member/);
+  assert.match(email, /payment_attention_member/);
 });

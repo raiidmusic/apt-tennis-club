@@ -1,5 +1,5 @@
 import { asaasRequest } from "../../../../lib/asaas";
-import { sendManagementEmail, sendMemberEmail } from "../../../../lib/apt-email";
+import { sendBillingTransitionEmails } from "../../../../lib/apt-email";
 import { reconcileMemberBilling } from "../../../../lib/billing-reconciliation";
 import { runtimeEnv, supabaseAdmin, SupabaseRequestError } from "../../../../lib/supabase-server";
 
@@ -13,6 +13,8 @@ type AsaasPayment = {
   paymentDate?: string;
   clientPaymentDate?: string;
   invoiceUrl?: string;
+  customer?: string;
+  checkoutSession?: string;
 };
 
 type AsaasEvent = {
@@ -56,6 +58,33 @@ async function recordFailure(eventId: string, error: unknown) {
     query: { id: `eq.${eventId}` },
     body: { processing_error: message },
   }).catch(() => undefined);
+}
+
+async function resolveMemberId(payment: AsaasPayment | undefined, event: AsaasEvent) {
+  const directReference = payment?.externalReference || event.subscription?.externalReference;
+  if (directReference) return directReference;
+
+  const providerLinks: Array<Record<string, string>> = [];
+  if (payment?.subscription) providerLinks.push({ asaas_subscription_id: `eq.${payment.subscription}` });
+  if (payment?.checkoutSession) providerLinks.push({ asaas_checkout_id: `eq.${payment.checkoutSession}` });
+  if (payment?.customer) providerLinks.push({ asaas_customer_id: `eq.${payment.customer}` });
+  for (const providerLink of providerLinks) {
+    const subscription = (await supabaseAdmin<SubscriptionRow[]>("subscriptions", {
+      query: { select: "id,member_id", ...providerLink, limit: "1" },
+    }))[0];
+    if (subscription?.member_id) return subscription.member_id;
+  }
+
+  if (!payment?.customer) return undefined;
+  const customerResponse = await asaasRequest(`/customers/${encodeURIComponent(payment.customer)}`);
+  if (!customerResponse.ok) return undefined;
+  const customer = await customerResponse.json() as { email?: string; externalReference?: string };
+  if (customer.externalReference) return customer.externalReference;
+  if (!customer.email) return undefined;
+  const matchingMembers = await supabaseAdmin<Array<{ id: string }>>("members", {
+    query: { select: "id", email: `eq.${customer.email.trim().toLowerCase()}`, limit: "2" },
+  });
+  return matchingMembers.length === 1 ? matchingMembers[0].id : undefined;
 }
 
 export async function POST(request: Request) {
@@ -151,14 +180,14 @@ export async function POST(request: Request) {
     const paymentHasFailed = paymentState
       ? paymentNeedsAttention(paymentState)
       : failedEvents.has(payload.event);
-    const memberId = payment?.externalReference || payload.subscription?.externalReference;
+    const memberId = await resolveMemberId(payment, payload);
     if (!memberId) throw new SupabaseRequestError("Evento sem referência do membro.", 409);
     const member = (await supabaseAdmin<MemberRow[]>("members", {
       query: { select: "id,name,email,joined_at", id: `eq.${memberId}`, limit: "1" },
     }))[0];
     if (!member) throw new SupabaseRequestError("Membro referenciado não existe.", 409);
     const subscription = (await supabaseAdmin<SubscriptionRow[]>("subscriptions", {
-      query: { select: "id", member_id: `eq.${memberId}`, limit: "1" },
+      query: { select: "id,member_id", member_id: `eq.${memberId}`, limit: "1" },
     }))[0];
     if (!subscription) throw new SupabaseRequestError("Assinatura local não existe.", 409);
 
@@ -200,7 +229,11 @@ export async function POST(request: Request) {
       await supabaseAdmin("subscriptions", {
         method: "PATCH",
         query: { id: `eq.${subscription.id}` },
-        body: { asaas_subscription_id: asaasSubscriptionId, updated_at: new Date().toISOString() },
+        body: {
+          asaas_subscription_id: asaasSubscriptionId,
+          asaas_customer_id: payment?.customer || undefined,
+          updated_at: new Date().toISOString(),
+        },
       });
     }
 
@@ -247,39 +280,9 @@ export async function POST(request: Request) {
         ? "attention"
         : null;
     if (memberPaymentNotification === "confirmed" && paymentId) {
-      await Promise.all([
-        sendMemberEmail({
-          to: member.email,
-          subject: "Pagamento confirmado — acesso APT liberado",
-          text: `Olá, ${member.name}.\n\nO Asaas confirmou sua mensalidade do APT. Seu acesso aos links e à área de membros está liberado.`,
-          flow: "payment_confirmed_member",
-          idempotencyKey: `apt-payment-confirmed-member-${paymentId}`,
-        }),
-        sendManagementEmail({
-          replyTo: member.email,
-          subject: `Pagamento confirmado — ${member.name}`,
-          text: `O Asaas confirmou a mensalidade de ${member.name}.\n\nE-mail: ${member.email}\nStatus do provedor: ${paymentState}\n\nA participação foi atualizada automaticamente no APT.`,
-          flow: "payment_confirmed_management",
-          idempotencyKey: `apt-payment-confirmed-management-${paymentId}`,
-        }),
-      ]);
+      await sendBillingTransitionEmails({ kind: "confirmed", member, paymentId, providerStatus: paymentState });
     } else if (memberPaymentNotification === "attention" && paymentId) {
-      await Promise.all([
-        sendMemberEmail({
-          to: member.email,
-          subject: "Atualização necessária na sua mensalidade APT",
-          text: `Olá, ${member.name}.\n\nO Asaas informou uma atualização na sua mensalidade. Acesse a área de membros para acompanhar a situação ou fale com a gestão do APT.`,
-          flow: "payment_attention_member",
-          idempotencyKey: `apt-payment-attention-member-${paymentId}`,
-        }),
-        sendManagementEmail({
-          replyTo: member.email,
-          subject: `Mensalidade requer atenção — ${member.name}`,
-          text: `O Asaas informou uma atualização que requer atenção na mensalidade de ${member.name}.\n\nE-mail: ${member.email}\nStatus do provedor: ${paymentState || payload.event}\n\nAcesse a gestão para conferir o histórico financeiro.`,
-          flow: "payment_attention_management",
-          idempotencyKey: `apt-payment-attention-management-${paymentId}`,
-        }),
-      ]);
+      await sendBillingTransitionEmails({ kind: "attention", member, paymentId, providerStatus: paymentState || payload.event });
     }
 
     await supabaseAdmin("webhook_events", {

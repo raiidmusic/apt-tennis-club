@@ -80,12 +80,13 @@ test("revokes earlier invitations and validates applications on the server", asy
   assert.match(enrollmentRoute, /revoked_at: "is\.null"/);
 });
 
-test("lets hosted Asaas Checkout collect the complete billing address", async () => {
+test("pre-fills identity while hosted Asaas Checkout collects address and card", async () => {
   const [enrollmentRoute, client] = await Promise.all([
     readFile(new URL("../app/api/cadastros/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
   ]);
-  assert.doesNotMatch(enrollmentRoute, /customerData:/);
+  assert.match(enrollmentRoute, /customerData: \{ name, cpfCnpj: cpf, email, phone \}/);
+  assert.doesNotMatch(enrollmentRoute, /customerData: \{[^}]*address/);
   assert.match(client, /Endereço e cartão serão informados somente no ambiente seguro do Asaas\./);
 });
 
@@ -131,7 +132,13 @@ test("reconciles billing without collecting card data in the APT portal", async 
   assert.match(reconciliation, /externalReference: memberId/);
   assert.match(reconciliation, /localPayment\?\.asaas_payment_id/);
   assert.match(reconciliation, /customer: localSubscription\.asaas_customer_id/);
+  assert.match(reconciliation, /normalizedName\(customer\.name\).*normalizedName\(member\.name\)/s);
+  assert.match(reconciliation, /cpfCnpj.*endsWith\(member\.cpf_last4/s);
+  assert.match(reconciliation, /sendBillingTransitionEmails/);
   assert.match(webhook, /payload\.event === "CHECKOUT_PAID"/);
+  assert.match(webhook, /resolveMemberId/);
+  assert.match(webhook, /payment\?\.checkoutSession/);
+  assert.match(webhook, /payment\?\.customer/);
   assert.match(webhook, /asaas_customer_id: payload\.checkout\.customer/);
   assert.match(webhook, /participation_status: "active"/);
   assert.match(reconciliation, /subscriptions\/\$\{encodeURIComponent\(providerSubscription\.id\)\}\/payments/);

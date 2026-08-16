@@ -268,7 +268,7 @@ export async function POST(request: Request) {
       return qualifyGroupRegistration({ groupLink, name, email, phone });
     }
     if ([inviteToken, directToken].filter(Boolean).length !== 1 || groupToken || !name || !isValidCpf(cpf) || !email || phone.length < 10 || phone.length > 13 || !isValidNewPassword(password) || payload.consent !== true) {
-      return Response.json({ error: "Confira o link, os dados e a senha: use 12 caracteres, maiúscula, minúscula e número." }, { status: 400 });
+      return Response.json({ error: "Confira o link, os dados e a senha: use pelo menos 8 caracteres." }, { status: 400 });
     }
 
     const invite = inviteToken ? await findInvite(inviteToken) : undefined;

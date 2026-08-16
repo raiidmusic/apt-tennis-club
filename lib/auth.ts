@@ -46,8 +46,7 @@ export function isAdminEmail(email: string) {
 }
 
 export function isValidNewPassword(password: string) {
-  return password.length >= 12 && password.length <= 128 &&
-    /[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password);
+  return password.length >= 8 && password.length <= 128 && password.trim().length > 0;
 }
 
 export async function getSession(request: Request): Promise<SessionUser | null> {

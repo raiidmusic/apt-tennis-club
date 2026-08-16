@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const password = payload.password || "";
     const accessToken = payload.accessToken || "";
     if (payload.action !== "reset" || !isValidNewPassword(password) || !accessToken) {
-      return Response.json({ error: "Use 12 caracteres, incluindo maiúscula, minúscula e número." }, { status: 400 });
+      return Response.json({ error: "Use uma senha com pelo menos 8 caracteres." }, { status: 400 });
     }
     await resetPasswordWithRecoveryToken(accessToken, password);
     return Response.json({ reset: true });

@@ -283,12 +283,11 @@ test("keeps password recovery inside the official app and Supabase public-auth b
   assert.match(route, /APT_PUBLIC_URL/);
   assert.match(route, /\/redefinir-senha/);
   assert.match(route, /isValidNewPassword\(password\)/);
-  assert.match(client, /minLength=\{12\}/);
-  assert.match(client, /maiúscula, minúscula e número/);
+  assert.match(client, /minLength=\{8\}/);
+  assert.match(client, /Use pelo menos 8 caracteres\./);
   const auth = await readFile(new URL("../lib/auth.ts", import.meta.url), "utf8");
-  assert.match(auth, /password\.length >= 12/);
-  assert.match(auth, /\[a-z\]/);
-  assert.match(auth, /\[A-Z\]/);
+  assert.match(auth, /password\.length >= 8/);
+  assert.match(auth, /password\.trim\(\)\.length > 0/);
   assert.match(supabase, /auth\/v1\/recover/);
   assert.match(supabase, /auth\/v1\/user/);
   assert.doesNotMatch(route, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);

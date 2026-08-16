@@ -925,6 +925,8 @@ const memberOperationsStages: Array<{ id: MemberOperationsStage; label: string; 
   { id: "inactive", label: "Inativos", mobileLabel: "Inativos", empty: "Nenhum membro inativo." },
 ];
 
+const memberOperationsDesktopStages = memberOperationsStages.filter((stage) => stage.id !== "inactive");
+
 function memberOperationsStage(member: MemberRecord): MemberOperationsStage {
   const periodEnded = Boolean(member.currentPeriodEnd && member.currentPeriodEnd < new Date().toISOString().slice(0, 10));
   if (member.participationStatus === "cancellation_requested") return periodEnded ? "inactive" : "cancellation_requested";
@@ -955,6 +957,7 @@ function MemberOperationsKanban({ members, onManage, mobileDefaultStage }: { mem
   const grouped = useMemo(() => Object.fromEntries(memberOperationsStages.map((stage) => [stage.id, members.filter((member) => memberOperationsStage(member) === stage.id)])) as Record<MemberOperationsStage, MemberRecord[]>, [members]);
   const mobileMembers = mobileStage === "all" ? members : mobileStage === "action" ? [...grouped.awaiting_payment, ...grouped.attention] : grouped[mobileStage];
   const mobileTitle = mobileStage === "all" ? "Todos os resultados" : mobileStage === "action" ? "Ação necessária" : memberOperationsStages.find((stage) => stage.id === mobileStage)?.label || "Membros";
+  const desktopStages = mobileDefaultStage === "inactive" ? memberOperationsStages.filter((stage) => stage.id === "inactive") : memberOperationsDesktopStages;
   return <section className="member-operations" aria-label="Operação de membros">
     <div className="member-operations__summary" aria-label="Resumo da operação">
       <div><span>Em ação</span><strong>{grouped.awaiting_payment.length + grouped.attention.length}</strong></div>
@@ -966,7 +969,7 @@ function MemberOperationsKanban({ members, onManage, mobileDefaultStage }: { mem
       {([{ id: "all", mobileLabel: "Todos" }, { id: "action", mobileLabel: "Ação" }, ...memberOperationsStages.map(({ id, mobileLabel }) => ({ id, mobileLabel }))] as Array<{ id: MemberOperationsStage | "action" | "all"; mobileLabel: string }>).map((stage) => <button key={stage.id} type="button" aria-pressed={mobileStage === stage.id} onClick={() => setMobileStage(stage.id)}>{stage.mobileLabel}</button>)}
     </div>
     <section className="member-operations__mobile-list" aria-live="polite"><header><span>{mobileTitle}</span><strong>{mobileMembers.length}</strong></header><div>{mobileMembers.map((member) => <MemberOperationCard key={member.id} member={member} onManage={onManage} />)}{!mobileMembers.length && <p>Nenhum membro nesta etapa.</p>}</div></section>
-    <div className="member-operations__desktop-board">{memberOperationsStages.map((stage) => <section className="member-operations__lane" data-stage={stage.id} key={stage.id}><header><div><strong>{stage.label}</strong><span>{grouped[stage.id].length} {grouped[stage.id].length === 1 ? "membro" : "membros"}</span></div></header><div>{grouped[stage.id].map((member) => <MemberOperationCard key={member.id} member={member} onManage={onManage} />)}{!grouped[stage.id].length && <p>{stage.empty}</p>}</div></section>)}</div>
+    <div className="member-operations__desktop-board" data-columns={desktopStages.length}>{desktopStages.map((stage) => <section className="member-operations__lane" data-stage={stage.id} key={stage.id}><header><div><strong>{stage.label}</strong><span>{grouped[stage.id].length} {grouped[stage.id].length === 1 ? "membro" : "membros"}</span></div></header><div>{grouped[stage.id].map((member) => <MemberOperationCard key={member.id} member={member} onManage={onManage} />)}{!grouped[stage.id].length && <p>{stage.empty}</p>}</div></section>)}</div>
   </section>;
 }
 

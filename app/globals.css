@@ -725,7 +725,8 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .member-welcome h1 { font-size: 2.75rem; }
   .signal-strip, .crm-kanban, .member-management-list, .payment-reminder-queue, .member-import-panel, .admin-toolbar, .member-operations { margin-top: 1.25rem; }
   .member-operations__mobile-stages, .member-operations__mobile-list { display: none; }
-  .member-operations__desktop-board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: start; gap: 0.7rem; margin-top: 0.75rem; }
+  .member-operations__desktop-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.7rem; margin-top: 0.75rem; }
+  .member-operations__desktop-board[data-columns="1"] { grid-template-columns: minmax(16rem, 22rem); }
   .member-operations__lane { min-width: 0; border: 1px solid var(--line); background: var(--surface-muted); }
   .member-operations__lane > div { min-width: 0; }
   .member-operations__lane > header { min-height: 5.1rem; align-items: flex-start; }
@@ -736,16 +737,6 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .member-operations__lane[data-stage="cancellation_requested"] > header { border-top: 2px solid var(--ink); }
   .member-operations__lane[data-stage="inactive"] > header { border-top: 2px solid var(--muted); }
   .toast { top: 5.5rem; left: auto; right: 2rem; width: min(28rem, calc(100vw - 4rem)); }
-}
-
-/* The application pipeline has seven canonical stages. On wide desktop, keep
-   all of them in view instead of making an operator discover hidden columns. */
-@media (min-width: 80rem) {
-  .crm-kanban { grid-auto-flow: row; grid-template-columns: repeat(7, minmax(0, 1fr)); overflow-x: visible; padding-bottom: 0; }
-  .crm-column, .crm-card, .crm-card__top { min-width: 0; }
-  .crm-card { box-sizing: border-box; width: 100%; }
-  .crm-card__top { align-items: flex-start; }
-  .crm-card strong, .crm-card small { overflow-wrap: anywhere; }
 }
 
 @media (hover: hover) and (pointer: fine) {

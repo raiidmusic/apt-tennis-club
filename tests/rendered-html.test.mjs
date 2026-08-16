@@ -181,12 +181,17 @@ test("keeps protected navigation responsive and accessible", async () => {
   assert.doesNotMatch(client, /className="(?:member-rail|admin-sidebar|mobile-tabbar|admin-mobile-nav)/);
 });
 
-test("keeps desktop operations boards inside their available workspace", async () => {
-  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+test("keeps the mockup-style desktop operations board inside its workspace", async () => {
+  const [client, styles] = await Promise.all([
+    readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
   assert.match(styles, /\.member-operations-card \{[^}]*box-sizing: border-box;[^}]*min-width: 0;[^}]*max-width: 100%/);
-  assert.match(styles, /\.member-operations__desktop-board \{[^}]*grid-template-columns: repeat\(5, minmax\(0, 1fr\)\);[^}]*align-items: start/);
-  assert.match(styles, /@media \(min-width: 80rem\) \{[\s\S]*\.crm-kanban \{[^}]*grid-template-columns: repeat\(7, minmax\(0, 1fr\)\);[^}]*overflow-x: visible/);
-  assert.match(styles, /@media \(min-width: 80rem\) \{[\s\S]*\.crm-card \{[^}]*box-sizing: border-box;[^}]*width: 100%/);
+  assert.match(client, /const memberOperationsDesktopStages = memberOperationsStages\.filter\(\(stage\) => stage\.id !== "inactive"\)/);
+  assert.match(client, /data-columns=\{desktopStages\.length\}/);
+  assert.match(styles, /\.member-operations__desktop-board \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.member-operations__desktop-board\[data-columns="1"\] \{ grid-template-columns: minmax\(16rem, 22rem\); \}/);
+  assert.match(styles, /\.crm-kanban \{[^}]*grid-auto-flow: column;[^}]*overflow-x: auto/);
 });
 
 test("allows the master admin to authenticate before server-only operations are configured", async () => {

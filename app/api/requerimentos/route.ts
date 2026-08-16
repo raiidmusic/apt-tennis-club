@@ -30,7 +30,8 @@ const allowedChoices: Record<string, Set<string>> = {
 
 type AnswerValue = string | string[];
 type ApplicationStatus = "new" | "in_review" | "awaiting_info" | "approved" | "rejected" | "invite_sent";
-type InviteApplication = { id: string; name: string; email: string };
+type InviteApplication = { id: string; name: string; email: string; whatsapp: string };
+type MemberInviteCandidate = { id: string; application_id: string | null; auth_user_id: string | null; participation_status: string };
 type AdminNote = { id: string; body: string; created_by: string; created_at: string };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -83,11 +84,63 @@ async function sendInviteEmail(application: InviteApplication, inviteToken: stri
   return sendMemberEmail({
     to: application.email,
     replyTo: managementReplyTo(),
-    subject: "Seu cadastro APT foi aprovado",
-    text: `Olá, ${application.name}.\n\nSeu requerimento foi aprovado. Conclua seu cadastro e sua assinatura pelo link privado:\n${inviteUrl}\n\nO link expira em 7 dias.`,
+    subject: "Seu cadastro APT está liberado",
+    text: `Olá, ${application.name}.\n\nSeu cadastro APT está liberado. Conclua seus dados e sua assinatura pelo link privado:\n${inviteUrl}\n\nO link expira em 7 dias.`,
     flow: "invite",
     idempotencyKey: `apt-invite-${inviteId}`,
   });
+}
+
+async function createPrivateInvite(target: { applicationId?: string; memberId?: string }) {
+  if (!target.memberId && !target.applicationId) throw new SupabaseRequestError("Destino do convite ausente.", 500);
+  const query: Record<string, string> = target.memberId ? { member_id: `eq.${target.memberId}` } : { application_id: `eq.${target.applicationId!}` };
+  await supabaseAdmin("invites", {
+    method: "PATCH",
+    query: { ...query, used_at: "is.null", revoked_at: "is.null" },
+    body: { revoked_at: new Date().toISOString() },
+  });
+  const inviteToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll("-", "");
+  const inserted = await supabaseAdmin<Array<{ id: string }>>("invites", {
+    method: "POST",
+    prefer: "return=representation",
+    body: {
+      ...(target.applicationId ? { application_id: target.applicationId } : {}),
+      ...(target.memberId ? { member_id: target.memberId } : {}),
+      token_hash: await sha256(inviteToken),
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+  });
+  if (!inserted[0]?.id) throw new SupabaseRequestError("Não foi possível gerar o convite.", 500);
+  return { inviteId: inserted[0].id, inviteToken };
+}
+
+async function findMemberByEmail(email: string) {
+  return (await supabaseAdmin<MemberInviteCandidate[]>("members", {
+    query: {
+      select: "id,application_id,auth_user_id,participation_status",
+      email: `eq.${email.toLowerCase()}`,
+      limit: "1",
+    },
+  }))[0];
+}
+
+function pendingMemberForInvite(member: MemberInviteCandidate | undefined) {
+  return member?.participation_status === "awaiting_payment" && !member.auth_user_id ? member : undefined;
+}
+
+function attachApplicationToMember(member: MemberInviteCandidate | undefined, applicationId: string) {
+  if (!member || member.application_id) return Promise.resolve();
+  return supabaseAdmin("members", {
+    method: "PATCH",
+    query: { id: `eq.${member.id}`, application_id: "is.null" },
+    body: { application_id: applicationId, updated_at: new Date().toISOString() },
+  });
+}
+
+async function issueInvite(application: InviteApplication, target: { applicationId?: string; memberId?: string }) {
+  const { inviteId, inviteToken } = await createPrivateInvite(target);
+  const emailStatus = await sendInviteEmail(application, inviteToken, inviteId);
+  return { inviteToken, inviteDelivery: emailStatus === "sent" ? "sent" as const : "manual" as const, emailStatus };
 }
 
 export async function POST(request: Request) {
@@ -183,7 +236,79 @@ export async function PATCH(request: Request) {
   const admin = await requireAdmin(request).catch(() => null);
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
   try {
-    const payload = await request.json() as { id?: string; status?: ApplicationStatus; note?: string };
+    const payload = await request.json() as {
+      id?: string;
+      status?: ApplicationStatus;
+      note?: string;
+      action?: "resend_invite" | "direct_invite";
+      name?: string;
+      email?: string;
+      whatsapp?: string;
+      consent?: boolean;
+    };
+    if (payload.action === "direct_invite") {
+      const name = payload.name?.trim() || "";
+      const email = payload.email?.trim().toLowerCase() || "";
+      const whatsapp = payload.whatsapp?.replace(/\D/g, "") || "";
+      if (!name || name.length > 100 || !/^\S+@\S+\.\S+$/.test(email) || whatsapp.length < 10 || whatsapp.length > 13 || payload.consent !== true) {
+        return Response.json({ error: "Informe nome, e-mail, WhatsApp e a autorização para envio." }, { status: 400 });
+      }
+      const existing = (await supabaseAdmin<Array<{ id: string }>>("applications", {
+        query: { select: "id", email: `eq.${email}`, status: "in.(new,in_review,awaiting_info,approved,invite_sent)", limit: "1" },
+      }))[0];
+      if (existing) return Response.json({ error: "Já existe um convite ou análise em andamento para este e-mail." }, { status: 409 });
+      const existingMember = await findMemberByEmail(email);
+      const member = pendingMemberForInvite(existingMember);
+      if (existingMember && !member) return Response.json({ error: "Este e-mail já pertence a um integrante com cadastro concluído." }, { status: 409 });
+      const created = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
+        method: "POST",
+        prefer: "return=representation",
+        body: {
+          name, email, whatsapp, age: null, city: null, profession: null, class_level: null, referrer: null,
+          answers: { nome: name, email, whatsapp, origem: "Convite direto da gestão", consent: "Contato autorizado pela gestão" },
+          consent_at: new Date().toISOString(), status: "approved", email_status: "not_requested",
+        },
+      });
+      const createdApplication = created[0];
+      if (!createdApplication) return Response.json({ error: "Não foi possível preparar o convite direto." }, { status: 500 });
+      const application = { id: String(createdApplication.id), name, email, whatsapp };
+      await attachApplicationToMember(member, application.id);
+      const issued = await issueInvite(application, member ? { memberId: member.id } : { applicationId: application.id });
+      const finalStatus = issued.inviteDelivery === "sent" ? "invite_sent" : "approved";
+      const rows = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
+        method: "PATCH", query: { id: `eq.${application.id}` }, prefer: "return=representation",
+        body: { status: finalStatus, email_status: issued.emailStatus, updated_at: new Date().toISOString() },
+      });
+      await supabaseAdmin("audit_logs", {
+        method: "POST",
+        body: { actor: admin.email, action: "application.direct_invite_created", entity_type: "application", entity_id: application.id, metadata: { invite_delivery: issued.inviteDelivery, member_targeted: Boolean(member) } },
+      });
+      return Response.json({ application: toApplication(rows[0], issued.inviteToken), inviteDelivery: issued.inviteDelivery, emailStatus: issued.emailStatus });
+    }
+
+    if (payload.action === "resend_invite") {
+      if (!payload.id || !uuidPattern.test(payload.id)) return Response.json({ error: "Requerimento inválido." }, { status: 400 });
+      const application = (await supabaseAdmin<InviteApplication[]>("applications", {
+        query: { select: "id,name,email,whatsapp", id: `eq.${payload.id}`, status: "in.(approved,invite_sent)", limit: "1" },
+      }))[0];
+      if (!application) return Response.json({ error: "Este convite não está disponível para reenvio." }, { status: 409 });
+      const existingMember = await findMemberByEmail(application.email);
+      const member = pendingMemberForInvite(existingMember);
+      if (existingMember && !member) return Response.json({ error: "Este e-mail já pertence a um integrante com cadastro concluído." }, { status: 409 });
+      await attachApplicationToMember(member, application.id);
+      const issued = await issueInvite(application, member ? { memberId: member.id } : { applicationId: application.id });
+      const finalStatus = issued.inviteDelivery === "sent" ? "invite_sent" : "approved";
+      const rows = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
+        method: "PATCH", query: { id: `eq.${application.id}` }, prefer: "return=representation",
+        body: { status: finalStatus, email_status: issued.emailStatus, updated_at: new Date().toISOString() },
+      });
+      await supabaseAdmin("audit_logs", {
+        method: "POST",
+        body: { actor: admin.email, action: "application.invite_resent", entity_type: "application", entity_id: application.id, metadata: { invite_delivery: issued.inviteDelivery, member_targeted: Boolean(member) } },
+      });
+      return Response.json({ application: toApplication(rows[0], issued.inviteToken), inviteDelivery: issued.inviteDelivery, emailStatus: issued.emailStatus });
+    }
+
     const allowed = new Set<ApplicationStatus>(["new", "in_review", "awaiting_info", "approved", "rejected", "invite_sent"]);
     const note = payload.note?.trim() || "";
     if (!payload.id || !uuidPattern.test(payload.id) || (payload.status && !allowed.has(payload.status)) || (!payload.status && !note) || note.length > 1_200 || (payload.status === "awaiting_info" && !note)) {
@@ -191,28 +316,18 @@ export async function PATCH(request: Request) {
     }
 
     let inviteToken: string | undefined;
-    let inviteId: string | undefined;
     let inviteApplication: InviteApplication | undefined;
+    let inviteMember: MemberInviteCandidate | undefined;
     let finalStatus: ApplicationStatus | undefined = payload.status;
     let inviteDelivery: "sent" | "manual" | undefined;
     if (payload.status === "approved") {
-      inviteToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll("-", "");
-      const tokenHash = await sha256(inviteToken);
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      await supabaseAdmin("invites", {
-        method: "PATCH",
-        query: { application_id: `eq.${payload.id}`, used_at: "is.null", revoked_at: "is.null" },
-        body: { revoked_at: new Date().toISOString() },
-      });
-      const insertedInvites = await supabaseAdmin<Array<{ id: string }>>("invites", {
-        method: "POST", prefer: "return=representation",
-        body: { application_id: payload.id, token_hash: tokenHash, expires_at: expiresAt },
-      });
-      inviteId = insertedInvites[0]?.id;
-      if (!inviteId) return Response.json({ error: "Não foi possível gerar o convite." }, { status: 500 });
       inviteApplication = (await supabaseAdmin<InviteApplication[]>("applications", {
-        query: { select: "id,name,email", id: `eq.${payload.id}`, limit: "1" },
+        query: { select: "id,name,email,whatsapp", id: `eq.${payload.id}`, limit: "1" },
       }))[0];
+      if (!inviteApplication) return Response.json({ error: "Requerimento não encontrado." }, { status: 404 });
+      const existingMember = await findMemberByEmail(inviteApplication.email);
+      inviteMember = pendingMemberForInvite(existingMember);
+      if (existingMember && !inviteMember) return Response.json({ error: "Este e-mail já pertence a um integrante com cadastro concluído." }, { status: 409 });
       finalStatus = "approved";
     }
 
@@ -227,7 +342,7 @@ export async function PATCH(request: Request) {
     }
     let rows = finalStatus
       ? await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
-        method: "PATCH", query: { id: `eq.${payload.id}` }, prefer: "return=representation",
+        method: "PATCH", query: { id: `eq.${payload.id}`, ...(payload.status === "approved" ? { status: "in.(new,in_review,awaiting_info,rejected)" } : {}) }, prefer: "return=representation",
         body: { status: finalStatus, updated_at: new Date().toISOString() },
       })
       : await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
@@ -241,17 +356,17 @@ export async function PATCH(request: Request) {
       }))[0]
       : undefined);
     let decisionEmail: string | undefined;
-    if (payload.status === "approved" && inviteApplication && inviteToken && inviteId) {
-      const emailSent = await sendInviteEmail(inviteApplication, inviteToken, inviteId) === "sent";
-      inviteDelivery = emailSent ? "sent" : "manual";
+    if (payload.status === "approved" && inviteApplication) {
+      await attachApplicationToMember(inviteMember, inviteApplication.id);
+      const issued = await issueInvite(inviteApplication, inviteMember ? { memberId: inviteMember.id } : { applicationId: inviteApplication.id });
+      inviteToken = issued.inviteToken;
+      inviteDelivery = issued.inviteDelivery;
       decisionEmail = inviteDelivery;
-      if (emailSent) {
-        finalStatus = "invite_sent";
-        rows = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
-          method: "PATCH", query: { id: `eq.${payload.id}` }, prefer: "return=representation",
-          body: { status: finalStatus, updated_at: new Date().toISOString() },
-        });
-      }
+      finalStatus = inviteDelivery === "sent" ? "invite_sent" : "approved";
+      rows = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
+        method: "PATCH", query: { id: `eq.${payload.id}` }, prefer: "return=representation",
+        body: { status: finalStatus, email_status: issued.emailStatus, updated_at: new Date().toISOString() },
+      });
     }
     if (payload.status === "rejected") {
       const application = rows[0] as { name?: unknown; email?: unknown };
@@ -268,7 +383,7 @@ export async function PATCH(request: Request) {
     await supabaseAdmin("audit_logs", {
       method: "POST", body: { actor: admin.email, action: finalStatus ? `application.${finalStatus}` : "application.note_added", entity_type: "application", entity_id: payload.id, metadata: { invite_delivery: inviteDelivery, decision_email: decisionEmail, note_recorded: Boolean(savedNote) } },
     });
-    return Response.json({ application: toApplication(rows[0], inviteToken), inviteDelivery, note: savedNote });
+    return Response.json({ application: toApplication(rows[0], inviteToken), inviteDelivery, emailStatus: decisionEmail === "sent" ? "sent" : decisionEmail === "manual" ? "failed" : undefined, note: savedNote });
   } catch (error) {
     const status = error instanceof SupabaseRequestError ? error.status : 500;
     return Response.json({ error: "Não foi possível atualizar o requerimento." }, { status: status >= 400 && status < 600 ? status : 500 });

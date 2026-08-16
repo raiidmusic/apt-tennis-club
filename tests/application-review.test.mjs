@@ -14,6 +14,6 @@ test("application review exposes answers and records internal notes without fals
   assert.doesNotMatch(route, /return Response\.json\(\{ applications: \[\] \}\)/);
   assert.match(app, /ApplicationReviewDetail/);
   assert.match(app, /Mova o lead com uma decisão clara/);
-  assert.match(app, /Aprovar e gerar convite/);
+  assert.match(app, /Aprovar e enviar convite/);
   assert.match(app, /Copiar link individual de cadastro/);
 });

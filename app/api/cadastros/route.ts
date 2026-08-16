@@ -269,6 +269,11 @@ export async function POST(request: Request) {
       if (email !== member.email.toLowerCase()) {
         return Response.json({ error: "Use o mesmo e-mail associado ao convite." }, { status: 409 });
       }
+      if (member.application_id) {
+        application = (await supabaseAdmin<ApplicationRow[]>("applications", {
+          query: { select: "id,name,email,whatsapp,class_level,status", id: `eq.${member.application_id}`, limit: "1" },
+        }))[0];
+      }
     } else {
       application = (await supabaseAdmin<ApplicationRow[]>("applications", {
         query: { select: "id,name,email,whatsapp,class_level,status", id: `eq.${invite.application_id}`, limit: "1" },
@@ -421,7 +426,6 @@ export async function POST(request: Request) {
             cancelUrl: `${origin}/cadastro?status=cancelado`,
             expiredUrl: `${origin}/cadastro?status=expirado`,
           },
-          customerData: { name, cpfCnpj: cpf, email, phone },
           items: [{ name: "Participação mensal APT", description: "Mensalidade do APT Tennis Club", quantity: 1, value: monthlyValue }],
           subscription: { cycle: "MONTHLY", nextDueDate: `${nextDueDate} 12:00:00` },
         }),

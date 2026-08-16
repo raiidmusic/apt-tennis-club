@@ -80,13 +80,12 @@ test("revokes earlier invitations and validates applications on the server", asy
   assert.match(enrollmentRoute, /revoked_at: "is\.null"/);
 });
 
-test("pre-fills identity while hosted Asaas Checkout collects address and card", async () => {
+test("keeps payer identity and address inside hosted Asaas Checkout", async () => {
   const [enrollmentRoute, client] = await Promise.all([
     readFile(new URL("../app/api/cadastros/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(enrollmentRoute, /customerData: \{ name, cpfCnpj: cpf, email, phone \}/);
-  assert.doesNotMatch(enrollmentRoute, /customerData: \{[^}]*address/);
+  assert.doesNotMatch(enrollmentRoute, /customerData/);
   assert.match(client, /Endereço e cartão serão informados somente no ambiente seguro do Asaas\./);
 });
 

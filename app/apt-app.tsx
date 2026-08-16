@@ -799,6 +799,7 @@ function ApplicationReviewDetail({
   onNoteChange,
   onClose,
   onSave,
+  onResendInvite,
   onCopyInvite,
   saving,
 }: {
@@ -808,6 +809,7 @@ function ApplicationReviewDetail({
   onNoteChange: (value: string) => void;
   onClose: () => void;
   onSave: (status?: "new" | "in_review" | "awaiting_info" | "approved" | "rejected") => void;
+  onResendInvite: () => void;
   onCopyInvite: (token: string) => void;
   saving: boolean;
 }) {
@@ -821,6 +823,8 @@ function ApplicationReviewDetail({
   }, [onClose]);
   const whatsappUrl = application ? paymentReminderUrl({ name: application.name, whatsapp: application.whatsapp })?.replace(/\?text=.*/, "") : null;
   const statusLocked = application?.status === "registered";
+  const isQuickRecadastro = application?.answers.origem === "Recadastro pelo link da comunidade";
+  const isDirectInvite = application?.answers.origem === "Convite direto da gestão";
   return <div className="crm-drawer-shell">
     <button className="crm-drawer-backdrop" type="button" tabIndex={-1} onClick={onClose} aria-label="Fechar ficha do requerimento" />
     <section className="crm-drawer" role="dialog" aria-modal="true" aria-labelledby="application-drawer-title" aria-busy={loading}>
@@ -832,8 +836,8 @@ function ApplicationReviewDetail({
           <div className="crm-contact-actions"><a href={`mailto:${application.email}`}>E-mail</a>{whatsappUrl && <a href={whatsappUrl} target="_blank" rel="noreferrer">WhatsApp</a>}</div>
         </section>
         <section className="crm-stage-card" aria-labelledby="crm-stage-title">
-          <div><span>{application.answers.origem ? "Aprovação rápida" : "Etapa do CRM"}</span><h4 id="crm-stage-title">{application.answers.origem ? "Veio pelo recadastro da comunidade." : "Mova o lead com uma decisão clara."}</h4>{application.answers.origem && <p>Confira nome, e-mail e WhatsApp. Se reconhecer o integrante, aprove e gere o convite.</p>}</div>
-          {statusLocked ? <p>Esta ficha já chegou a <strong>{applicationStatusLabels[application.status]}</strong>. O cadastro e a cobrança seguem no fluxo do membro.</p> : <><label><span>Próxima etapa</span><select value={nextStatus} onChange={(event) => setNextStatus(event.target.value as typeof nextStatus)}><option value="new">Novo</option><option value="in_review">Em análise</option><option value="awaiting_info">Aguardando retorno</option><option value="rejected">Não aprovado</option></select></label><button className="secondary-button" type="button" onClick={() => onSave(nextStatus)} disabled={saving || nextStatus === application.status || (nextStatus === "awaiting_info" && !note.trim())}>{saving ? "Salvando…" : "Aplicar etapa"}</button><button className="primary-button" type="button" onClick={() => onSave("approved")} disabled={saving}>{saving ? "Processando…" : "Aprovar e gerar convite"}<span aria-hidden="true">→</span></button></>}
+          <div><span>{application.answers.origem ? "Aprovação rápida" : "Etapa do CRM"}</span><h4 id="crm-stage-title">{isQuickRecadastro ? "Veio pelo recadastro da comunidade." : isDirectInvite ? "Convite liberado diretamente pela gestão." : "Mova o lead com uma decisão clara."}</h4>{isQuickRecadastro && <p>Confira nome, e-mail e WhatsApp. Se reconhecer o integrante, aprove e gere o convite.</p>}</div>
+          {statusLocked ? <p>Esta ficha já chegou a <strong>{applicationStatusLabels[application.status]}</strong>. O cadastro e a cobrança seguem no fluxo do membro.</p> : <><label><span>Próxima etapa</span><select value={nextStatus} onChange={(event) => setNextStatus(event.target.value as typeof nextStatus)}><option value="new">Novo</option><option value="in_review">Em análise</option><option value="awaiting_info">Aguardando retorno</option><option value="rejected">Não aprovado</option></select></label><button className="secondary-button" type="button" onClick={() => onSave(nextStatus)} disabled={saving || nextStatus === application.status || (nextStatus === "awaiting_info" && !note.trim())}>{saving ? "Salvando…" : "Aplicar etapa"}</button><button className="primary-button" type="button" onClick={() => onSave("approved")} disabled={saving}>{saving ? "Processando…" : "Aprovar e enviar convite"}<span aria-hidden="true">→</span></button>{["approved", "invite_sent"].includes(application.status) && <button className="secondary-button" type="button" onClick={onResendInvite} disabled={saving}>{saving ? "Enviando…" : "Reenviar convite por e-mail"}</button>}<p>{application.emailStatus === "sent" ? "E-mail do convite aceito pelo provedor." : application.emailStatus === "failed" ? "O provedor não confirmou este e-mail. Reenvie ou copie o novo link." : "O convite pode ser reenviado a qualquer momento."}</p></>}
           {application.inviteToken && <button className="invite-copy" type="button" onClick={() => onCopyInvite(application.inviteToken!)}>Copiar link individual de cadastro</button>}
         </section>
         <section className="crm-notes" aria-labelledby="crm-notes-title">
@@ -927,6 +931,34 @@ function CrmKanban({ applications, onOpen }: { applications: ApplicationRecord[]
   })}</section>;
 }
 
+function DirectInvitePanel({ onIssued, onCopyInvite, onNotice }: {
+  onIssued: (application: ApplicationRecord) => void;
+  onCopyInvite: (token: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [fallbackToken, setFallbackToken] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setSubmitting(true); setError(""); setFallbackToken("");
+    try {
+      const response = await fetch("/api/requerimentos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "direct_invite", name, email, whatsapp, consent }) });
+      const payload = await response.json() as { application?: ApplicationRecord; inviteDelivery?: "sent" | "manual"; error?: string };
+      if (!response.ok || !payload.application) throw new Error(payload.error || "Não foi possível enviar o convite.");
+      onIssued(payload.application);
+      setName(""); setEmail(""); setWhatsapp(""); setConsent(false);
+      if (payload.inviteDelivery === "sent") onNotice("Convite direto enviado por e-mail.");
+      else { setFallbackToken(payload.application.inviteToken || ""); onNotice("Convite criado, mas o e-mail não foi confirmado. Copie o link abaixo."); }
+    } catch (inviteError) { setError(inviteError instanceof Error ? inviteError.message : "Não foi possível enviar o convite."); }
+    finally { setSubmitting(false); }
+  }
+  return <section className="crm-stage-card direct-invite" aria-labelledby="direct-invite-title"><div><span>Convite direto</span><h3 id="direct-invite-title">Você já fez o onboarding?</h3><p>Envie o cadastro privado sem criar um requerimento público. A pessoa preenche CPF, senha e pagamento somente nas próximas etapas.</p></div><form onSubmit={submit}><label className="field-label field-label--compact"><span>Nome completo</span><input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required /></label><label className="field-label field-label--compact"><span>E-mail</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required /></label><label className="field-label field-label--compact"><span>WhatsApp com DDD</span><input type="tel" value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} autoComplete="tel" required /></label><label className="consent-control"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required /><span>A pessoa autorizou receber este convite por e-mail.</span></label>{error && <p className="field-error" role="alert">{error}</p>}<button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Enviando…" : "Enviar convite de cadastro"}<span aria-hidden="true">→</span></button>{fallbackToken && <button className="invite-copy" type="button" onClick={() => onCopyInvite(fallbackToken)}>Copiar novo link de cadastro</button>}</form></section>;
+}
+
 export function AdminPage() {
   const [tab, setTab] = useState<"resumo" | "membros">("resumo");
   const [query, setQuery] = useState("");
@@ -987,13 +1019,26 @@ export function AdminPage() {
     setApplicationSaving(true);
     try {
       const response = await fetch("/api/requerimentos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status, note: reviewNote }) });
-      const payload = await response.json() as { application?: ApplicationRecord; note?: AdminNote; error?: string; inviteDelivery?: "sent" | "manual" };
+      const payload = await response.json() as { application?: ApplicationRecord; note?: AdminNote; error?: string; inviteDelivery?: "sent" | "manual"; emailStatus?: string };
       if (!response.ok || !payload.application) throw new Error(payload.error);
       setApplications((current) => current.map((item) => item.id === id ? payload.application! : item));
-      setSelectedApplication((current) => current?.id === id ? { ...current, ...payload.application!, notes: payload.note ? [...current.notes, payload.note] : current.notes } : current);
+      setSelectedApplication((current) => current?.id === id ? { ...current, ...payload.application!, emailStatus: payload.emailStatus || current.emailStatus, notes: payload.note ? [...current.notes, payload.note] : current.notes } : current);
       setReviewNote("");
-      setNotice(status === "approved" ? payload.inviteDelivery === "sent" ? "Convite enviado por e-mail." : "Aprovado. Copie o link individual de cadastro." : status === "awaiting_info" ? "Pedido de informação registrado. O contato ainda precisa ser feito pela gestão." : status ? "Decisão registrada." : "Nota registrada.");
+      setNotice(status === "approved" ? payload.inviteDelivery === "sent" ? "Convite enviado por e-mail." : "Convite criado, mas o e-mail não foi confirmado. Reenvie ou copie o link individual." : status === "awaiting_info" ? "Pedido de informação registrado. O contato ainda precisa ser feito pela gestão." : status ? "Decisão registrada." : "Nota registrada.");
     } catch (error) { setNotice(error instanceof Error ? error.message : "Não foi possível registrar a decisão."); }
+    finally { setApplicationSaving(false); }
+  }
+  async function resendApplicationInvite() {
+    if (!selectedApplication) return;
+    setApplicationSaving(true);
+    try {
+      const response = await fetch("/api/requerimentos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "resend_invite", id: selectedApplication.id }) });
+      const payload = await response.json() as { application?: ApplicationRecord; error?: string; inviteDelivery?: "sent" | "manual"; emailStatus?: string };
+      if (!response.ok || !payload.application) throw new Error(payload.error || "Não foi possível reenviar o convite.");
+      setApplications((current) => current.map((item) => item.id === payload.application!.id ? payload.application! : item));
+      setSelectedApplication((current) => current ? { ...current, ...payload.application!, emailStatus: payload.emailStatus || current.emailStatus } : current);
+      setNotice(payload.inviteDelivery === "sent" ? "Novo convite enviado por e-mail." : "Novo convite criado, mas o e-mail não foi confirmado. Copie o link individual.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Não foi possível reenviar o convite."); }
     finally { setApplicationSaving(false); }
   }
   async function openMember(member: MemberRecord) {
@@ -1061,7 +1106,7 @@ export function AdminPage() {
     />
     <section className="admin-content">
       {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice("")}>Fechar</button></div>}
-      {tab === "resumo" && <><header className="admin-heading"><div><span>CRM e visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section>{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state empty-state--bordered"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{!loading && applications.length > 0 && <CrmKanban applications={applications} onOpen={openApplication} />}{(selectedApplication || applicationLoading) && <ApplicationReviewDetail key={selectedApplication?.id || "loading-application"} application={selectedApplication} loading={applicationLoading} saving={applicationSaving} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} onCopyInvite={copyInvite} />}</>}
+      {tab === "resumo" && <><header className="admin-heading"><div><span>CRM e visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section><DirectInvitePanel onIssued={(application) => setApplications((current) => [application, ...current.filter((item) => item.id !== application.id)])} onCopyInvite={copyInvite} onNotice={setNotice} />{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state empty-state--bordered"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{!loading && applications.length > 0 && <CrmKanban applications={applications} onOpen={openApplication} />}{(selectedApplication || applicationLoading) && <ApplicationReviewDetail key={selectedApplication?.id || "loading-application"} application={selectedApplication} loading={applicationLoading} saving={applicationSaving} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} onResendInvite={resendApplicationInvite} onCopyInvite={copyInvite} />}</>}
       {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Quem está em dia e quem precisa de ação.</h2></div></header><div className="admin-toolbar"><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar nome, e-mail ou WhatsApp" /></label><label className="filter-field"><span className="sr-only">Filtrar membros</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value as typeof memberFilter)}><option value="all">Todos</option><option value="attention">Precisa de ação</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select></label><span>{filteredMembers.length} de {members.length}</span></div><PaymentReminderQueue members={members} /><MemberManagementList members={filteredMembers} onManage={openMember} /><MemberImportPanel onImported={refreshMembers} />{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Ajuste a busca ou o filtro.</span></div>}{(selectedMember || memberLoading) && <MemberManagementDetail member={selectedMember} loading={memberLoading} saving={memberSaving} refreshing={memberRefreshing} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} onRefresh={refreshMemberBilling} />}</>}
     </section>
   </main></div>;

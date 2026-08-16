@@ -521,11 +521,15 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 .crm-contact-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .crm-contact-actions a, .invite-copy { min-height: 2.75rem; display: inline-flex; align-items: center; justify-content: center; padding: 0.55rem 0.75rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--white); color: var(--navy); font-size: 0.76rem; font-weight: 730; cursor: pointer; }
 .crm-stage-card, .crm-notes, .member-management-form { display: grid; gap: 1rem; padding: 1rem; }
-.crm-stage-card h4, .crm-notes h4, .member-management-form h4 { margin: 0.2rem 0 0; font-size: 1.05rem; }
+.crm-stage-card h3, .crm-stage-card h4, .crm-notes h4, .member-management-form h4 { margin: 0.2rem 0 0; font-size: 1.05rem; }
 .crm-stage-card > p, .crm-notes > div:first-child > p { margin: 0; color: var(--muted); font-size: 0.82rem; }
 .crm-stage-card label { display: grid; gap: 0.45rem; }
 .crm-stage-card label > span { color: var(--muted); font-size: 0.76rem; font-weight: 700; }
 .crm-stage-card select, .member-management-form select { width: 100%; min-height: 3rem; padding: 0.5rem 0.7rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--white); color: var(--ink); }
+.direct-invite { margin-top: 1.25rem; }
+.direct-invite form { display: grid; gap: 1rem; }
+.consent-control { display: flex !important; align-items: flex-start; gap: 0.7rem !important; color: var(--muted); font-size: 0.82rem; cursor: pointer; }
+.consent-control input { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; margin: 0.1rem 0 0; accent-color: var(--clay); }
 .invite-copy { border-color: var(--navy); background: var(--navy); color: var(--white); }
 .crm-notes__history { display: grid; gap: 0.65rem; }
 .crm-notes__history article { position: relative; padding: 0.85rem; border: 1px solid var(--line); background: var(--surface-muted); }
@@ -640,6 +644,8 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .payment-method { flex-direction: row; align-items: center; justify-content: space-between; }
   .payment-method__action { max-width: 32rem; justify-items: start; }
   .signal-strip { grid-template-columns: repeat(4, 1fr); }
+  .direct-invite form { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
+  .direct-invite .consent-control, .direct-invite .field-error, .direct-invite .primary-button, .direct-invite .invite-copy { grid-column: 1 / -1; }
   .member-import-panel { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
   .admin-toolbar { grid-template-columns: minmax(16rem, 1fr) 12rem auto; align-items: center; }
   .payment-reminder-queue { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }

@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { asaasRequest } from "../../../../lib/asaas";
 import { sendBillingTransitionEmails } from "../../../../lib/apt-email";
 import { reconcileMemberBilling } from "../../../../lib/billing-reconciliation";
@@ -18,13 +19,13 @@ type AsaasPayment = {
 };
 
 type AsaasEvent = {
-  id?: string;
-  event?: string;
+  id: string;
+  event: string;
   payment?: AsaasPayment;
   subscription?: { id?: string; externalReference?: string };
   checkout?: { id?: string; status?: string; externalReference?: string; customer?: string };
 };
-type StoredEvent = { id: string; processed_at: string | null };
+type StoredEvent = { id: string; processed_at: string | null; payload?: AsaasEvent };
 type SubscriptionRow = { id: string; member_id?: string };
 type MemberRow = { id: string; name: string; email: string; joined_at: string | null };
 
@@ -49,6 +50,10 @@ function paymentIsPaid(status: string | undefined) {
 
 function paymentNeedsAttention(status: string | undefined) {
   return failedPaymentStatuses.has((status || "").toUpperCase());
+}
+
+function normalizedName(value = "") {
+  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 async function recordFailure(eventId: string, error: unknown) {
@@ -78,25 +83,24 @@ async function resolveMemberId(payment: AsaasPayment | undefined, event: AsaasEv
   if (!payment?.customer) return undefined;
   const customerResponse = await asaasRequest(`/customers/${encodeURIComponent(payment.customer)}`);
   if (!customerResponse.ok) return undefined;
-  const customer = await customerResponse.json() as { email?: string; externalReference?: string };
+  const customer = await customerResponse.json() as { email?: string; externalReference?: string; name?: string; cpfCnpj?: string };
   if (customer.externalReference) return customer.externalReference;
-  if (!customer.email) return undefined;
-  const matchingMembers = await supabaseAdmin<Array<{ id: string }>>("members", {
-    query: { select: "id", email: `eq.${customer.email.trim().toLowerCase()}`, limit: "2" },
+  if (customer.email) {
+    const matchingMembers = await supabaseAdmin<Array<{ id: string }>>("members", {
+      query: { select: "id", email: `eq.${customer.email.trim().toLowerCase()}`, limit: "2" },
+    });
+    if (matchingMembers.length === 1) return matchingMembers[0].id;
+  }
+  const cpfLast4 = (customer.cpfCnpj || "").replace(/\D/g, "").slice(-4);
+  if (!cpfLast4 || !customer.name) return undefined;
+  const matchingMembers = await supabaseAdmin<Array<{ id: string; name: string }>>("members", {
+    query: { select: "id,name", cpf_last4: `eq.${cpfLast4}`, limit: "10" },
   });
-  return matchingMembers.length === 1 ? matchingMembers[0].id : undefined;
+  const exactNameMatches = matchingMembers.filter((member) => normalizedName(member.name) === normalizedName(customer.name));
+  return exactNameMatches.length === 1 ? exactNameMatches[0].id : undefined;
 }
 
-export async function POST(request: Request) {
-  const configuredToken = runtimeEnv().ASAAS_WEBHOOK_TOKEN;
-  const receivedToken = request.headers.get("asaas-access-token");
-  if (!configuredToken || receivedToken !== configuredToken) {
-    return Response.json({ received: false }, { status: 401 });
-  }
-
-  const payload = await request.json() as AsaasEvent;
-  if (!payload.id || !payload.event) return Response.json({ received: false }, { status: 400 });
-
+async function processEvent(payload: AsaasEvent) {
   try {
     const existing = await supabaseAdmin<StoredEvent[]>("webhook_events", {
       query: { select: "id,processed_at", id: `eq.${payload.id}`, limit: "1" },
@@ -295,4 +299,54 @@ export async function POST(request: Request) {
     await recordFailure(payload.id, error);
     return Response.json({ received: false }, { status: 500 });
   }
+}
+
+async function processPendingEvents(excludedEventId: string) {
+  const pending = await supabaseAdmin<StoredEvent[]>("webhook_events", {
+    query: { select: "id,processed_at,payload", processed_at: "is.null", order: "received_at.asc", limit: "20" },
+  });
+  for (const stored of pending) {
+    if (stored.id !== excludedEventId && stored.payload?.id && stored.payload.event) {
+      await processEvent(stored.payload);
+    }
+  }
+}
+
+export async function POST(request: Request) {
+  const configuredToken = runtimeEnv().ASAAS_WEBHOOK_TOKEN;
+  const receivedToken = request.headers.get("asaas-access-token");
+  if (!configuredToken || receivedToken !== configuredToken) {
+    return Response.json({ received: false }, { status: 401 });
+  }
+
+  let payload: AsaasEvent;
+  try {
+    payload = await request.json() as AsaasEvent;
+  } catch {
+    return Response.json({ received: false }, { status: 400 });
+  }
+  if (!payload.id || !payload.event) return Response.json({ received: false }, { status: 400 });
+
+  try {
+    const existing = await supabaseAdmin<StoredEvent[]>("webhook_events", {
+      query: { select: "id,processed_at", id: `eq.${payload.id}`, limit: "1" },
+    });
+    if (existing[0]?.processed_at) return Response.json({ received: true, duplicate: true });
+    if (!existing[0]) {
+      await supabaseAdmin("webhook_events", {
+        method: "POST",
+        query: { on_conflict: "id" },
+        prefer: "resolution=ignore-duplicates,return=minimal",
+        body: { id: payload.id, event_type: payload.event, payload, processed_at: null },
+      });
+    }
+  } catch {
+    return Response.json({ received: false }, { status: 500 });
+  }
+
+  after(async () => {
+    await processEvent(payload);
+    await processPendingEvents(payload.id!).catch(() => undefined);
+  });
+  return Response.json({ received: true, queued: true });
 }

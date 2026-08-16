@@ -86,6 +86,11 @@ test("keeps payer identity and address inside hosted Asaas Checkout", async () =
     readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(enrollmentRoute, /customerData/);
+  assert.match(enrollmentRoute, /ensureAsaasCustomer/);
+  assert.match(enrollmentRoute, /externalReference: input\.memberId/);
+  assert.match(enrollmentRoute, /cpfCnpj: input\.cpf/);
+  assert.match(enrollmentRoute, /customer: asaasCustomerId/);
+  assert.match(enrollmentRoute, /asaas_customer_id: asaasCustomerId/);
   assert.match(client, /Endereço e cartão serão informados somente no ambiente seguro do Asaas\./);
 });
 
@@ -142,6 +147,11 @@ test("reconciles billing without collecting card data in the APT portal", async 
   assert.match(webhook, /payment\?\.checkoutSession/);
   assert.match(webhook, /payment\?\.customer/);
   assert.match(webhook, /asaas_customer_id: payload\.checkout\.customer/);
+  assert.match(webhook, /cpf_last4: `eq\.\$\{cpfLast4\}`/);
+  assert.match(webhook, /normalizedName\(member\.name\) === normalizedName\(customer\.name\)/);
+  assert.match(webhook, /after\(async \(\) =>/);
+  assert.match(webhook, /processPendingEvents/);
+  assert.match(webhook, /received: true, queued: true/);
   assert.match(webhook, /participation_status: "active"/);
   assert.match(reconciliation, /subscriptions\/\$\{encodeURIComponent\(providerSubscription\.id\)\}\/payments/);
   assert.doesNotMatch(portalRoute, /creditCardHolderInfo|creditCardToken|\bcvv\b/i);

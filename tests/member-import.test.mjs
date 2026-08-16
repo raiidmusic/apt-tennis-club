@@ -44,5 +44,6 @@ test("recadastro migration keeps CPF nullable until self-entry and gives an invi
   assert.match(webhookRoute, /processed_at: null/);
   assert.match(webhookRoute, /payments\/\$\{encodeURIComponent\(payment\.id\)\}/);
   assert.match(webhookRoute, /current_period_end: providerNextDueDate/);
+  assert.match(webhookRoute, /monthlyAccessEnd/);
   assert.doesNotMatch(webhookRoute, /reconciled: false/);
 });

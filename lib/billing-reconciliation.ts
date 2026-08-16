@@ -1,6 +1,6 @@
 import { asaasRequest } from "./asaas";
 import { sendBillingTransitionEmails } from "./apt-email";
-import { asaasPaymentState } from "./billing-state";
+import { asaasPaymentState, monthlyAccessEnd } from "./billing-state";
 import { supabaseAdmin, SupabaseRequestError } from "./supabase-server";
 
 export type AsaasPaymentSnapshot = {
@@ -170,6 +170,9 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
   }));
 
   const latestState = asaasPaymentState(latest?.status);
+  const oneOffPeriodEnd = latestState.paid
+    ? monthlyAccessEnd(latest?.paymentDate || latest?.clientPaymentDate || latest?.dueDate)
+    : null;
   const protectedManualState = ["courtesy", "inactive", "cancelled", "cancellation_requested"].includes(member.participation_status);
   const nextMemberStatus = protectedManualState
     ? member.participation_status
@@ -186,8 +189,8 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
         asaas_customer_id: providerSubscription?.customer || recoveredCustomerId || localSubscription.asaas_customer_id,
         status: nextSubscriptionStatus,
         amount_cents: providerSubscription?.value ? Math.round(providerSubscription.value * 100) : localSubscription.amount_cents,
-        next_due_date: providerSubscription?.nextDueDate || localSubscription.next_due_date,
-        current_period_end: providerSubscription?.nextDueDate || localSubscription.current_period_end,
+        next_due_date: providerSubscription?.nextDueDate || oneOffPeriodEnd || localSubscription.next_due_date,
+        current_period_end: providerSubscription?.nextDueDate || oneOffPeriodEnd || localSubscription.current_period_end,
         overdue_since: latestState.failed ? latest?.dueDate || new Date().toISOString().slice(0, 10) : null,
         updated_at: now,
       },

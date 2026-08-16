@@ -2,6 +2,7 @@ import { after } from "next/server";
 import { asaasRequest } from "../../../../lib/asaas";
 import { sendBillingTransitionEmails } from "../../../../lib/apt-email";
 import { reconcileMemberBilling } from "../../../../lib/billing-reconciliation";
+import { monthlyAccessEnd } from "../../../../lib/billing-state";
 import { runtimeEnv, sha256, supabaseAdmin, SupabaseRequestError } from "../../../../lib/supabase-server";
 
 type AsaasPayment = {
@@ -233,7 +234,9 @@ async function processEvent(payload: AsaasEvent) {
     }
 
     const asaasSubscriptionId = payment?.subscription || payload.subscription?.id;
-    let providerNextDueDate: string | null = null;
+    let providerNextDueDate = paymentIsReceived
+      ? monthlyAccessEnd(payment?.paymentDate || payment?.clientPaymentDate || payment?.dueDate)
+      : null;
     if (asaasSubscriptionId) {
       if (paymentIsReceived) {
         const providerResponse = await asaasRequest(`/subscriptions/${encodeURIComponent(asaasSubscriptionId)}`);

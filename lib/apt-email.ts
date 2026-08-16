@@ -177,9 +177,9 @@ async function queueAndProcessBillingEmails(input: {
       audience: "member",
       recipient_email: input.member.email,
       reply_to: null,
-      subject: confirmed ? "Pagamento confirmado — acesso APT liberado" : "Atualização necessária na sua mensalidade APT",
+      subject: confirmed ? "Pagamento confirmado — mensalidade APT" : "Atualização necessária na sua mensalidade APT",
       body_text: confirmed
-        ? `Olá, ${input.member.name}.\n\nO Asaas confirmou sua mensalidade do APT. Seu acesso aos links e à área de membros está liberado.`
+        ? `Olá, ${input.member.name}.\n\nO Asaas confirmou e o APT registrou sua mensalidade. Se o seu cadastro já estiver concluído, o acesso está liberado. Caso ainda não esteja, finalize-o pelo link enviado pela gestão.`
         : `Olá, ${input.member.name}.\n\nO Asaas informou uma atualização na sua mensalidade. Acesse a área de membros para acompanhar a situação ou fale com a gestão do APT.`,
       flow: confirmed ? "payment_confirmed_member" : "payment_attention_member",
       provider_status: input.providerStatus,

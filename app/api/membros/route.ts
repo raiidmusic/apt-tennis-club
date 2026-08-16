@@ -10,7 +10,7 @@ type MemberRow = {
 };
 type SubscriptionRow = {
   member_id: string; status: string; amount_cents: number; next_due_date: string | null;
-  overdue_since: string | null; cancel_at_period_end: boolean;
+  current_period_end: string | null; overdue_since: string | null; cancel_at_period_end: boolean;
 };
 type MemberPayment = { id: string; status: string; value_cents: number; due_date: string | null; paid_at: string | null; invoice_url: string | null; created_at: string };
 type MemberNote = { id: string; body: string; created_by: string; created_at: string };
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
       if (!uuidPattern.test(memberId)) return Response.json({ error: "Integrante inválido." }, { status: 400 });
       const [memberRows, subscriptionRows, payments, notes] = await Promise.all([
         supabaseAdmin<MemberRow[]>("members", { query: { select: "id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", id: `eq.${memberId}`, limit: "1" } }),
-        supabaseAdmin<SubscriptionRow[]>("subscriptions", { query: { select: "member_id,status,amount_cents,next_due_date,overdue_since,cancel_at_period_end", member_id: `eq.${memberId}`, limit: "1" } }),
+        supabaseAdmin<SubscriptionRow[]>("subscriptions", { query: { select: "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end", member_id: `eq.${memberId}`, limit: "1" } }),
         supabaseAdmin<MemberPayment[]>("payments", { query: { select: "id,status,value_cents,due_date,paid_at,invoice_url,created_at", member_id: `eq.${memberId}`, order: "created_at.desc", limit: "24" } }),
         supabaseAdmin<MemberNote[]>("admin_notes", { query: { select: "id,body,created_by,created_at", member_id: `eq.${memberId}`, order: "created_at.asc" } }),
       ]);
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
         twinnerUrl: member.twinner_url, whatsappCommunityUrl: member.whatsapp_community_url, joinedAt: member.joined_at, createdAt: member.created_at,
         participationStatus: ["courtesy", "inactive"].includes(member.participation_status) ? member.participation_status : overdueDays >= 7 ? "delinquent" : member.participation_status,
         subscriptionStatus: subscription?.status || "pending_configuration", amountCents: subscription?.amount_cents || 0,
-        nextDueDate: subscription?.next_due_date, overdueDays, cancelAtPeriodEnd: subscription?.cancel_at_period_end || false,
+        nextDueDate: subscription?.next_due_date, currentPeriodEnd: subscription?.current_period_end, overdueDays, cancelAtPeriodEnd: subscription?.cancel_at_period_end || false,
         payments, notes,
       } });
     }
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
         query: { select: "id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", order: "name.asc" },
       }),
       supabaseAdmin<SubscriptionRow[]>("subscriptions", {
-        query: { select: "member_id,status,amount_cents,next_due_date,overdue_since,cancel_at_period_end" },
+        query: { select: "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end" },
       }),
     ]);
     const subscriptionByMember = new Map(subscriptions.map((item) => [item.member_id, item]));
@@ -74,7 +74,7 @@ export async function GET(request: Request) {
         classLevel: member.class_level, twinnerUrl: member.twinner_url, whatsappCommunityUrl: member.whatsapp_community_url,
         participationStatus: ["courtesy", "inactive"].includes(member.participation_status) ? member.participation_status : overdueDays >= 7 ? "delinquent" : member.participation_status,
         subscriptionStatus: subscription?.status || "pending_configuration", amountCents: subscription?.amount_cents || 0,
-        nextDueDate: subscription?.next_due_date, overdueDays, cancelAtPeriodEnd: subscription?.cancel_at_period_end || false,
+        nextDueDate: subscription?.next_due_date, currentPeriodEnd: subscription?.current_period_end, overdueDays, cancelAtPeriodEnd: subscription?.cancel_at_period_end || false,
       };
     });
     return Response.json({ members: result });

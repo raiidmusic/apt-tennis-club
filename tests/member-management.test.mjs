@@ -15,7 +15,11 @@ test("keeps member access editing admin-only, auditable and inside safe boundari
   assert.match(membersRoute, /member\.management_updated/);
   assert.match(membersRoute, /\["courtesy", "inactive"\]\.includes\(member\.participation_status\)/);
   assert.match(portalRoute, /member\.participation_status === "courtesy"/);
-  assert.match(client, /MemberManagementList/);
+  assert.match(client, /MemberOperationsKanban/);
+  assert.match(client, /memberOperationsStage/);
+  assert.match(client, /cancellation_requested/);
+  assert.match(client, /currentPeriodEnd/);
+  assert.match(client, /Operação em tempo real, sem movimentação manual/);
   assert.match(client, /Abrir ficha completa/);
   assert.match(client, /Histórico financeiro/);
   assert.match(client, /Nova nota interna/);

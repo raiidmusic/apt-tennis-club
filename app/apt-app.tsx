@@ -121,6 +121,7 @@ type MemberRecord = {
   subscriptionStatus: string;
   amountCents: number;
   nextDueDate?: string | null;
+  currentPeriodEnd?: string | null;
   overdueDays: number;
   cancelAtPeriodEnd?: boolean;
   joinedAt?: string | null;
@@ -914,8 +915,59 @@ function PaymentReminderQueue({ members }: { members: MemberRecord[] }) {
   return <section className="payment-reminder-queue" aria-live="polite"><div><span>Cobrança por WhatsApp</span><h3>Fila de lembretes</h3><p>Abra uma conversa por vez, revise e envie pelo seu WhatsApp. Não há disparo automático.</p></div><div className="payment-reminder-queue__next"><small>{position + 1} de {contacts.length}</small><strong>{member.name}</strong><a className="small-primary" href={reminderUrl || undefined} target="_blank" rel="noreferrer" onClick={() => setCurrent((index) => Math.min(index + 1, contacts.length - 1))}>Abrir lembrete</a></div></section>;
 }
 
-function MemberManagementList({ members, onManage }: { members: MemberRecord[]; onManage: (member: MemberRecord) => void }) {
-  return <div className="member-management-list">{members.map((member) => <button key={member.id} className="member-management-card" type="button" onClick={() => onManage(member)}><div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.email} · {member.classLevel || "Sem classe"}</small></div></div><div className="member-management-card__status"><span className={["active", "courtesy"].includes(member.participationStatus) ? "status-chip status-chip--ok" : member.participationStatus === "pending_payment" ? "status-chip status-chip--pending" : "status-chip status-chip--inactive"}>{readableStatus(member.participationStatus, memberStatusLabels)}</span><small>{member.nextDueDate ? `Vence ${shortDate(member.nextDueDate)}` : readableStatus(member.subscriptionStatus, subscriptionStatusLabels)}</small></div><span className="member-management-card__open">Abrir ficha completa <i aria-hidden="true">→</i></span></button>)}</div>;
+type MemberOperationsStage = "awaiting_payment" | "attention" | "active" | "cancellation_requested" | "inactive";
+
+const memberOperationsStages: Array<{ id: MemberOperationsStage; label: string; mobileLabel: string; empty: string }> = [
+  { id: "awaiting_payment", label: "Aguardando pagamento", mobileLabel: "Aguardando", empty: "Nenhum cadastro aguardando pagamento." },
+  { id: "attention", label: "Atenção financeira", mobileLabel: "Ação", empty: "Nenhum membro precisa de atenção financeira." },
+  { id: "active", label: "Ativos", mobileLabel: "Ativos", empty: "Nenhum membro ativo." },
+  { id: "cancellation_requested", label: "Cancelamento solicitado", mobileLabel: "Cancelando", empty: "Nenhum cancelamento em andamento." },
+  { id: "inactive", label: "Inativos", mobileLabel: "Inativos", empty: "Nenhum membro inativo." },
+];
+
+function memberOperationsStage(member: MemberRecord): MemberOperationsStage {
+  const periodEnded = Boolean(member.currentPeriodEnd && member.currentPeriodEnd < new Date().toISOString().slice(0, 10));
+  if (member.participationStatus === "cancellation_requested") return periodEnded ? "inactive" : "cancellation_requested";
+  if (["inactive", "cancelled"].includes(member.participationStatus)) return "inactive";
+  if (["active", "courtesy"].includes(member.participationStatus)) return "active";
+  if (["pending_payment", "delinquent"].includes(member.participationStatus) || ["past_due", "overdue"].includes(member.subscriptionStatus)) return "attention";
+  return "awaiting_payment";
+}
+
+function memberOperationsStatusClass(stage: MemberOperationsStage) {
+  return stage === "active" ? "ok" : stage === "inactive" || stage === "cancellation_requested" ? "inactive" : "pending";
+}
+
+function MemberOperationCard({ member, onManage }: { member: MemberRecord; onManage: (member: MemberRecord) => void }) {
+  const stage = memberOperationsStage(member);
+  const dueLabel = member.nextDueDate ? `Vence ${shortDate(member.nextDueDate)}` : readableStatus(member.subscriptionStatus, subscriptionStatusLabels);
+  return <button className="member-operations-card" type="button" onClick={() => onManage(member)}>
+    <div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.classLevel || "Classe não informada"}</small></div></div>
+    <div className="member-operations-card__meta"><span className={`status-chip status-chip--${memberOperationsStatusClass(stage)}`}>{readableStatus(member.participationStatus, memberStatusLabels)}</span><small>{dueLabel}</small></div>
+    <span className="member-operations-card__value"><small>Mensalidade</small><strong>{(member.amountCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></span>
+    <span className="member-management-card__open">Abrir ficha completa <i aria-hidden="true">→</i></span>
+  </button>;
+}
+
+function MemberOperationsKanban({ members, onManage, mobileDefaultStage }: { members: MemberRecord[]; onManage: (member: MemberRecord) => void; mobileDefaultStage: MemberOperationsStage | "action" | "all" }) {
+  const [mobileStage, setMobileStage] = useState<MemberOperationsStage | "action" | "all">(mobileDefaultStage);
+  useEffect(() => setMobileStage(mobileDefaultStage), [mobileDefaultStage]);
+  const grouped = useMemo(() => Object.fromEntries(memberOperationsStages.map((stage) => [stage.id, members.filter((member) => memberOperationsStage(member) === stage.id)])) as Record<MemberOperationsStage, MemberRecord[]>, [members]);
+  const mobileMembers = mobileStage === "all" ? members : mobileStage === "action" ? [...grouped.awaiting_payment, ...grouped.attention] : grouped[mobileStage];
+  const mobileTitle = mobileStage === "all" ? "Todos os resultados" : mobileStage === "action" ? "Ação necessária" : memberOperationsStages.find((stage) => stage.id === mobileStage)?.label || "Membros";
+  return <section className="member-operations" aria-label="Operação de membros">
+    <div className="member-operations__summary" aria-label="Resumo da operação">
+      <div><span>Em ação</span><strong>{grouped.awaiting_payment.length + grouped.attention.length}</strong></div>
+      <div><span>Ativos</span><strong>{grouped.active.length}</strong></div>
+      <div><span>Cancelando</span><strong>{grouped.cancellation_requested.length}</strong></div>
+      <div><span>Inativos</span><strong>{grouped.inactive.length}</strong></div>
+    </div>
+    <div className="member-operations__mobile-stages" aria-label="Etapa dos membros">
+      {([{ id: "all", mobileLabel: "Todos" }, { id: "action", mobileLabel: "Ação" }, ...memberOperationsStages.map(({ id, mobileLabel }) => ({ id, mobileLabel }))] as Array<{ id: MemberOperationsStage | "action" | "all"; mobileLabel: string }>).map((stage) => <button key={stage.id} type="button" aria-pressed={mobileStage === stage.id} onClick={() => setMobileStage(stage.id)}>{stage.mobileLabel}</button>)}
+    </div>
+    <section className="member-operations__mobile-list" aria-live="polite"><header><span>{mobileTitle}</span><strong>{mobileMembers.length}</strong></header><div>{mobileMembers.map((member) => <MemberOperationCard key={member.id} member={member} onManage={onManage} />)}{!mobileMembers.length && <p>Nenhum membro nesta etapa.</p>}</div></section>
+    <div className="member-operations__desktop-board">{memberOperationsStages.map((stage) => <section className="member-operations__lane" data-stage={stage.id} key={stage.id}><header><div><strong>{stage.label}</strong><span>{grouped[stage.id].length} {grouped[stage.id].length === 1 ? "membro" : "membros"}</span></div></header><div>{grouped[stage.id].map((member) => <MemberOperationCard key={member.id} member={member} onManage={onManage} />)}{!grouped[stage.id].length && <p>{stage.empty}</p>}</div></section>)}</div>
+  </section>;
 }
 
 const crmColumns: Array<{ status: ApplicationRecord["status"]; label: string }> = [
@@ -960,7 +1012,7 @@ function DirectEnrollmentLinkPanel({ onNotice }: { onNotice: (message: string) =
 export function AdminPage() {
   const [tab, setTab] = useState<"resumo" | "membros">("resumo");
   const [query, setQuery] = useState("");
-  const [memberFilter, setMemberFilter] = useState<"all" | "attention" | "active" | "inactive">("all");
+  const [memberFilter, setMemberFilter] = useState<"all" | "attention" | "active" | "cancellation_requested" | "inactive">("all");
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
   const [members, setMembers] = useState<MemberRecord[]>([]);
   const [asaasConnected, setAsaasConnected] = useState(false);
@@ -979,12 +1031,13 @@ export function AdminPage() {
   const [authRequired, setAuthRequired] = useState(false);
   const filteredMembers = members.filter((member) => {
     const matchesQuery = `${member.name} ${member.email} ${member.whatsapp}`.toLowerCase().includes(query.toLowerCase());
+    const stage = memberOperationsStage(member);
     const matchesStatus = memberFilter === "all" ||
-      (memberFilter === "attention" && ["awaiting_payment", "pending_payment", "delinquent"].includes(member.participationStatus)) ||
-      (memberFilter === "active" && ["active", "courtesy"].includes(member.participationStatus)) ||
-      (memberFilter === "inactive" && ["inactive", "cancelled", "cancellation_requested"].includes(member.participationStatus));
+      (memberFilter === "attention" && ["awaiting_payment", "attention"].includes(stage)) ||
+      memberFilter === stage;
     return matchesQuery && matchesStatus;
   });
+  const mobileDefaultStage: MemberOperationsStage | "action" | "all" = query.trim() ? "all" : memberFilter === "all" || memberFilter === "attention" ? "action" : memberFilter;
   useEffect(() => {
     fetch("/api/auth/session").then(async (sessionResponse) => {
       const sessionPayload = await sessionResponse.json() as { user?: { role?: string } };
@@ -1105,7 +1158,7 @@ export function AdminPage() {
     <section className="admin-content">
       {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice("")}>Fechar</button></div>}
       {tab === "resumo" && <><header className="admin-heading"><div><span>CRM e visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section><DirectEnrollmentLinkPanel onNotice={setNotice} />{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state empty-state--bordered"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{!loading && applications.length > 0 && <CrmKanban applications={applications} onOpen={openApplication} />}{(selectedApplication || applicationLoading) && <ApplicationReviewDetail key={selectedApplication?.id || "loading-application"} application={selectedApplication} loading={applicationLoading} saving={applicationSaving} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} onResendInvite={resendApplicationInvite} onCopyInvite={copyInvite} />}</>}
-      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Quem está em dia e quem precisa de ação.</h2></div></header><div className="admin-toolbar"><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar nome, e-mail ou WhatsApp" /></label><label className="filter-field"><span className="sr-only">Filtrar membros</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value as typeof memberFilter)}><option value="all">Todos</option><option value="attention">Precisa de ação</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select></label><span>{filteredMembers.length} de {members.length}</span></div><PaymentReminderQueue members={members} /><MemberManagementList members={filteredMembers} onManage={openMember} /><MemberImportPanel onImported={refreshMembers} />{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Ajuste a busca ou o filtro.</span></div>}{(selectedMember || memberLoading) && <MemberManagementDetail member={selectedMember} loading={memberLoading} saving={memberSaving} refreshing={memberRefreshing} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} onRefresh={refreshMemberBilling} />}</>}
+      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Operação em tempo real, sem movimentação manual.</h2></div></header><div className="admin-toolbar"><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar nome, e-mail ou WhatsApp" /></label><label className="filter-field"><span className="sr-only">Filtrar membros</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value as typeof memberFilter)}><option value="all">Todos os estágios</option><option value="attention">Precisa de ação</option><option value="active">Ativos</option><option value="cancellation_requested">Cancelamento</option><option value="inactive">Inativos</option></select></label><span>{filteredMembers.length} de {members.length}</span></div><PaymentReminderQueue members={members} /><MemberOperationsKanban members={filteredMembers} onManage={openMember} mobileDefaultStage={mobileDefaultStage} /><MemberImportPanel onImported={refreshMembers} />{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Ajuste a busca ou o filtro.</span></div>}{(selectedMember || memberLoading) && <MemberManagementDetail member={selectedMember} loading={memberLoading} saving={memberSaving} refreshing={memberRefreshing} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} onRefresh={refreshMemberBilling} />}</>}
     </section>
   </main></div>;
 }

@@ -580,14 +580,16 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 .member-operations__mobile-list > div, .member-operations__lane > div { display: grid; gap: 0.55rem; padding: 0.55rem; }
 .member-operations__mobile-list p, .member-operations__lane p { margin: 0; padding: 1rem 0.3rem; color: var(--muted); font-size: 0.76rem; }
 .member-operations__desktop-board { display: none; }
-.member-operations-card { display: grid; gap: 0.7rem; width: 100%; padding: 0.85rem; border: 1px solid var(--line); background: var(--white); color: var(--ink); text-align: left; cursor: pointer; transition: border-color 180ms var(--ease), transform 180ms var(--ease), box-shadow 180ms var(--ease); }
-.member-operations-card .member-cell { align-items: flex-start; }
+/* Native buttons can retain content-box sizing in the browser shell. These cards
+   live inside narrow Kanban lanes, so their width must include padding and border. */
+.member-operations-card { box-sizing: border-box; display: grid; gap: 0.7rem; width: 100%; min-width: 0; max-width: 100%; padding: 0.85rem; border: 1px solid var(--line); background: var(--white); color: var(--ink); text-align: left; cursor: pointer; transition: border-color 180ms var(--ease), transform 180ms var(--ease), box-shadow 180ms var(--ease); }
+.member-operations-card .member-cell { min-width: 0; align-items: flex-start; }
 .member-operations-card .member-cell > div { min-width: 0; display: grid; gap: 0.15rem; }
 .member-operations-card .member-cell strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.84rem; }
 .member-operations-card .member-cell small { color: var(--muted); font-size: 0.72rem; }
-.member-operations-card__meta { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.member-operations-card__meta > small { color: var(--muted); font-size: 0.7rem; text-align: right; }
-.member-operations-card__value { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+.member-operations-card__meta { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.member-operations-card__meta > small { min-width: 0; color: var(--muted); font-size: 0.7rem; text-align: right; overflow-wrap: anywhere; }
+.member-operations-card__value { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
 .member-operations-card__value small { color: var(--muted); font-size: 0.68rem; }
 .member-operations-card__value strong { font-size: 0.78rem; font-variant-numeric: tabular-nums; }
 .crm-kanban { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(15rem, 82vw); gap: 0.8rem; overflow-x: auto; margin-top: 1.5rem; padding-bottom: 0.5rem; }
@@ -723,8 +725,9 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .member-welcome h1 { font-size: 2.75rem; }
   .signal-strip, .crm-kanban, .member-management-list, .payment-reminder-queue, .member-import-panel, .admin-toolbar, .member-operations { margin-top: 1.25rem; }
   .member-operations__mobile-stages, .member-operations__mobile-list { display: none; }
-  .member-operations__desktop-board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.7rem; margin-top: 0.75rem; }
+  .member-operations__desktop-board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: start; gap: 0.7rem; margin-top: 0.75rem; }
   .member-operations__lane { min-width: 0; border: 1px solid var(--line); background: var(--surface-muted); }
+  .member-operations__lane > div { min-width: 0; }
   .member-operations__lane > header { min-height: 5.1rem; align-items: flex-start; }
   .member-operations__lane > header > div { display: grid; gap: 0.25rem; }
   .member-operations__lane > header span { color: var(--muted); font-size: 0.7rem; }
@@ -733,6 +736,16 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .member-operations__lane[data-stage="cancellation_requested"] > header { border-top: 2px solid var(--ink); }
   .member-operations__lane[data-stage="inactive"] > header { border-top: 2px solid var(--muted); }
   .toast { top: 5.5rem; left: auto; right: 2rem; width: min(28rem, calc(100vw - 4rem)); }
+}
+
+/* The application pipeline has seven canonical stages. On wide desktop, keep
+   all of them in view instead of making an operator discover hidden columns. */
+@media (min-width: 80rem) {
+  .crm-kanban { grid-auto-flow: row; grid-template-columns: repeat(7, minmax(0, 1fr)); overflow-x: visible; padding-bottom: 0; }
+  .crm-column, .crm-card, .crm-card__top { min-width: 0; }
+  .crm-card { box-sizing: border-box; width: 100%; }
+  .crm-card__top { align-items: flex-start; }
+  .crm-card strong, .crm-card small { overflow-wrap: anywhere; }
 }
 
 @media (hover: hover) and (pointer: fine) {

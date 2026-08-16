@@ -181,6 +181,14 @@ test("keeps protected navigation responsive and accessible", async () => {
   assert.doesNotMatch(client, /className="(?:member-rail|admin-sidebar|mobile-tabbar|admin-mobile-nav)/);
 });
 
+test("keeps desktop operations boards inside their available workspace", async () => {
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(styles, /\.member-operations-card \{[^}]*box-sizing: border-box;[^}]*min-width: 0;[^}]*max-width: 100%/);
+  assert.match(styles, /\.member-operations__desktop-board \{[^}]*grid-template-columns: repeat\(5, minmax\(0, 1fr\)\);[^}]*align-items: start/);
+  assert.match(styles, /@media \(min-width: 80rem\) \{[\s\S]*\.crm-kanban \{[^}]*grid-template-columns: repeat\(7, minmax\(0, 1fr\)\);[^}]*overflow-x: visible/);
+  assert.match(styles, /@media \(min-width: 80rem\) \{[\s\S]*\.crm-card \{[^}]*box-sizing: border-box;[^}]*width: 100%/);
+});
+
 test("allows the master admin to authenticate before server-only operations are configured", async () => {
   const [auth, supabase] = await Promise.all([
     readFile(new URL("../lib/auth.ts", import.meta.url), "utf8"),

@@ -564,9 +564,10 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 .member-management-card__open { min-height: 2.75rem; display: flex; align-items: center; justify-content: space-between; padding-top: 0.75rem; border-top: 1px solid var(--line); color: var(--navy); font-size: 0.76rem; font-weight: 760; }
 .member-management-card__open i { font-style: normal; transition: transform 180ms var(--ease-snap); }
 .member-operations { margin-top: 1.5rem; }
-.member-operations__summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--white); }
-.member-operations__summary > div { display: grid; gap: 0.2rem; min-width: 0; padding: 0.8rem; border-right: 1px solid var(--line); }
-.member-operations__summary > div:last-child { border-right: 0; }
+.member-operations__summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--white); }
+.member-operations__summary > div { display: grid; gap: 0.2rem; min-width: 0; padding: 0.8rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.member-operations__summary > div:nth-child(2n) { border-right: 0; }
+.member-operations__summary > div:nth-last-child(-n + 2) { border-bottom: 0; }
 .member-operations__summary span { color: var(--muted); font-size: 0.68rem; font-weight: 710; }
 .member-operations__summary strong { color: var(--ink); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
 .member-operations__mobile-stages { display: flex; gap: 0.45rem; overflow-x: auto; margin-top: 1rem; padding-bottom: 0.15rem; scrollbar-width: none; }
@@ -676,6 +677,9 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .payment-method { flex-direction: row; align-items: center; justify-content: space-between; }
   .payment-method__action { max-width: 32rem; justify-items: start; }
   .signal-strip { grid-template-columns: repeat(4, 1fr); }
+  .member-operations__summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .member-operations__summary > div, .member-operations__summary > div:nth-child(2n) { border-right: 1px solid var(--line); border-bottom: 0; }
+  .member-operations__summary > div:last-child { border-right: 0; }
   .direct-invite form { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
   .direct-invite .consent-control, .direct-invite .field-error, .direct-invite .primary-button, .direct-invite .invite-copy { grid-column: 1 / -1; }
   .member-import-panel { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
@@ -721,12 +725,16 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .rail-status i { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: oklch(72% 0.14 135); }
   .sidebar-footer { display: grid; gap: 0.2rem; }
   .member-content, .admin-content { width: 100%; max-width: 92rem; padding: 2.5rem clamp(2rem, 4vw, 4rem); }
+  /* The sidebar is independently resizable, so dashboard grids respond to the
+     actual workspace width rather than the viewport width. */
+  .admin-content { container-type: inline-size; }
   .admin-heading h2 { font-size: 2.5rem; }
   .member-welcome h1 { font-size: 2.75rem; }
   .signal-strip, .crm-kanban, .member-management-list, .payment-reminder-queue, .member-import-panel, .admin-toolbar, .member-operations { margin-top: 1.25rem; }
   .member-operations__mobile-stages, .member-operations__mobile-list { display: none; }
-  .member-operations__desktop-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.7rem; margin-top: 0.75rem; }
-  .member-operations__desktop-board[data-columns="1"] { grid-template-columns: minmax(16rem, 22rem); }
+  .member-operations__desktop-board { display: grid; gap: 0.7rem; margin-top: 0.75rem; }
+  .member-operations__desktop-board:not([data-columns="1"]) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .member-operations__desktop-board[data-columns="1"] { grid-template-columns: minmax(0, 28rem); }
   .member-operations__lane { min-width: 0; border: 1px solid var(--line); background: var(--surface-muted); }
   .member-operations__lane > div { min-width: 0; }
   .member-operations__lane > header { min-height: 5.1rem; align-items: flex-start; }
@@ -737,6 +745,16 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .member-operations__lane[data-stage="cancellation_requested"] > header { border-top: 2px solid var(--ink); }
   .member-operations__lane[data-stage="inactive"] > header { border-top: 2px solid var(--muted); }
   .toast { top: 5.5rem; left: auto; right: 2rem; width: min(28rem, calc(100vw - 4rem)); }
+}
+
+/* These thresholds apply to the content pane after the desktop sidebar has
+   opened or collapsed. The safe default remains two readable lanes. */
+@container (min-width: 50rem) {
+  .member-operations__desktop-board:not([data-columns="1"]) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@container (min-width: 68rem) {
+  .member-operations__desktop-board:not([data-columns="1"]) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 @media (hover: hover) and (pointer: fine) {

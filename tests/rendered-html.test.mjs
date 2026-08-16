@@ -192,8 +192,15 @@ test("keeps the mockup-style desktop operations board inside its workspace", asy
   assert.doesNotMatch(styles, /\.member-operations-card__meta > small \{[^}]*overflow-wrap: anywhere/);
   assert.match(client, /const memberOperationsDesktopStages = memberOperationsStages\.filter\(\(stage\) => stage\.id !== "inactive"\)/);
   assert.match(client, /data-columns=\{desktopStages\.length\}/);
-  assert.match(styles, /\.member-operations__desktop-board \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
-  assert.match(styles, /\.member-operations__desktop-board\[data-columns="1"\] \{ grid-template-columns: minmax\(16rem, 22rem\); \}/);
+  assert.match(client, /<MemberOperationsKanban key=\{mobileDefaultStage\}/);
+  assert.doesNotMatch(client, /useEffect\(\(\) => setMobileStage\(mobileDefaultStage\)/);
+  assert.match(styles, /\.member-operations__summary \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.member-operations__summary > div:nth-child\(2n\) \{ border-right: 0; \}/);
+  assert.match(styles, /\.admin-content \{ container-type: inline-size; \}/);
+  assert.match(styles, /\.member-operations__desktop-board:not\(\[data-columns="1"\]\) \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
+  assert.match(styles, /@container \(min-width: 50rem\) \{[\s\S]*repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /@container \(min-width: 68rem\) \{[\s\S]*repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.member-operations__desktop-board\[data-columns="1"\] \{ grid-template-columns: minmax\(0, 28rem\); \}/);
   assert.match(styles, /\.crm-kanban \{[^}]*grid-auto-flow: column;[^}]*overflow-x: auto/);
 });
 

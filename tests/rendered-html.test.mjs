@@ -187,6 +187,9 @@ test("keeps the mockup-style desktop operations board inside its workspace", asy
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.match(styles, /\.member-operations-card \{[^}]*box-sizing: border-box;[^}]*min-width: 0;[^}]*max-width: 100%/);
+  assert.match(styles, /\.member-operations-card__meta \{[^}]*flex-wrap: wrap/);
+  assert.match(styles, /\.member-operations-card__meta > small \{[^}]*white-space: nowrap/);
+  assert.doesNotMatch(styles, /\.member-operations-card__meta > small \{[^}]*overflow-wrap: anywhere/);
   assert.match(client, /const memberOperationsDesktopStages = memberOperationsStages\.filter\(\(stage\) => stage\.id !== "inactive"\)/);
   assert.match(client, /data-columns=\{desktopStages\.length\}/);
   assert.match(styles, /\.member-operations__desktop-board \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);

@@ -35,7 +35,7 @@ test("wires member and management notices to completed canonical events", async 
   assert.match(applications, /application_receipt/);
   assert.match(applications, /application_rejected/);
   assert.match(enrollment, /registration_checkout/);
-  assert.match(enrollment, /quick_recadastro_management/);
+  assert.match(enrollment, /member\.community_registration_completed/);
   assert.match(portal, /card_change_management/);
   assert.match(portal, /cancellation_member/);
   assert.match(webhook, /sendBillingTransitionEmails/);

@@ -48,17 +48,16 @@ test("wires member and management notices to completed canonical events", async 
   assert.match(email, /payment_attention_member/);
 });
 
-test("gives management one safe private-invite flow for approvals and known contacts", async () => {
+test("keeps approvals individual while direct enrollment uses one management-held link", async () => {
   const [applications, client] = await Promise.all([
     readFile(new URL("../app/api/requerimentos/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(applications, /action === "direct_invite"/);
+  assert.match(applications, /action === "rotate_direct_link"/);
   assert.match(applications, /action === "resend_invite"/);
-  assert.match(applications, /application\.direct_invite_created/);
+  assert.match(applications, /registration\.direct_link_rotated/);
   assert.match(applications, /application\.invite_resent/);
-  assert.match(applications, /application_id: applicationId/);
-  assert.match(applications, /status: "in\.\(new,in_review,awaiting_info,rejected\)"/);
-  assert.match(client, /Enviar convite de cadastro/);
+  assert.match(applications, /flow: "eq\.direct", revoked_at: "is\.null"/);
+  assert.match(client, /Gerar link direto/);
   assert.match(client, /Reenviar convite por e-mail/);
 });

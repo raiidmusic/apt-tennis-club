@@ -240,50 +240,29 @@ export async function PATCH(request: Request) {
       id?: string;
       status?: ApplicationStatus;
       note?: string;
-      action?: "resend_invite" | "direct_invite";
-      name?: string;
-      email?: string;
-      whatsapp?: string;
-      consent?: boolean;
+      action?: "resend_invite" | "rotate_direct_link";
     };
-    if (payload.action === "direct_invite") {
-      const name = payload.name?.trim() || "";
-      const email = payload.email?.trim().toLowerCase() || "";
-      const whatsapp = payload.whatsapp?.replace(/\D/g, "") || "";
-      if (!name || name.length > 100 || !/^\S+@\S+\.\S+$/.test(email) || whatsapp.length < 10 || whatsapp.length > 13 || payload.consent !== true) {
-        return Response.json({ error: "Informe nome, e-mail, WhatsApp e a autorização para envio." }, { status: 400 });
-      }
-      const existing = (await supabaseAdmin<Array<{ id: string }>>("applications", {
-        query: { select: "id", email: `eq.${email}`, status: "in.(new,in_review,awaiting_info,approved,invite_sent)", limit: "1" },
-      }))[0];
-      if (existing) return Response.json({ error: "Já existe um convite ou análise em andamento para este e-mail." }, { status: 409 });
-      const existingMember = await findMemberByEmail(email);
-      const member = pendingMemberForInvite(existingMember);
-      if (existingMember && !member) return Response.json({ error: "Este e-mail já pertence a um integrante com cadastro concluído." }, { status: 409 });
-      const created = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
+    if (payload.action === "rotate_direct_link") {
+      const now = new Date();
+      const directToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll("-", "");
+      await supabaseAdmin("group_registration_links", {
+        method: "PATCH",
+        query: { flow: "eq.direct", revoked_at: "is.null" },
+        body: { revoked_at: now.toISOString() },
+      });
+      const expiresAt = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString();
+      const links = await supabaseAdmin<Array<{ id: string }>>("group_registration_links", {
         method: "POST",
         prefer: "return=representation",
-        body: {
-          name, email, whatsapp, age: null, city: null, profession: null, class_level: null, referrer: null,
-          answers: { nome: name, email, whatsapp, origem: "Convite direto da gestão", consent: "Contato autorizado pela gestão" },
-          consent_at: new Date().toISOString(), status: "approved", email_status: "not_requested",
-        },
+        body: { label: "Cadastro direto da gestão", flow: "direct", token_hash: await sha256(directToken), expires_at: expiresAt },
       });
-      const createdApplication = created[0];
-      if (!createdApplication) return Response.json({ error: "Não foi possível preparar o convite direto." }, { status: 500 });
-      const application = { id: String(createdApplication.id), name, email, whatsapp };
-      await attachApplicationToMember(member, application.id);
-      const issued = await issueInvite(application, member ? { memberId: member.id } : { applicationId: application.id });
-      const finalStatus = issued.inviteDelivery === "sent" ? "invite_sent" : "approved";
-      const rows = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
-        method: "PATCH", query: { id: `eq.${application.id}` }, prefer: "return=representation",
-        body: { status: finalStatus, email_status: issued.emailStatus, updated_at: new Date().toISOString() },
-      });
+      const link = links[0];
+      if (!link) return Response.json({ error: "Não foi possível gerar o link direto." }, { status: 500 });
       await supabaseAdmin("audit_logs", {
         method: "POST",
-        body: { actor: admin.email, action: "application.direct_invite_created", entity_type: "application", entity_id: application.id, metadata: { invite_delivery: issued.inviteDelivery, member_targeted: Boolean(member) } },
-      });
-      return Response.json({ application: toApplication(rows[0], issued.inviteToken), inviteDelivery: issued.inviteDelivery, emailStatus: issued.emailStatus });
+        body: { actor: admin.email, action: "registration.direct_link_rotated", entity_type: "registration_link", entity_id: link.id, metadata: { expires_at: expiresAt } },
+      }).catch(() => undefined);
+      return Response.json({ directToken, expiresAt });
     }
 
     if (payload.action === "resend_invite") {

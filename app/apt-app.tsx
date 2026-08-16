@@ -496,12 +496,14 @@ export function EnrollmentPage() {
   const [cpf, setCpf] = useState("");
   const inviteToken = useRef("");
   const groupToken = useRef("");
+  const directToken = useRef("");
   const [hasInvite, setHasInvite] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [recadastro, setRecadastro] = useState(false);
   const [groupRegistration, setGroupRegistration] = useState(false);
+  const [directRegistration, setDirectRegistration] = useState(false);
   const [qualificationState, setQualificationState] = useState<"form" | "pending" | "registered">("form");
   const [monthlyValue, setMonthlyValue] = useState<number | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -518,17 +520,19 @@ export function EnrollmentPage() {
     }
     const token = query.get("convite") || "";
     const communityToken = query.get("grupo") || "";
+    const managedToken = query.get("direto") || "";
     inviteToken.current = token;
     groupToken.current = communityToken;
-    if (!token && !communityToken) { queueMicrotask(() => setProfileLoading(false)); return; }
+    directToken.current = managedToken;
+    if (!token && !communityToken && !managedToken) { queueMicrotask(() => setProfileLoading(false)); return; }
     queueMicrotask(() => setHasInvite(true));
-    const accessQuery = token ? `convite=${encodeURIComponent(token)}` : `grupo=${encodeURIComponent(communityToken)}`;
+    const accessQuery = token ? `convite=${encodeURIComponent(token)}` : communityToken ? `grupo=${encodeURIComponent(communityToken)}` : `direto=${encodeURIComponent(managedToken)}`;
     fetch(`/api/cadastros?${accessQuery}`)
       .then(async (response) => {
-        const payload = await response.json() as { name?: string; email?: string; phone?: string; recadastro?: boolean; groupRegistration?: boolean; monthlyValue?: number | null; checkoutUrl?: string; error?: string };
+        const payload = await response.json() as { name?: string; email?: string; phone?: string; recadastro?: boolean; groupRegistration?: boolean; directRegistration?: boolean; monthlyValue?: number | null; checkoutUrl?: string; error?: string };
         if (!response.ok) throw new Error(payload.error || "Este convite não pôde ser validado.");
         setName(payload.name || ""); setEmail(payload.email || ""); setPhone(payload.phone || "");
-        setRecadastro(Boolean(payload.recadastro)); setGroupRegistration(Boolean(payload.groupRegistration)); setMonthlyValue(payload.monthlyValue || null); setPaymentLink(payload.checkoutUrl || "");
+        setRecadastro(Boolean(payload.recadastro)); setGroupRegistration(Boolean(payload.groupRegistration)); setDirectRegistration(Boolean(payload.directRegistration)); setMonthlyValue(payload.monthlyValue || null); setPaymentLink(payload.checkoutUrl || "");
       })
       .catch((validationError) => setError(validationError instanceof Error ? validationError.message : "Este convite não pôde ser validado."))
       .finally(() => setProfileLoading(false));
@@ -555,7 +559,7 @@ export function EnrollmentPage() {
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSubmitting(true); setError(""); const data = new FormData(event.currentTarget);
-    try { const response = await fetch("/api/cadastros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inviteToken: inviteToken.current, name, cpf, email, phone, password: data.get("password"), consent: data.get("consent") === "on" }) }); const payload = await response.json() as { error?: string; checkoutUrl?: string }; if (!response.ok) throw new Error(payload.error || "Não foi possível concluir o cadastro."); setPaymentLink(payload.checkoutUrl || ""); setSubmitted(true); }
+    try { const response = await fetch("/api/cadastros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inviteToken: inviteToken.current, directToken: directToken.current, name, cpf, email, phone, password: data.get("password"), consent: data.get("consent") === "on" }) }); const payload = await response.json() as { error?: string; checkoutUrl?: string }; if (!response.ok) throw new Error(payload.error || "Não foi possível concluir o cadastro."); setPaymentLink(payload.checkoutUrl || ""); setSubmitted(true); }
     catch (submissionError) { setError(submissionError instanceof Error ? submissionError.message : "Não foi possível concluir o cadastro."); }
     finally { setSubmitting(false); }
   }
@@ -568,12 +572,12 @@ export function EnrollmentPage() {
     <section className="enrollment-content"><header><span>Primeiro passo</span><h2>Informe como você está no grupo.</h2><p>CPF, senha e pagamento só serão solicitados depois desta conferência.</p></header>{profileLoading ? <div className="loading-state"><i /><span>Validando o link…</span></div> : <form className="enrollment-form" onSubmit={qualifyGroup}><div className="fields-grid"><label className="field-label field-label--compact"><span>Nome completo</span><input required minLength={2} name="name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome e sobrenome" /></label><label className="field-label field-label--compact"><span>E-mail de acesso</span><input required name="email" type="email" autoComplete="email" spellCheck={false} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@exemplo.com" /></label><label className="field-label field-label--compact"><span>WhatsApp com DDD</span><input required name="phone" type="tel" autoComplete="tel" inputMode="tel" spellCheck={false} value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(61) 99999-9999" /></label></div><p className="form-helper">Ao continuar, você autoriza o APT a usar estes dados para localizar sua participação ou encaminhar uma aprovação rápida.</p>{error && <p className="field-error" role="alert">{error}</p>}<button className="primary-button primary-button--wide" type="submit" disabled={qualificationSubmitting || profileLoading}>{qualificationSubmitting ? "Conferindo…" : "Continuar meu recadastro"}<span aria-hidden="true">→</span></button></form>}</section>
   </main></div>;
   if (paymentLink && !submitted) return <div className="apt-app"><RouteHeader label="Recadastro APT" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Recadastro concluído</p><h1>Sua assinatura está pronta para ativação.</h1><p>Continue no ambiente seguro do Asaas. O APT não recebe nem armazena os dados completos do seu cartão.</p><a className="primary-button" href={paymentLink}>Abrir checkout seguro <span aria-hidden="true">↗</span></a></main></div>;
-  if (submitted) return <div className="apt-app"><RouteHeader label="Cadastro do aprovado" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Cadastro recebido</p><h1>{paymentLink ? "Sua assinatura está pronta para ativação." : "Seus dados foram vinculados ao requerimento."}</h1><p>{paymentLink ? "Conclua o pagamento no ambiente seguro do Asaas. O APT não recebe nem armazena os dados completos do seu cartão." : "A cobrança será liberada quando valor e vencimento forem confirmados pela gestão."}</p>{paymentLink ? <a className="primary-button" href={paymentLink}>Abrir checkout seguro <span aria-hidden="true">↗</span></a> : <a className="secondary-button" href="/">Voltar ao site</a>}</main></div>;
-  return <div className="apt-app"><RouteHeader label="Cadastro do aprovado" /><main className="enrollment-page" id="main-content">
-    <aside className="enrollment-intro"><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Jogador segura uma bola e uma raquete junto à rede" /><div className="enrollment-intro__shade" /><div><span>Link privado</span><h1>{recadastro ? "Atualize seus dados. Ative sua recorrência." : "Você foi aprovado. Agora, vamos ativar sua participação."}</h1><p>O APT guarda somente a proteção criptográfica do CPF e os quatro últimos dígitos. O cartão fica no Asaas.</p></div></aside>
+  if (submitted) return <div className="apt-app"><RouteHeader label={directRegistration ? "Cadastro direto APT" : "Cadastro do aprovado"} /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Cadastro recebido</p><h1>{paymentLink ? "Sua assinatura está pronta para ativação." : "Seus dados foram vinculados ao requerimento."}</h1><p>{paymentLink ? "Conclua o pagamento no ambiente seguro do Asaas. O APT não recebe nem armazena os dados completos do seu cartão." : "A cobrança será liberada quando valor e vencimento forem confirmados pela gestão."}</p>{paymentLink ? <a className="primary-button" href={paymentLink}>Abrir checkout seguro <span aria-hidden="true">↗</span></a> : <a className="secondary-button" href="/">Voltar ao site</a>}</main></div>;
+  return <div className="apt-app"><RouteHeader label={directRegistration ? "Cadastro direto APT" : "Cadastro do aprovado"} /><main className="enrollment-page" id="main-content">
+    <aside className="enrollment-intro"><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Jogador segura uma bola e uma raquete junto à rede" /><div className="enrollment-intro__shade" /><div><span>Link privado</span><h1>{recadastro ? "Atualize seus dados. Ative sua recorrência." : directRegistration ? "Complete seu cadastro. Ative sua participação." : "Você foi aprovado. Agora, vamos ativar sua participação."}</h1><p>O APT guarda somente a proteção criptográfica do CPF e os quatro últimos dígitos. O cartão fica no Asaas.</p></div></aside>
     <section className="enrollment-content">
       <header><span>{recadastro ? "Recadastro e assinatura" : "Cadastro e assinatura"}</span><h2>Confirme os dados da sua participação.</h2><p>Endereço e cartão serão informados somente no ambiente seguro do Asaas.</p></header>
-      {!profileLoading && !hasInvite && <div className="access-notice"><strong>Este cadastro precisa de um acesso válido.</strong><span>Abra o link de recadastro enviado no grupo ou seu convite individual.</span></div>}
+      {!profileLoading && !hasInvite && <div className="access-notice"><strong>Este cadastro precisa de um acesso válido.</strong><span>Abra o link de recadastro, seu convite individual ou o link direto da gestão.</span></div>}
       {!profileLoading && hasInvite && !monthlyValue && !error && <div className="access-notice"><strong>A mensalidade ainda não foi liberada.</strong><span>A gestão precisa confirmar o valor antes de gerar a recorrência.</span></div>}
       {profileLoading && <div className="loading-state"><i /><span>Validando seu convite…</span></div>}
       <form className="enrollment-form" onSubmit={submit}>
@@ -931,32 +935,26 @@ function CrmKanban({ applications, onOpen }: { applications: ApplicationRecord[]
   })}</section>;
 }
 
-function DirectInvitePanel({ onIssued, onCopyInvite, onNotice }: {
-  onIssued: (application: ApplicationRecord) => void;
-  onCopyInvite: (token: string) => void;
-  onNotice: (message: string) => void;
-}) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
-  const [consent, setConsent] = useState(false);
+function DirectEnrollmentLinkPanel({ onNotice }: { onNotice: (message: string) => void }) {
+  const [link, setLink] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [fallbackToken, setFallbackToken] = useState("");
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setSubmitting(true); setError(""); setFallbackToken("");
+  async function generate() {
+    setSubmitting(true); setError("");
     try {
-      const response = await fetch("/api/requerimentos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "direct_invite", name, email, whatsapp, consent }) });
-      const payload = await response.json() as { application?: ApplicationRecord; inviteDelivery?: "sent" | "manual"; error?: string };
-      if (!response.ok || !payload.application) throw new Error(payload.error || "Não foi possível enviar o convite.");
-      onIssued(payload.application);
-      setName(""); setEmail(""); setWhatsapp(""); setConsent(false);
-      if (payload.inviteDelivery === "sent") onNotice("Convite direto enviado por e-mail.");
-      else { setFallbackToken(payload.application.inviteToken || ""); onNotice("Convite criado, mas o e-mail não foi confirmado. Copie o link abaixo."); }
-    } catch (inviteError) { setError(inviteError instanceof Error ? inviteError.message : "Não foi possível enviar o convite."); }
+      const response = await fetch("/api/requerimentos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "rotate_direct_link" }) });
+      const payload = await response.json() as { directToken?: string; error?: string };
+      if (!response.ok || !payload.directToken) throw new Error(payload.error || "Não foi possível gerar o link direto.");
+      setLink(`${window.location.origin}/cadastro?direto=${encodeURIComponent(payload.directToken)}`);
+      onNotice("Link direto gerado. Guarde-o antes de sair desta tela.");
+    } catch (generationError) { setError(generationError instanceof Error ? generationError.message : "Não foi possível gerar o link direto."); }
     finally { setSubmitting(false); }
   }
-  return <section className="crm-stage-card direct-invite" aria-labelledby="direct-invite-title"><div><span>Convite direto</span><h3 id="direct-invite-title">Você já fez o onboarding?</h3><p>Envie o cadastro privado sem criar um requerimento público. A pessoa preenche CPF, senha e pagamento somente nas próximas etapas.</p></div><form onSubmit={submit}><label className="field-label field-label--compact"><span>Nome completo</span><input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required /></label><label className="field-label field-label--compact"><span>E-mail</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required /></label><label className="field-label field-label--compact"><span>WhatsApp com DDD</span><input type="tel" value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} autoComplete="tel" required /></label><label className="consent-control"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required /><span>A pessoa autorizou receber este convite por e-mail.</span></label>{error && <p className="field-error" role="alert">{error}</p>}<button className="primary-button" type="submit" disabled={submitting}>{submitting ? "Enviando…" : "Enviar convite de cadastro"}<span aria-hidden="true">→</span></button>{fallbackToken && <button className="invite-copy" type="button" onClick={() => onCopyInvite(fallbackToken)}>Copiar novo link de cadastro</button>}</form></section>;
+  async function copyLink() {
+    try { await navigator.clipboard.writeText(link); onNotice("Link direto copiado."); }
+    catch { window.prompt("Copie o link direto de cadastro:", link); }
+  }
+  return <section className="crm-stage-card direct-invite" aria-labelledby="direct-link-title"><div><span>Link direto</span><h3 id="direct-link-title">Onboarding já aprovado?</h3><p>Gere uma única vez, guarde e envie este link apenas para quem você já aprovou. Ele não cria requerimento nem exige preenchimento na gestão.</p></div><div className="direct-link-actions"><button className="primary-button" type="button" onClick={generate} disabled={submitting}>{submitting ? "Gerando…" : link ? "Substituir link direto" : "Gerar link direto"}<span aria-hidden="true">→</span></button>{link && <><code>{link}</code><button className="invite-copy" type="button" onClick={copyLink}>Copiar link direto</button></>}{error && <p className="field-error" role="alert">{error}</p>}<small>Ao substituir, o link anterior é revogado. Este vale por um ano.</small></div></section>;
 }
 
 export function AdminPage() {
@@ -1106,7 +1104,7 @@ export function AdminPage() {
     />
     <section className="admin-content">
       {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice("")}>Fechar</button></div>}
-      {tab === "resumo" && <><header className="admin-heading"><div><span>CRM e visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section><DirectInvitePanel onIssued={(application) => setApplications((current) => [application, ...current.filter((item) => item.id !== application.id)])} onCopyInvite={copyInvite} onNotice={setNotice} />{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state empty-state--bordered"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{!loading && applications.length > 0 && <CrmKanban applications={applications} onOpen={openApplication} />}{(selectedApplication || applicationLoading) && <ApplicationReviewDetail key={selectedApplication?.id || "loading-application"} application={selectedApplication} loading={applicationLoading} saving={applicationSaving} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} onResendInvite={resendApplicationInvite} onCopyInvite={copyInvite} />}</>}
+      {tab === "resumo" && <><header className="admin-heading"><div><span>CRM e visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section><DirectEnrollmentLinkPanel onNotice={setNotice} />{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state empty-state--bordered"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{!loading && applications.length > 0 && <CrmKanban applications={applications} onOpen={openApplication} />}{(selectedApplication || applicationLoading) && <ApplicationReviewDetail key={selectedApplication?.id || "loading-application"} application={selectedApplication} loading={applicationLoading} saving={applicationSaving} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} onResendInvite={resendApplicationInvite} onCopyInvite={copyInvite} />}</>}
       {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Quem está em dia e quem precisa de ação.</h2></div></header><div className="admin-toolbar"><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar nome, e-mail ou WhatsApp" /></label><label className="filter-field"><span className="sr-only">Filtrar membros</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value as typeof memberFilter)}><option value="all">Todos</option><option value="attention">Precisa de ação</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select></label><span>{filteredMembers.length} de {members.length}</span></div><PaymentReminderQueue members={members} /><MemberManagementList members={filteredMembers} onManage={openMember} /><MemberImportPanel onImported={refreshMembers} />{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Ajuste a busca ou o filtro.</span></div>}{(selectedMember || memberLoading) && <MemberManagementDetail member={selectedMember} loading={memberLoading} saving={memberSaving} refreshing={memberRefreshing} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} onRefresh={refreshMemberBilling} />}</>}
     </section>
   </main></div>;

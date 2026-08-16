@@ -34,6 +34,7 @@ type GroupRegistrationLinkRow = {
   id: string;
   expires_at: string;
   revoked_at: string | null;
+  flow: "community" | "direct";
 };
 
 async function findInvite(inviteToken: string) {
@@ -61,12 +62,13 @@ async function findMember(id: string) {
   }))[0];
 }
 
-async function findGroupRegistrationLink(groupToken: string) {
-  const tokenHash = await sha256(groupToken);
+async function findGroupRegistrationLink(token: string, flow: GroupRegistrationLinkRow["flow"]) {
+  const tokenHash = await sha256(token);
   const links = await supabaseAdmin<GroupRegistrationLinkRow[]>("group_registration_links", {
     query: {
-      select: "id,expires_at,revoked_at",
+      select: "id,expires_at,revoked_at,flow",
       token_hash: `eq.${tokenHash}`,
+      flow: `eq.${flow}`,
       revoked_at: "is.null",
       limit: "1",
     },
@@ -185,11 +187,19 @@ export async function GET(request: Request) {
     const searchParams = new URL(request.url).searchParams;
     const inviteToken = searchParams.get("convite")?.trim() || "";
     const groupToken = searchParams.get("grupo")?.trim() || "";
-    if (!inviteToken && !groupToken) return Response.json({ error: "Link de cadastro ausente." }, { status: 400 });
+    const directToken = searchParams.get("direto")?.trim() || "";
+    if ([inviteToken, groupToken, directToken].filter(Boolean).length !== 1) return Response.json({ error: "Link de cadastro ausente." }, { status: 400 });
     if (groupToken) {
-      const groupLink = await findGroupRegistrationLink(groupToken);
+      const groupLink = await findGroupRegistrationLink(groupToken, "community");
       if (!groupLink) return Response.json({ error: "Este link de recadastro não é válido ou já expirou." }, { status: 403 });
       return Response.json({ name: "", email: "", phone: "", recadastro: true, groupRegistration: true });
+    }
+    if (directToken) {
+      const directLink = await findGroupRegistrationLink(directToken, "direct");
+      if (!directLink) return Response.json({ error: "Este link de cadastro direto não é válido ou já expirou." }, { status: 403 });
+      const configuredMonthlyValue = Number(runtimeEnv().ASAAS_MONTHLY_VALUE);
+      const monthlyValue = Number.isFinite(configuredMonthlyValue) && configuredMonthlyValue > 0 ? configuredMonthlyValue : null;
+      return Response.json({ name: "", email: "", phone: "", recadastro: false, directRegistration: true, monthlyValue });
     }
     const invite = await findInvite(inviteToken);
     if (!invite) return Response.json({ error: "Este convite não é válido ou já expirou." }, { status: 403 });
@@ -232,6 +242,7 @@ export async function POST(request: Request) {
     const payload = await request.json() as {
       inviteToken?: string;
       groupToken?: string;
+      directToken?: string;
       action?: string;
       name?: string;
       cpf?: string;
@@ -242,6 +253,7 @@ export async function POST(request: Request) {
     };
     const inviteToken = payload.inviteToken?.trim() || "";
     const groupToken = payload.groupToken?.trim() || "";
+    const directToken = payload.directToken?.trim() || "";
     const name = payload.name?.trim() || "";
     const cpf = payload.cpf?.replace(/\D/g, "") || "";
     const email = payload.email?.trim().toLowerCase() || "";
@@ -251,20 +263,21 @@ export async function POST(request: Request) {
       if (!groupToken || name.length < 2 || name.length > 100 || email.length > 254 || !/^\S+@\S+\.\S+$/.test(email) || phone.length < 10 || phone.length > 13 || payload.consent !== true) {
         return Response.json({ error: "Confira seu nome, e-mail e WhatsApp." }, { status: 400 });
       }
-      const groupLink = await findGroupRegistrationLink(groupToken);
+      const groupLink = await findGroupRegistrationLink(groupToken, "community");
       if (!groupLink) return Response.json({ error: "Este link de recadastro não é válido ou já expirou." }, { status: 403 });
       return qualifyGroupRegistration({ groupLink, name, email, phone });
     }
-    if (!inviteToken || groupToken || !name || !isValidCpf(cpf) || !email || phone.length < 10 || phone.length > 13 || !isValidNewPassword(password) || payload.consent !== true) {
+    if ([inviteToken, directToken].filter(Boolean).length !== 1 || groupToken || !name || !isValidCpf(cpf) || !email || phone.length < 10 || phone.length > 13 || !isValidNewPassword(password) || payload.consent !== true) {
       return Response.json({ error: "Confira o link, os dados e a senha: use 12 caracteres, maiúscula, minúscula e número." }, { status: 400 });
     }
 
-    const invite = await findInvite(inviteToken);
-    if (!invite) return Response.json({ error: "Este convite não é válido ou já expirou." }, { status: 403 });
+    const invite = inviteToken ? await findInvite(inviteToken) : undefined;
+    const directLink = directToken ? await findGroupRegistrationLink(directToken, "direct") : undefined;
+    if (!invite && !directLink) return Response.json({ error: "Este link de cadastro não é válido ou já expirou." }, { status: 403 });
 
     let application: ApplicationRow | undefined;
-    let member = invite.member_id ? await findMember(invite.member_id) : undefined;
-    if (invite.member_id) {
+    let member = invite?.member_id ? await findMember(invite.member_id) : undefined;
+    if (invite?.member_id) {
       if (!member) return Response.json({ error: "Atleta não encontrado." }, { status: 404 });
       if (email !== member.email.toLowerCase()) {
         return Response.json({ error: "Use o mesmo e-mail associado ao convite." }, { status: 409 });
@@ -274,7 +287,7 @@ export async function POST(request: Request) {
           query: { select: "id,name,email,whatsapp,class_level,status", id: `eq.${member.application_id}`, limit: "1" },
         }))[0];
       }
-    } else {
+    } else if (invite) {
       application = (await supabaseAdmin<ApplicationRow[]>("applications", {
         query: { select: "id,name,email,whatsapp,class_level,status", id: `eq.${invite.application_id}`, limit: "1" },
       }))[0];
@@ -321,8 +334,11 @@ export async function POST(request: Request) {
       if (existingMember?.cpf_hash && existingMember.cpf_hash !== cpfHash) {
         return Response.json({ error: "Já existe um cadastro associado a este e-mail ou CPF." }, { status: 409 });
       }
-      const canResumeApplicationRegistration = Boolean(application && existingMember?.application_id === application.id && existingMember?.participation_status === "awaiting_payment");
-      if (existingMember && !canResumeApplicationRegistration) {
+      const canResumeRegistration = Boolean(
+        existingMember?.participation_status === "awaiting_payment" &&
+        (application ? existingMember.application_id === application.id : directLink && !existingMember.application_id),
+      );
+      if (existingMember && !canResumeRegistration) {
         return Response.json({ error: "Já existe um cadastro associado a este e-mail ou CPF." }, { status: 409 });
       }
       member = existingMember;
@@ -481,7 +497,9 @@ export async function POST(request: Request) {
     }
 
     await Promise.all([
-      supabaseAdmin("invites", { method: "PATCH", query: { id: `eq.${invite.id}` }, body: { used_at: new Date().toISOString() } }),
+      invite
+        ? supabaseAdmin("invites", { method: "PATCH", query: { id: `eq.${invite.id}` }, body: { used_at: new Date().toISOString() } })
+        : Promise.resolve(),
       application
         ? supabaseAdmin("applications", {
           method: "PATCH",
@@ -493,10 +511,10 @@ export async function POST(request: Request) {
         method: "POST",
         body: {
           actor: email,
-          action: "member.recadastro_completed",
+          action: directLink ? "member.direct_registration_completed" : "member.recadastro_completed",
           entity_type: "member",
           entity_id: memberId,
-          metadata: { consent_version: "2026-08" },
+          metadata: { consent_version: "2026-08", direct_registration_link_id: directLink?.id },
         },
       }),
     ]);

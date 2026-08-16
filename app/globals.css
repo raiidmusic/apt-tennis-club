@@ -528,6 +528,9 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 .crm-stage-card select, .member-management-form select { width: 100%; min-height: 3rem; padding: 0.5rem 0.7rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--white); color: var(--ink); }
 .direct-invite { margin-top: 1.25rem; }
 .direct-invite form { display: grid; gap: 1rem; }
+.direct-link-actions { display: grid; gap: .75rem; align-content: start; }
+.direct-link-actions code { display: block; overflow-wrap: anywhere; padding: .8rem 1rem; border: 1px solid var(--line); border-radius: .75rem; color: var(--ink); background: var(--surface-muted); font-size: .8rem; }
+.direct-link-actions small { color: var(--muted); }
 .consent-control { display: flex !important; align-items: flex-start; gap: 0.7rem !important; color: var(--muted); font-size: 0.82rem; cursor: pointer; }
 .consent-control input { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; margin: 0.1rem 0 0; accent-color: var(--clay); }
 .invite-copy { border-color: var(--navy); background: var(--navy); color: var(--white); }

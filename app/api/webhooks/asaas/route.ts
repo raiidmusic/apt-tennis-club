@@ -2,7 +2,7 @@ import { after } from "next/server";
 import { asaasRequest } from "../../../../lib/asaas";
 import { sendBillingTransitionEmails } from "../../../../lib/apt-email";
 import { reconcileMemberBilling } from "../../../../lib/billing-reconciliation";
-import { runtimeEnv, supabaseAdmin, SupabaseRequestError } from "../../../../lib/supabase-server";
+import { runtimeEnv, sha256, supabaseAdmin, SupabaseRequestError } from "../../../../lib/supabase-server";
 
 type AsaasPayment = {
   id?: string;
@@ -26,7 +26,7 @@ type AsaasEvent = {
   checkout?: { id?: string; status?: string; externalReference?: string; customer?: string };
 };
 type StoredEvent = { id: string; processed_at: string | null; payload?: AsaasEvent };
-type SubscriptionRow = { id: string; member_id?: string };
+type SubscriptionRow = { id: string; member_id?: string; amount_cents?: number; asaas_customer_id?: string | null };
 type MemberRow = { id: string; name: string; email: string; joined_at: string | null };
 
 const receivedEvents = new Set(["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]);
@@ -50,10 +50,6 @@ function paymentIsPaid(status: string | undefined) {
 
 function paymentNeedsAttention(status: string | undefined) {
   return failedPaymentStatuses.has((status || "").toUpperCase());
-}
-
-function normalizedName(value = "") {
-  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 async function recordFailure(eventId: string, error: unknown) {
@@ -80,24 +76,32 @@ async function resolveMemberId(payment: AsaasPayment | undefined, event: AsaasEv
     if (subscription?.member_id) return subscription.member_id;
   }
 
-  if (!payment?.customer) return undefined;
+  if (!payment?.customer || typeof payment.value !== "number") return undefined;
+  const cpfSecret = runtimeEnv().CPF_HASH_SECRET;
+  if (!cpfSecret) return undefined;
   const customerResponse = await asaasRequest(`/customers/${encodeURIComponent(payment.customer)}`);
   if (!customerResponse.ok) return undefined;
-  const customer = await customerResponse.json() as { email?: string; externalReference?: string; name?: string; cpfCnpj?: string };
+  const customer = await customerResponse.json() as { cpfCnpj?: string; externalReference?: string };
   if (customer.externalReference) return customer.externalReference;
-  if (customer.email) {
-    const matchingMembers = await supabaseAdmin<Array<{ id: string }>>("members", {
-      query: { select: "id", email: `eq.${customer.email.trim().toLowerCase()}`, limit: "2" },
-    });
-    if (matchingMembers.length === 1) return matchingMembers[0].id;
-  }
-  const cpfLast4 = (customer.cpfCnpj || "").replace(/\D/g, "").slice(-4);
-  if (!cpfLast4 || !customer.name) return undefined;
-  const matchingMembers = await supabaseAdmin<Array<{ id: string; name: string }>>("members", {
-    query: { select: "id,name", cpf_last4: `eq.${cpfLast4}`, limit: "10" },
+  const customerCpf = (customer.cpfCnpj || "").replace(/\D/g, "");
+  if (customerCpf.length !== 11) return undefined;
+  const cpfHash = await sha256(`${cpfSecret}:${customerCpf}`);
+  const matchingMembers = await supabaseAdmin<Array<{ id: string }>>("members", {
+    query: { select: "id", cpf_hash: `eq.${cpfHash}`, limit: "2" },
   });
-  const exactNameMatches = matchingMembers.filter((member) => normalizedName(member.name) === normalizedName(customer.name));
-  return exactNameMatches.length === 1 ? exactNameMatches[0].id : undefined;
+  if (matchingMembers.length !== 1) return undefined;
+  const subscription = (await supabaseAdmin<SubscriptionRow[]>("subscriptions", {
+    query: { select: "id,member_id,amount_cents,asaas_customer_id", member_id: `eq.${matchingMembers[0].id}`, limit: "1" },
+  }))[0];
+  if (!subscription || subscription.amount_cents !== Math.round(payment.value * 100)) return undefined;
+  if (!subscription.asaas_customer_id) {
+    await supabaseAdmin("subscriptions", {
+      method: "PATCH",
+      query: { id: `eq.${subscription.id}`, asaas_customer_id: "is.null" },
+      body: { asaas_customer_id: payment.customer, updated_at: new Date().toISOString() },
+    });
+  }
+  return matchingMembers[0].id;
 }
 
 async function processEvent(payload: AsaasEvent) {
@@ -185,7 +189,19 @@ async function processEvent(payload: AsaasEvent) {
       ? paymentNeedsAttention(paymentState)
       : failedEvents.has(payload.event);
     const memberId = await resolveMemberId(payment, payload);
-    if (!memberId) throw new SupabaseRequestError("Evento sem referência do membro.", 409);
+    if (!memberId) {
+      await supabaseAdmin("webhook_events", {
+        method: "PATCH",
+        query: { id: `eq.${payload.id}` },
+        body: {
+          event_type: payload.event,
+          payload,
+          processed_at: new Date().toISOString(),
+          processing_error: "Evento sem vínculo financeiro APT; nenhuma transição foi aplicada.",
+        },
+      });
+      return Response.json({ received: true, ignored: true });
+    }
     const member = (await supabaseAdmin<MemberRow[]>("members", {
       query: { select: "id,name,email,joined_at", id: `eq.${memberId}`, limit: "1" },
     }))[0];
@@ -196,11 +212,6 @@ async function processEvent(payload: AsaasEvent) {
     if (!subscription) throw new SupabaseRequestError("Assinatura local não existe.", 409);
 
     const paymentId = payment?.id;
-    const previousPayment = paymentId
-      ? (await supabaseAdmin<Array<{ status?: string }>>("payments", {
-        query: { select: "status", asaas_payment_id: `eq.${paymentId}`, limit: "1" },
-      }))[0]
-      : undefined;
     if (payment?.id) {
       await supabaseAdmin("payments", {
         method: "POST",
@@ -278,14 +289,9 @@ async function processEvent(payload: AsaasEvent) {
       ]);
     }
 
-    const memberPaymentNotification = paymentId && paymentIsReceived && !paymentIsPaid(previousPayment?.status)
-      ? "confirmed"
-      : paymentId && paymentHasFailed && !paymentNeedsAttention(previousPayment?.status)
-        ? "attention"
-        : null;
-    if (memberPaymentNotification === "confirmed" && paymentId) {
+    if (paymentId && paymentIsReceived) {
       await sendBillingTransitionEmails({ kind: "confirmed", member, paymentId, providerStatus: paymentState });
-    } else if (memberPaymentNotification === "attention" && paymentId) {
+    } else if (paymentId && paymentHasFailed) {
       await sendBillingTransitionEmails({ kind: "attention", member, paymentId, providerStatus: paymentState || payload.event });
     }
 

@@ -1,4 +1,4 @@
-import { runtimeEnv } from "./supabase-server";
+import { runtimeEnv, supabaseAdmin } from "./supabase-server";
 
 export type EmailDeliveryStatus = "sent" | "failed" | "not_configured";
 
@@ -9,6 +9,18 @@ type EmailInput = {
   replyTo?: string;
   flow: string;
   idempotencyKey: string;
+};
+
+type BillingEmailDelivery = {
+  id: string;
+  dedupe_key: string;
+  recipient_email: string;
+  reply_to: string | null;
+  subject: string;
+  body_text: string;
+  flow: string;
+  status: "pending" | "failed" | "sent" | "suppressed";
+  attempt_count: number;
 };
 
 const emailPattern = /^\S+@\S+\.\S+$/;
@@ -95,29 +107,105 @@ export function sendMemberEmail(input: Omit<EmailInput, "to"> & { to: string }) 
 
 export function sendBillingTransitionEmails(input: {
   kind: "confirmed" | "attention";
-  member: { name: string; email: string };
+  member: { id: string; name: string; email: string };
+  paymentId: string;
+  providerStatus: string;
+}) {
+  return queueAndProcessBillingEmails(input);
+}
+
+function retryDelay(attempt: number) {
+  const minutes = [1, 5, 15, 60, 360][Math.min(attempt, 4)];
+  return new Date(Date.now() + minutes * 60_000).toISOString();
+}
+
+async function deliverBillingEmail(delivery: BillingEmailDelivery) {
+  const deliveryStatus = await sendAptEmail({
+    to: delivery.recipient_email,
+    subject: delivery.subject,
+    text: delivery.body_text,
+    ...(delivery.reply_to ? { replyTo: delivery.reply_to } : {}),
+    flow: delivery.flow,
+    idempotencyKey: delivery.dedupe_key,
+  });
+  const now = new Date().toISOString();
+  await supabaseAdmin("billing_email_deliveries", {
+    method: "PATCH",
+    query: { id: `eq.${delivery.id}`, status: "neq.sent" },
+    body: deliveryStatus === "sent"
+      ? { status: "sent", attempt_count: delivery.attempt_count + 1, sent_at: now, last_error: null, updated_at: now }
+      : {
+          status: "failed",
+          attempt_count: delivery.attempt_count + 1,
+          next_attempt_at: retryDelay(delivery.attempt_count),
+          last_error: deliveryStatus,
+          updated_at: now,
+        },
+  });
+  return deliveryStatus;
+}
+
+export async function retryBillingEmailDeliveries(limit = 25, dedupeKeys: string[] = []) {
+  const deliveries = await supabaseAdmin<BillingEmailDelivery[]>("billing_email_deliveries", {
+    query: {
+      select: "id,dedupe_key,recipient_email,reply_to,subject,body_text,flow,status,attempt_count",
+      status: "in.(pending,failed)",
+      next_attempt_at: `lte.${new Date().toISOString()}`,
+      ...(dedupeKeys.length ? { dedupe_key: `in.(${dedupeKeys.join(",")})` } : {}),
+      order: "next_attempt_at.asc",
+      limit: String(limit),
+    },
+  });
+  return Promise.all(deliveries.map(deliverBillingEmail));
+}
+
+async function queueAndProcessBillingEmails(input: {
+  kind: "confirmed" | "attention";
+  member: { id: string; name: string; email: string };
   paymentId: string;
   providerStatus: string;
 }) {
   const confirmed = input.kind === "confirmed";
-  return Promise.all([
-    sendMemberEmail({
-      to: input.member.email,
+  const management = managementRecipients();
+  const memberKey = `apt-payment-${input.kind}-member-${input.paymentId}`;
+  const deliveries = [
+    {
+      dedupe_key: memberKey,
+      member_id: input.member.id,
+      payment_id: input.paymentId,
+      kind: input.kind,
+      audience: "member",
+      recipient_email: input.member.email,
+      reply_to: null,
       subject: confirmed ? "Pagamento confirmado — acesso APT liberado" : "Atualização necessária na sua mensalidade APT",
-      text: confirmed
+      body_text: confirmed
         ? `Olá, ${input.member.name}.\n\nO Asaas confirmou sua mensalidade do APT. Seu acesso aos links e à área de membros está liberado.`
         : `Olá, ${input.member.name}.\n\nO Asaas informou uma atualização na sua mensalidade. Acesse a área de membros para acompanhar a situação ou fale com a gestão do APT.`,
       flow: confirmed ? "payment_confirmed_member" : "payment_attention_member",
-      idempotencyKey: `apt-payment-${input.kind}-member-${input.paymentId}`,
-    }),
-    sendManagementEmail({
-      replyTo: input.member.email,
+      provider_status: input.providerStatus,
+    },
+    ...(management.length ? [{
+      dedupe_key: `apt-payment-${input.kind}-management-${input.paymentId}`,
+      member_id: input.member.id,
+      payment_id: input.paymentId,
+      kind: input.kind,
+      audience: "management",
+      recipient_email: management.join(","),
+      reply_to: input.member.email,
       subject: confirmed ? `Pagamento confirmado — ${input.member.name}` : `Mensalidade requer atenção — ${input.member.name}`,
-      text: confirmed
+      body_text: confirmed
         ? `O Asaas confirmou a mensalidade de ${input.member.name}.\n\nE-mail: ${input.member.email}\nStatus do provedor: ${input.providerStatus}\n\nA participação foi atualizada automaticamente no APT.`
         : `O Asaas informou uma atualização que requer atenção na mensalidade de ${input.member.name}.\n\nE-mail: ${input.member.email}\nStatus do provedor: ${input.providerStatus}\n\nAcesse a gestão para conferir o histórico financeiro.`,
       flow: confirmed ? "payment_confirmed_management" : "payment_attention_management",
-      idempotencyKey: `apt-payment-${input.kind}-management-${input.paymentId}`,
-    }),
-  ]);
+      provider_status: input.providerStatus,
+    }] : []),
+  ];
+
+  await Promise.all(deliveries.map((delivery) => supabaseAdmin("billing_email_deliveries", {
+    method: "POST",
+    query: { on_conflict: "dedupe_key" },
+    prefer: "resolution=ignore-duplicates,return=minimal",
+    body: delivery,
+  })));
+  return retryBillingEmailDeliveries(deliveries.length, deliveries.map((delivery) => delivery.dedupe_key));
 }

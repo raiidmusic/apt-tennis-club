@@ -147,8 +147,10 @@ test("reconciles billing without collecting card data in the APT portal", async 
   assert.match(webhook, /payment\?\.checkoutSession/);
   assert.match(webhook, /payment\?\.customer/);
   assert.match(webhook, /asaas_customer_id: payload\.checkout\.customer/);
-  assert.match(webhook, /cpf_last4: `eq\.\$\{cpfLast4\}`/);
-  assert.match(webhook, /normalizedName\(member\.name\) === normalizedName\(customer\.name\)/);
+  assert.match(webhook, /sha256\(`\$\{cpfSecret\}:\$\{customerCpf\}`\)/);
+  assert.match(webhook, /cpf_hash: `eq\.\$\{cpfHash\}`/);
+  assert.match(webhook, /subscription\.amount_cents !== Math\.round\(payment\.value \* 100\)/);
+  assert.doesNotMatch(webhook, /normalizedName|customer\.email/);
   assert.match(webhook, /after\(async \(\) =>/);
   assert.match(webhook, /processPendingEvents/);
   assert.match(webhook, /received: true, queued: true/);

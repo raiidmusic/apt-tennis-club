@@ -20,13 +20,15 @@ test("keeps transactional Resend mail server-only and idempotent", async () => {
 });
 
 test("wires member and management notices to completed canonical events", async () => {
-  const [applications, enrollment, portal, webhook, reconciliation, email] = await Promise.all([
+  const [applications, enrollment, portal, webhook, reconciliation, email, outboxMigration, cron] = await Promise.all([
     readFile(new URL("../app/api/requerimentos/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cadastros/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/portal/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/webhooks/asaas/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/billing-reconciliation.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/apt-email.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/202608160002_billing_email_outbox.sql", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cron/billing-reconciliation/route.ts", import.meta.url), "utf8"),
   ]);
   for (const route of [applications, enrollment, portal]) {
     assert.match(route, /sendManagementEmail/);
@@ -39,13 +41,21 @@ test("wires member and management notices to completed canonical events", async 
   assert.match(portal, /card_change_management/);
   assert.match(portal, /cancellation_member/);
   assert.match(webhook, /sendBillingTransitionEmails/);
-  assert.match(webhook, /!paymentIsPaid\(previousPayment\?\.status\)/);
-  assert.match(webhook, /!paymentNeedsAttention\(previousPayment\?\.status\)/);
+  assert.match(webhook, /paymentId && paymentIsReceived/);
+  assert.match(webhook, /paymentId && paymentHasFailed/);
   assert.match(reconciliation, /sendBillingTransitionEmails/);
-  assert.match(reconciliation, /!previousLatestState\.paid/);
-  assert.match(reconciliation, /!previousLatestState\.failed/);
+  assert.match(reconciliation, /customer: recoveredCustomerId \|\| localSubscription\.asaas_customer_id/);
   assert.match(email, /payment_confirmed_member/);
   assert.match(email, /payment_attention_member/);
+  assert.match(email, /billing_email_deliveries/);
+  assert.match(email, /retryBillingEmailDeliveries/);
+  assert.match(email, /resolution=ignore-duplicates/);
+  assert.match(outboxMigration, /dedupe_key text not null unique/);
+  assert.match(outboxMigration, /enable row level security/);
+  assert.match(outboxMigration, /revoke all.*anon, authenticated/);
+  assert.match(cron, /CRON_SECRET/);
+  assert.match(cron, /reconcileMemberBilling/);
+  assert.match(cron, /retryBillingEmailDeliveries/);
 });
 
 test("keeps approvals individual while direct enrollment uses one management-held link", async () => {

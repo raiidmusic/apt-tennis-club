@@ -124,7 +124,9 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
     ? [`/subscriptions/${encodeURIComponent(providerSubscription.id)}/payments`]
     : [
         ...(checkoutId ? [`/payments?${new URLSearchParams({ checkoutSession: checkoutId, limit: "24" })}`] : []),
-        ...(recoveredCustomerId ? [`/payments?${new URLSearchParams({ customer: recoveredCustomerId, limit: "24" })}`] : []),
+        ...((recoveredCustomerId || localSubscription.asaas_customer_id)
+          ? [`/payments?${new URLSearchParams({ customer: recoveredCustomerId || localSubscription.asaas_customer_id || "", limit: "24" })}`]
+          : []),
         `/payments?${new URLSearchParams({ externalReference: memberId, limit: "24" })}`,
       ];
   let payments: AsaasPaymentSnapshot[] = [];
@@ -146,11 +148,6 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
 
   const snapshots = payments.filter((payment): payment is AsaasPaymentSnapshot & { id: string } => Boolean(payment.id));
   const latest = [...snapshots].sort((a, b) => (b.dueDate || b.dateCreated || "").localeCompare(a.dueDate || a.dateCreated || ""))[0];
-  const previousLatest = latest
-    ? (await supabaseAdmin<Array<{ status?: string }>>("payments", {
-      query: { select: "status", asaas_payment_id: `eq.${latest.id}`, limit: "1" },
-    }))[0]
-    : undefined;
   await Promise.all(snapshots.map((payment) => {
     const state = asaasPaymentState(payment.status);
     return supabaseAdmin("payments", {
@@ -173,7 +170,6 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
   }));
 
   const latestState = asaasPaymentState(latest?.status);
-  const previousLatestState = asaasPaymentState(previousLatest?.status);
   const protectedManualState = ["courtesy", "inactive", "cancelled", "cancellation_requested"].includes(member.participation_status);
   const nextMemberStatus = protectedManualState
     ? member.participation_status
@@ -205,9 +201,9 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
       : Promise.resolve(),
   ]);
 
-  if (latest?.id && latestState.paid && !previousLatestState.paid) {
+  if (latest?.id && latestState.paid) {
     await sendBillingTransitionEmails({ kind: "confirmed", member, paymentId: latest.id, providerStatus: latestState.normalized });
-  } else if (latest?.id && latestState.failed && !previousLatestState.failed) {
+  } else if (latest?.id && latestState.failed) {
     await sendBillingTransitionEmails({ kind: "attention", member, paymentId: latest.id, providerStatus: latestState.normalized });
   }
 

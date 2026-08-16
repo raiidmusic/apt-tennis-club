@@ -197,8 +197,8 @@ test("keeps the mockup-style desktop operations board inside its workspace", asy
   assert.match(styles, /\.member-operations__summary \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(styles, /\.member-operations__summary > div:nth-child\(2n\) \{ border-right: 0; \}/);
   assert.match(styles, /\.admin-content \{ container-type: inline-size; \}/);
-  assert.match(styles, /\.member-operations__desktop-board:not\(\[data-columns="1"\]\) \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
-  assert.match(styles, /@container \(min-width: 50rem\) \{[\s\S]*repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.member-operations__desktop-board:not\(\[data-columns="1"\]\) \{ grid-template-columns: repeat\(4, minmax\(17rem, 1fr\)\); overflow-x: auto;/);
+  assert.match(styles, /\.member-operations__desktop-board:not\(\[data-columns="1"\]\) \.member-operations__lane \{ scroll-snap-align: start; \}/);
   assert.match(styles, /@container \(min-width: 68rem\) \{[\s\S]*repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(styles, /\.member-operations__desktop-board\[data-columns="1"\] \{ grid-template-columns: minmax\(0, 28rem\); \}/);
   assert.match(styles, /\.crm-kanban \{[^}]*grid-auto-flow: column;[^}]*overflow-x: auto/);

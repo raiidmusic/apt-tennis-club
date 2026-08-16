@@ -733,9 +733,12 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .signal-strip, .crm-kanban, .member-management-list, .payment-reminder-queue, .member-import-panel, .admin-toolbar, .member-operations { margin-top: 1.25rem; }
   .member-operations__mobile-stages, .member-operations__mobile-list { display: none; }
   .member-operations__desktop-board { display: grid; gap: 0.7rem; margin-top: 0.75rem; }
-  .member-operations__desktop-board:not([data-columns="1"]) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Keep a Kanban as one continuous lane sequence: constrained workspaces
+     scroll inside the board instead of wrapping a stage onto a second row. */
+  .member-operations__desktop-board:not([data-columns="1"]) { grid-template-columns: repeat(4, minmax(17rem, 1fr)); overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: inline proximity; scrollbar-width: thin; }
   .member-operations__desktop-board[data-columns="1"] { grid-template-columns: minmax(0, 28rem); }
   .member-operations__lane { min-width: 0; border: 1px solid var(--line); background: var(--surface-muted); }
+  .member-operations__desktop-board:not([data-columns="1"]) .member-operations__lane { scroll-snap-align: start; }
   .member-operations__lane > div { min-width: 0; }
   .member-operations__lane > header { min-height: 5.1rem; align-items: flex-start; }
   .member-operations__lane > header > div { display: grid; gap: 0.25rem; }
@@ -748,13 +751,10 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
 }
 
 /* These thresholds apply to the content pane after the desktop sidebar has
-   opened or collapsed. The safe default remains two readable lanes. */
-@container (min-width: 50rem) {
-  .member-operations__desktop-board:not([data-columns="1"]) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-
+   opened or collapsed. Before the workspace fits four lanes, the board itself
+   becomes the horizontal scroll surface instead of compressing its cards. */
 @container (min-width: 68rem) {
-  .member-operations__desktop-board:not([data-columns="1"]) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .member-operations__desktop-board:not([data-columns="1"]) { grid-template-columns: repeat(4, minmax(0, 1fr)); overflow-x: visible; }
 }
 
 @media (hover: hover) and (pointer: fine) {

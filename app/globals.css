@@ -495,6 +495,67 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 .signal-strip > div:last-child { border-bottom: 0; }
 .signal-strip span, .signal-strip small { color: var(--muted); font-size: 0.76rem; }
 .signal-strip strong { font-size: 1.65rem; font-variant-numeric: tabular-nums; }
+.admin-heading--dashboard h2 { max-width: 20ch; font-size: 1.85rem; letter-spacing: -0.02em; }
+.admin-heading--dashboard p { max-width: 54ch; margin: 0.65rem 0 0; color: var(--muted); }
+.management-dashboard { display: grid; gap: 1rem; margin-top: 1.5rem; }
+.management-dashboard-loading { min-height: 26rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; overflow: hidden; margin-top: 1.5rem; border: 1px solid var(--line); background: var(--line); }
+.management-dashboard-loading span { position: relative; min-height: 8rem; overflow: hidden; background: var(--surface-muted); }
+.management-dashboard-loading span::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 25%, oklch(100% 0 0 / 0.7) 50%, transparent 75%); transform: translateX(-100%); animation: dashboard-shimmer 1.35s var(--ease) infinite; }
+.management-dashboard-loading span:first-child { grid-column: 1 / -1; min-height: 10rem; background: color-mix(in oklch, var(--navy-deep) 10%, var(--surface-muted)); }
+.management-ledger { display: grid; border: 1px solid var(--line); background: var(--white); }
+.management-ledger__mrr { min-height: 10rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.75rem; padding: 1rem; background: var(--navy-deep); color: var(--white); }
+.management-ledger__mrr > span, .management-ledger__mrr small { color: oklch(82% 0.012 255); font-size: 0.72rem; }
+.management-ledger__mrr strong { font-size: 2rem; font-variant-numeric: tabular-nums; line-height: 1; letter-spacing: -0.035em; }
+.management-ledger dl { display: grid; margin: 0; }
+.management-ledger dl > div { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 5.5rem; padding: 0.85rem 1rem; border-bottom: 1px solid var(--line); }
+.management-ledger dl > div:last-child { border-bottom: 0; }
+.management-ledger dt { min-width: 0; display: grid; gap: 0.2rem; color: var(--muted); font-size: 0.74rem; }
+.management-ledger dt small { overflow: hidden; font-size: 0.68rem; text-overflow: ellipsis; white-space: nowrap; }
+.management-ledger dd { margin: 0; font-size: 1.2rem; font-weight: 760; font-variant-numeric: tabular-nums; text-align: right; }
+.management-ledger__risk { background: var(--warning-surface); }
+.management-ledger__risk dd { color: var(--clay-dark); }
+.management-dashboard__main { display: grid; gap: 1rem; }
+.management-revenue { min-width: 0; overflow: hidden; padding: 1rem; background: var(--navy-deep); color: var(--white); }
+.management-revenue > header, .management-health > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.management-revenue > header > div, .management-health > header > div { display: grid; gap: 0.25rem; }
+.management-revenue > header span, .management-health > header span { color: var(--clay); font-size: 0.7rem; font-weight: 760; }
+.management-revenue h3, .management-health h3, .management-decisions h3 { margin: 0; font-size: 1.05rem; }
+.management-revenue > header > strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.management-revenue__chart { margin-top: 1rem; }
+.management-revenue svg { width: 100%; height: 12rem; overflow: visible; }
+.management-revenue svg line { stroke: oklch(100% 0 0 / 0.1); stroke-width: 1; }
+.management-revenue svg path { fill: oklch(59% 0.145 42 / 0.16); }
+.management-revenue svg polyline { fill: none; stroke: var(--clay); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; vector-effect: non-scaling-stroke; animation: revenue-line-in 620ms var(--ease-snap) 80ms forwards; }
+.management-revenue svg circle { fill: var(--clay); stroke: var(--navy-deep); stroke-width: 3; vector-effect: non-scaling-stroke; animation: revenue-point-in 280ms var(--ease-snap) 480ms both; }
+.management-revenue__months { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.25rem; margin-top: 0.35rem; }
+.management-revenue__months > span { min-width: 0; display: grid; gap: 0.15rem; text-align: center; }
+.management-revenue__months small { color: oklch(74% 0.012 255); font-size: 0.62rem; text-transform: uppercase; }
+.management-revenue__months strong { overflow: hidden; color: var(--white); font-size: 0.58rem; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.management-revenue > p { margin: 1rem 0 0; color: oklch(78% 0.012 255); font-size: 0.74rem; }
+.management-decisions { border: 1px solid var(--line); background: var(--white); }
+.management-decisions > header { display: grid; gap: 0.25rem; padding: 1rem; border-bottom: 1px solid var(--line); }
+.management-decisions > header > span { color: var(--clay-dark); font-size: 0.7rem; font-weight: 760; }
+.management-decisions > header p { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.76rem; }
+.management-decisions > div { display: grid; }
+.management-decisions button { min-height: 4.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.85rem 1rem; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.management-decisions button:last-child { border-bottom: 0; }
+.management-decisions button > span { display: grid; grid-template-columns: 2rem minmax(0, 1fr); align-items: baseline; gap: 0.5rem; }
+.management-decisions button strong { color: var(--clay-dark); font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.management-decisions button small { color: var(--muted); font-size: 0.76rem; }
+.management-decisions button > i { color: var(--clay-dark); font-style: normal; transition: transform 180ms var(--ease-snap); }
+.management-health { padding: 1rem; border: 1px solid var(--line); background: var(--white); }
+.management-health > header > strong { font-size: 2rem; font-variant-numeric: tabular-nums; line-height: 1; }
+.management-health__bar { height: 0.65rem; display: flex; overflow: hidden; margin-top: 1.25rem; border-radius: 999px; background: var(--surface-muted); }
+.management-health__segment { height: 100%; transform-origin: left; animation: health-bar-in 520ms var(--ease-snap) both; }
+.management-health__segment--active, .management-health__dot--active { background: var(--olive); }
+.management-health__segment--attention, .management-health__dot--attention { background: var(--clay); }
+.management-health__segment--cancelling, .management-health__dot--cancelling { background: var(--navy); }
+.management-health__segment--inactive, .management-health__dot--inactive { background: var(--muted); }
+.management-health__legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.35rem; margin-top: 0.85rem; }
+.management-health__legend button { min-width: 0; min-height: 2.75rem; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.45rem; padding: 0.35rem 0.45rem; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.management-health__legend button > span { overflow: hidden; color: var(--muted); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+.management-health__legend button > strong { font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.management-health__dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; }
 .member-cell > span { width: 2.4rem; height: 2.4rem; display: grid; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--surface-muted); color: var(--navy); font-size: 0.72rem; font-weight: 800; }
 .member-cell > div { display: grid; }
 .member-cell small { color: var(--muted); font-size: 0.76rem; }
@@ -654,6 +715,10 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
 @keyframes success-in { from { opacity: 0; transform: scale(0.72) rotate(-8deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
 @keyframes hero-settle { from { opacity: 0.72; transform: scale(1.055); } to { opacity: 1; transform: scale(1.01); } }
 @keyframes loading-line { from { transform: translateX(-105%); } to { transform: translateX(245%); } }
+@keyframes dashboard-shimmer { to { transform: translateX(100%); } }
+@keyframes revenue-line-in { to { stroke-dashoffset: 0; } }
+@keyframes revenue-point-in { from { opacity: 0; transform: scale(0.55); } to { opacity: 1; transform: scale(1); } }
+@keyframes health-bar-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes drawer-in { from { opacity: 0; transform: translateX(2rem); } to { opacity: 1; transform: translateX(0); } }
 
@@ -758,6 +823,18 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .member-operations__desktop-board:not([data-columns="1"]) { grid-template-columns: repeat(4, minmax(0, 1fr)); overflow-x: visible; }
 }
 
+@container (min-width: 54rem) {
+  .management-ledger { grid-template-columns: minmax(18rem, 0.85fr) minmax(0, 1.65fr); }
+  .management-ledger__mrr { min-height: 100%; }
+  .management-ledger dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .management-ledger dl > div { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; min-height: 10rem; border-right: 1px solid var(--line); border-bottom: 0; }
+  .management-ledger dl > div:last-child { border-right: 0; }
+  .management-ledger dd { font-size: 1.45rem; text-align: left; }
+  .management-dashboard__main { grid-template-columns: minmax(0, 1.7fr) minmax(17rem, 0.8fr); }
+  .management-health__legend { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .management-revenue__months strong { font-size: 0.68rem; }
+}
+
 @media (hover: hover) and (pointer: fine) {
   .primary-button:hover, .secondary-button:hover, .row-actions button:hover, .table-action:hover { transform: translateY(-2px); }
   .primary-button:hover > span[aria-hidden], .secondary-button:hover > span[aria-hidden], .apt-pill:hover > span { transform: translateX(0.18rem); }
@@ -771,6 +848,8 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .crm-card:hover .crm-card__top i, .member-management-card:hover .member-management-card__open i, .member-operations-card:hover .member-management-card__open i { transform: translateX(0.2rem); }
   .member-management-card:hover, .member-operations-card:hover { border-color: var(--navy); transform: translateY(-2px); }
   .product-sidebar__item:hover { background: oklch(100% 0 0 / 0.065); color: var(--white); }
+  .management-decisions button:hover, .management-health__legend button:hover { background: var(--surface-muted); }
+  .management-decisions button:hover > i { transform: translateX(0.2rem); }
 }
 
 @media (prefers-reduced-motion: reduce) {

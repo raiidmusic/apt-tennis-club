@@ -3,10 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("keeps member access editing admin-only, auditable and inside safe boundaries", async () => {
-  const [membersRoute, portalRoute, client] = await Promise.all([
+  const [membersRoute, portalRoute, client, packageJson] = await Promise.all([
     readFile(new URL("../app/api/membros/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/portal/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
   assert.match(membersRoute, /requireAdmin/);
   assert.match(membersRoute, /new Set\(\["pending_payment", "courtesy", "inactive"\]\)/);
@@ -31,4 +32,14 @@ test("keeps member access editing admin-only, auditable and inside safe boundari
   assert.match(client, /Ativo e inadimplente são atualizados pelo fluxo financeiro/);
   assert.match(client, /Verificando acesso\./);
   assert.match(client, /if \(authChecking\) return/);
+  assert.match(membersRoute, /supabaseAdmin<ManagementPaymentRow\[]>\("payments"/);
+  assert.match(membersRoute, /paid_at\.gte/);
+  assert.match(membersRoute, /valueCents: payment\.value_cents/);
+  assert.match(client, /function ManagementDashboard/);
+  assert.match(client, /Painel de decisão/);
+  assert.match(client, /Receita confirmada nos últimos seis meses/);
+  assert.match(client, /Receita em risco/);
+  assert.match(client, /setPayments\(payload\.payments \|\| \[\]\)/);
+  assert.match(client, /memberOperationsStage\(member\) === "active"/);
+  assert.doesNotMatch(packageJson, /recharts|chart\.js|d3/);
 });

@@ -13,6 +13,7 @@ type SubscriptionRow = {
   current_period_end: string | null; overdue_since: string | null; cancel_at_period_end: boolean;
 };
 type MemberPayment = { id: string; status: string; value_cents: number; due_date: string | null; paid_at: string | null; invoice_url: string | null; created_at: string };
+type ManagementPaymentRow = { id: string; status: string; value_cents: number; paid_at: string | null; created_at: string };
 type MemberNote = { id: string; body: string; created_by: string; created_at: string };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -55,12 +56,17 @@ export async function GET(request: Request) {
         payments, notes,
       } });
     }
-    const [members, subscriptions] = await Promise.all([
+    const now = new Date();
+    const historyStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1)).toISOString();
+    const [members, subscriptions, payments] = await Promise.all([
       supabaseAdmin<MemberRow[]>("members", {
         query: { select: "id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", order: "name.asc" },
       }),
       supabaseAdmin<SubscriptionRow[]>("subscriptions", {
         query: { select: "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end" },
+      }),
+      supabaseAdmin<ManagementPaymentRow[]>("payments", {
+        query: { select: "id,status,value_cents,paid_at,created_at", or: `(created_at.gte.${historyStart},paid_at.gte.${historyStart})`, order: "created_at.asc", limit: "1000" },
       }),
     ]);
     const subscriptionByMember = new Map(subscriptions.map((item) => [item.member_id, item]));
@@ -72,12 +78,16 @@ export async function GET(request: Request) {
       return {
         id: member.id, name: member.name, email: member.email, whatsapp: member.whatsapp,
         classLevel: member.class_level, twinnerUrl: member.twinner_url, whatsappCommunityUrl: member.whatsapp_community_url,
+        joinedAt: member.joined_at, createdAt: member.created_at,
         participationStatus: ["courtesy", "inactive"].includes(member.participation_status) ? member.participation_status : overdueDays >= 7 ? "delinquent" : member.participation_status,
         subscriptionStatus: subscription?.status || "pending_configuration", amountCents: subscription?.amount_cents || 0,
         nextDueDate: subscription?.next_due_date, currentPeriodEnd: subscription?.current_period_end, overdueDays, cancelAtPeriodEnd: subscription?.cancel_at_period_end || false,
       };
     });
-    return Response.json({ members: result });
+    return Response.json({
+      members: result,
+      payments: payments.map((payment) => ({ id: payment.id, status: payment.status, valueCents: payment.value_cents, paidAt: payment.paid_at, createdAt: payment.created_at })),
+    });
   } catch {
     return Response.json({ error: "Não foi possível carregar os integrantes." }, { status: 500 });
   }

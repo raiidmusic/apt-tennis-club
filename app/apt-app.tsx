@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ClipboardList, CreditCard, Home, LogOut, Trophy, UserRound, UsersRound } from "lucide-react";
+import { ClipboardList, CreditCard, Home, LayoutDashboard, LogOut, Trophy, UserRound, UsersRound } from "lucide-react";
 import { ProductSidebar } from "@/components/ui/sidebar";
 import { AthleteImportInput, parseAthleteCsv } from "../lib/member-import";
 
@@ -130,6 +130,14 @@ type MemberRecord = {
   whatsappCommunityUrl?: string | null;
   payments?: Array<{ id: string; status: string; value_cents: number; due_date?: string | null; paid_at?: string | null; invoice_url?: string | null; created_at: string }>;
   notes?: AdminNote[];
+};
+
+type ManagementPayment = {
+  id: string;
+  status: string;
+  valueCents: number;
+  paidAt?: string | null;
+  createdAt: string;
 };
 
 type PortalPayload = {
@@ -957,10 +965,100 @@ const crmColumns: Array<{ status: ApplicationRecord["status"]; label: string }> 
 ];
 
 function CrmKanban({ applications, onOpen }: { applications: ApplicationRecord[]; onOpen: (id: string) => void }) {
-  return <section className="crm-kanban" aria-label="Pipeline de requerimentos">{crmColumns.map((column) => {
+  return <section className="crm-kanban" id="pipeline-requerimentos" aria-label="Pipeline de requerimentos">{crmColumns.map((column) => {
     const cards = applications.filter((application) => application.status === column.status);
     return <section className="crm-column" key={column.status}><header><strong>{column.label}</strong><span>{cards.length}</span></header><div>{cards.map((application) => <button type="button" className="crm-card" key={application.id} onClick={() => onOpen(application.id)}><span className="crm-card__top"><strong>{application.name}</strong><i aria-hidden="true">→</i></span><small>{application.city || "Cidade não informada"}</small><small>{application.classLevel || "Classe não informada"}</small><span className="crm-card__meta">{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(new Date(application.createdAt))}</span></button>)}{cards.length === 0 && <p>Sem requerimentos.</p>}</div></section>;
   })}</section>;
+}
+
+function currency(valueCents: number) {
+  return (valueCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function paidPayment(payment: ManagementPayment) {
+  return payment.status.includes("CONFIRMED") || payment.status.includes("RECEIVED");
+}
+
+function monthKey(value: Date | string) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" }).formatToParts(typeof value === "string" ? new Date(value) : value);
+  return `${parts.find((part) => part.type === "year")!.value}-${parts.find((part) => part.type === "month")!.value}`;
+}
+
+function RevenuePulse({ payments }: { payments: ManagementPayment[] }) {
+  const now = new Date();
+  const months = Array.from({ length: 6 }, (_, index) => new Date(now.getFullYear(), now.getMonth() - 5 + index, 1));
+  const totals = months.map((month) => payments.filter((payment) => paidPayment(payment) && monthKey(payment.paidAt || payment.createdAt) === monthKey(month)).reduce((sum, payment) => sum + payment.valueCents, 0));
+  const maximum = Math.max(...totals, 1);
+  const points = totals.map((total, index) => ({ x: 26 + index * 109.6, y: 174 - (total / maximum) * 132 }));
+  const line = points.map(({ x, y }) => `${x},${y}`).join(" ");
+  const area = `M ${points[0].x} 174 L ${points.map(({ x, y }) => `${x} ${y}`).join(" L ")} L ${points.at(-1)!.x} 174 Z`;
+  const total = totals.reduce((sum, value) => sum + value, 0);
+  return <section className="management-revenue" aria-labelledby="revenue-pulse-title">
+    <header><div><span>Receita confirmada</span><h3 id="revenue-pulse-title">Pulso dos últimos seis meses</h3></div><strong>{currency(total)}</strong></header>
+    <div className="management-revenue__chart">
+      <svg viewBox="0 0 600 194" role="img" aria-labelledby="revenue-chart-title revenue-chart-description" preserveAspectRatio="none">
+        <title id="revenue-chart-title">Receita confirmada nos últimos seis meses</title>
+        <desc id="revenue-chart-description">A curva mostra valores que o Asaas confirmou e que foram persistidos na base APT.</desc>
+        {[42, 86, 130, 174].map((y) => <line key={y} x1="26" x2="574" y1={y} y2={y} />)}
+        <path d={area} />
+        <polyline points={line} pathLength="1" />
+        {points.map((point, index) => <circle key={monthKey(months[index])} cx={point.x} cy={point.y} r="4"><title>{`${months[index].toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}: ${currency(totals[index])}`}</title></circle>)}
+      </svg>
+      <div className="management-revenue__months">{months.map((month, index) => <span key={monthKey(month)}><small>{month.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</small><strong>{totals[index] ? currency(totals[index]) : "—"}</strong></span>)}</div>
+    </div>
+    {!total && <p>Nenhum recebimento confirmado neste recorte. O gráfico começa a ganhar forma com os pagamentos reais.</p>}
+  </section>;
+}
+
+function ManagementDashboard({ applications, members, payments, loading, onOpenApplications, onOpenMembers }: {
+  applications: ApplicationRecord[];
+  members: MemberRecord[];
+  payments: ManagementPayment[];
+  loading: boolean;
+  onOpenApplications: () => void;
+  onOpenMembers: (filter: "attention" | "active" | "cancellation_requested" | "inactive") => void;
+}) {
+  if (loading) return <div className="management-dashboard-loading" role="status" aria-label="Atualizando os indicadores da gestão"><span /><span /><span /><span /></div>;
+  const now = new Date();
+  const currentMonth = monthKey(now);
+  const previousMonth = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+  const activeMembers = members.filter((member) => memberOperationsStage(member) === "active");
+  const recurringMembers = members.filter((member) => member.participationStatus === "active" && member.subscriptionStatus === "active" && member.amountCents > 0);
+  const actionMembers = members.filter((member) => ["awaiting_payment", "attention"].includes(memberOperationsStage(member)));
+  const cancellingMembers = members.filter((member) => memberOperationsStage(member) === "cancellation_requested");
+  const inactiveMembers = members.filter((member) => memberOperationsStage(member) === "inactive");
+  const attentionApplications = applications.filter((application) => ["new", "in_review", "awaiting_info"].includes(application.status));
+  const mrr = recurringMembers.reduce((total, member) => total + member.amountCents, 0);
+  const revenueThisMonth = payments.filter((payment) => paidPayment(payment) && monthKey(payment.paidAt || payment.createdAt) === currentMonth).reduce((total, payment) => total + payment.valueCents, 0);
+  const revenuePreviousMonth = payments.filter((payment) => paidPayment(payment) && monthKey(payment.paidAt || payment.createdAt) === previousMonth).reduce((total, payment) => total + payment.valueCents, 0);
+  const revenueDelta = revenuePreviousMonth ? Math.round(((revenueThisMonth - revenuePreviousMonth) / revenuePreviousMonth) * 100) : null;
+  const revenueAtRisk = actionMembers.reduce((total, member) => total + member.amountCents, 0);
+  const baseTotal = Math.max(members.length, 1);
+  const memberGroups = [
+    { label: "Ativos", count: activeMembers.length, className: "active" },
+    { label: "Pedem ação", count: actionMembers.length, className: "attention" },
+    { label: "Cancelando", count: cancellingMembers.length, className: "cancelling" },
+    { label: "Inativos", count: inactiveMembers.length, className: "inactive" },
+  ];
+  return <div className="management-dashboard" aria-busy={loading}>
+    <section className="management-ledger" aria-label="Indicadores principais">
+      <div className="management-ledger__mrr"><span>MRR ativo</span><strong>{currency(mrr)}</strong><small>{recurringMembers.length} {recurringMembers.length === 1 ? "assinatura recorrente" : "assinaturas recorrentes"} na base atual</small></div>
+      <dl>
+        <div><dt>Recebido no mês<small>{revenueDelta === null ? revenueThisMonth ? "primeiro período comparável" : "sem receita confirmada" : `${revenueDelta >= 0 ? "+" : ""}${revenueDelta}% sobre o mês anterior`}</small></dt><dd>{currency(revenueThisMonth)}</dd></div>
+        <div><dt>Membros ativos<small>{members.length ? `${Math.round((activeMembers.length / members.length) * 100)}% da base cadastrada` : "a base ainda está vazia"}</small></dt><dd>{activeMembers.length}</dd></div>
+        <div className="management-ledger__risk"><dt>Receita em risco<small>{actionMembers.length} {actionMembers.length === 1 ? "membro pede ação" : "membros pedem ação"}</small></dt><dd>{currency(revenueAtRisk)}</dd></div>
+      </dl>
+    </section>
+    <div className="management-dashboard__main">
+      <RevenuePulse payments={payments} />
+      <section className="management-decisions" aria-labelledby="management-decisions-title"><header><span>Agora</span><h3 id="management-decisions-title">Próximas decisões</h3><p>Atalhos abrem a fila exata, sem alterar nenhum estado.</p></header><div>
+        <button type="button" onClick={onOpenApplications}><span><strong>{attentionApplications.length}</strong><small>requerimentos para decidir</small></span><i aria-hidden="true">→</i></button>
+        <button type="button" onClick={() => onOpenMembers("attention")}><span><strong>{actionMembers.length}</strong><small>membros com ação financeira</small></span><i aria-hidden="true">→</i></button>
+        <button type="button" onClick={() => onOpenMembers("cancellation_requested")}><span><strong>{cancellingMembers.length}</strong><small>{cancellingMembers.length === 1 ? "cancelamento em andamento" : "cancelamentos em andamento"}</small></span><i aria-hidden="true">→</i></button>
+      </div></section>
+    </div>
+    <section className="management-health" aria-labelledby="management-health-title"><header><div><span>Saúde da base</span><h3 id="management-health-title">Como os membros se distribuem hoje</h3></div><strong>{members.length}</strong></header><div className="management-health__bar" aria-hidden="true">{memberGroups.map((group) => <i key={group.className} className={`management-health__segment management-health__segment--${group.className}`} style={{ width: `${(group.count / baseTotal) * 100}%` }} />)}</div><div className="management-health__legend">{memberGroups.map((group) => <button type="button" key={group.className} onClick={() => onOpenMembers(group.className === "attention" ? "attention" : group.className === "cancelling" ? "cancellation_requested" : group.className as "active" | "inactive")}><i className={`management-health__dot management-health__dot--${group.className}`} aria-hidden="true" /><span>{group.label}</span><strong>{group.count}</strong></button>)}</div></section>
+  </div>;
 }
 
 function DirectEnrollmentLinkPanel({ onNotice }: { onNotice: (message: string) => void }) {
@@ -986,11 +1084,12 @@ function DirectEnrollmentLinkPanel({ onNotice }: { onNotice: (message: string) =
 }
 
 export function AdminPage() {
-  const [tab, setTab] = useState<"resumo" | "membros">("resumo");
+  const [tab, setTab] = useState<"painel" | "requerimentos" | "membros">("painel");
   const [query, setQuery] = useState("");
   const [memberFilter, setMemberFilter] = useState<"all" | "attention" | "active" | "cancellation_requested" | "inactive">("all");
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
   const [members, setMembers] = useState<MemberRecord[]>([]);
+  const [payments, setPayments] = useState<ManagementPayment[]>([]);
   const [asaasConnected, setAsaasConnected] = useState(false);
   const [notice, setNotice] = useState("");
   const [selectedApplication, setSelectedApplication] = useState<ApplicationDetail | null>(null);
@@ -1023,12 +1122,15 @@ export function AdminPage() {
       ]);
       const [applicationPayload, memberPayload, asaasPayload] = await Promise.all([
         applicationResponse.json() as Promise<{ applications?: ApplicationRecord[]; error?: string }>,
-        memberResponse.json() as Promise<{ members?: MemberRecord[] }>,
+        memberResponse.json() as Promise<{ members?: MemberRecord[]; payments?: ManagementPayment[]; error?: string }>,
         asaasResponse.json() as Promise<{ connected?: boolean }>,
       ]);
       if (applicationResponse.ok) setApplications(applicationPayload.applications || []);
       else setNotice(applicationPayload.error || "Não foi possível carregar os requerimentos.");
-      setMembers(memberPayload.members || []);
+      if (memberResponse.ok) {
+        setMembers(memberPayload.members || []);
+        setPayments(memberPayload.payments || []);
+      } else setNotice(memberPayload.error || "Não foi possível carregar os integrantes.");
       setAsaasConnected(Boolean(asaasPayload.connected));
     }).catch(() => setNotice("Não foi possível atualizar os dados agora.")).finally(() => { setLoading(false); setAuthChecking(false); });
   }, []);
@@ -1112,12 +1214,11 @@ export function AdminPage() {
     try { await navigator.clipboard.writeText(url); setNotice("Link individual copiado."); }
     catch { window.prompt("Copie o link individual de cadastro:", url); }
   }
-  async function refreshMembers() { const response = await fetch("/api/membros"); const payload = await response.json() as { members?: MemberRecord[] }; if (response.ok) setMembers(payload.members || []); }
+  async function refreshMembers() { const response = await fetch("/api/membros"); const payload = await response.json() as { members?: MemberRecord[]; payments?: ManagementPayment[] }; if (response.ok) { setMembers(payload.members || []); setPayments(payload.payments || []); } }
   if (authChecking) return <div className="apt-app"><RouteHeader label="Gestão APT" /><main className="access-state"><span>Acesso administrativo</span><h1>Verificando acesso.</h1><p>A gestão é carregada somente para contas autorizadas.</p></main></div>;
   if (authRequired) return <div className="apt-app"><RouteHeader label="Gestão APT" /><main className="access-state"><span>Acesso administrativo</span><h1>Entre com uma conta autorizada.</h1><p>A base de candidatos, integrantes e pagamentos não fica exposta publicamente.</p><a className="primary-button" href="/entrar?next=/gestao">Entrar na gestão</a></main></div>;
-  const activeCount = members.filter((member) => member.participationStatus === "active").length;
-  const inactiveCount = members.filter((member) => ["inactive", "cancelled"].includes(member.participationStatus)).length;
   const attentionCount = applications.filter((item) => ["new", "in_review", "awaiting_info"].includes(item.status)).length;
+  const memberActionCount = members.filter((member) => ["awaiting_payment", "attention"].includes(memberOperationsStage(member))).length;
   return <div className="apt-app apt-product-app"><a className="skip-link" href="#main-content">Pular para o conteúdo</a><main className="admin-page" id="main-content">
     <ProductSidebar
       ariaLabel="Gestão APT"
@@ -1125,15 +1226,17 @@ export function AdminPage() {
       eyebrow="Gestão APT"
       title="Clube em movimento"
       items={[
-        { id: "resumo", label: "CRM e visão geral", mobileLabel: "Visão geral", icon: ClipboardList, active: tab === "resumo", onSelect: () => setTab("resumo"), badge: attentionCount || undefined },
-        { id: "membros", label: "Membros e cobranças", mobileLabel: "Membros", icon: UsersRound, active: tab === "membros", onSelect: () => setTab("membros") },
+        { id: "painel", label: "Painel de decisão", mobileLabel: "Painel", icon: LayoutDashboard, active: tab === "painel", onSelect: () => setTab("painel") },
+        { id: "requerimentos", label: "Requerimentos", mobileLabel: "CRM", icon: ClipboardList, active: tab === "requerimentos", onSelect: () => setTab("requerimentos"), badge: attentionCount || undefined },
+        { id: "membros", label: "Membros e cobranças", mobileLabel: "Membros", icon: UsersRound, active: tab === "membros", onSelect: () => setTab("membros"), badge: memberActionCount || undefined },
       ]}
       status={<div className="sidebar-footer"><span>Integração financeira</span><strong>{asaasConnected ? "Asaas conectado" : "Asaas pendente"}</strong></div>}
       footer={<SignOutButton />}
     />
     <section className="admin-content">
       {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice("")}>Fechar</button></div>}
-      {tab === "resumo" && <><header className="admin-heading"><div><span>CRM e visão geral</span><h2>O que pede atenção hoje.</h2></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><section className="signal-strip"><div><span>Membros ativos</span><strong>{activeCount}</strong><small>na cobrança recorrente</small></div><div><span>Inativos</span><strong>{inactiveCount}</strong><small>fora da renovação</small></div><div><span>Em análise</span><strong>{attentionCount}</strong><small>pedem uma decisão</small></div><div><span>MRR ativo</span><strong>{(members.filter((item) => item.participationStatus === "active").reduce((total, item) => total + item.amountCents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</strong><small>calculado pela base ativa</small></div></section><DirectEnrollmentLinkPanel onNotice={setNotice} />{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state empty-state--bordered"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{!loading && applications.length > 0 && <CrmKanban applications={applications} onOpen={openApplication} />}{(selectedApplication || applicationLoading) && <ApplicationReviewDetail key={selectedApplication?.id || "loading-application"} application={selectedApplication} loading={applicationLoading} saving={applicationSaving} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} onResendInvite={resendApplicationInvite} onCopyInvite={copyInvite} />}</>}
+      {tab === "painel" && <><header className="admin-heading admin-heading--dashboard"><div><span>Visão executiva</span><h2>O que mudou. O que pede ação.</h2><p>Receita, base e pendências da operação, em um só lugar.</p></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><ManagementDashboard applications={applications} members={members} payments={payments} loading={loading} onOpenApplications={() => setTab("requerimentos")} onOpenMembers={(filter) => { setQuery(""); setMemberFilter(filter); setTab("membros"); }} /></>}
+      {tab === "requerimentos" && <><header className="admin-heading"><div><span>Requerimentos</span><h2>Decisões de entrada, com contexto.</h2></div><span className="status-chip status-chip--pending">{attentionCount} {attentionCount === 1 ? "decisão" : "decisões"}</span></header><DirectEnrollmentLinkPanel onNotice={setNotice} />{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state empty-state--bordered"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{!loading && applications.length > 0 && <CrmKanban applications={applications} onOpen={openApplication} />}{(selectedApplication || applicationLoading) && <ApplicationReviewDetail key={selectedApplication?.id || "loading-application"} application={selectedApplication} loading={applicationLoading} saving={applicationSaving} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} onResendInvite={resendApplicationInvite} onCopyInvite={copyInvite} />}</>}
       {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Operação em tempo real, sem movimentação manual.</h2></div></header><div className="admin-toolbar"><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar nome, e-mail ou WhatsApp" /></label><label className="filter-field"><span className="sr-only">Filtrar membros</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value as typeof memberFilter)}><option value="all">Todos os estágios</option><option value="attention">Precisa de ação</option><option value="active">Ativos</option><option value="cancellation_requested">Cancelamento</option><option value="inactive">Inativos</option></select></label><span>{filteredMembers.length} de {members.length}</span></div><PaymentReminderQueue members={members} /><MemberOperationsKanban key={mobileDefaultStage} members={filteredMembers} onManage={openMember} mobileDefaultStage={mobileDefaultStage} /><MemberImportPanel onImported={refreshMembers} />{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Ajuste a busca ou o filtro.</span></div>}{(selectedMember || memberLoading) && <MemberManagementDetail member={selectedMember} loading={memberLoading} saving={memberSaving} refreshing={memberRefreshing} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} onRefresh={refreshMemberBilling} />}</>}
     </section>
   </main></div>;

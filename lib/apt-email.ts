@@ -14,6 +14,10 @@ type EmailInput = {
 type BillingEmailDelivery = {
   id: string;
   dedupe_key: string;
+  member_id: string;
+  payment_id: string | null;
+  checkout_id: string | null;
+  kind: "confirmed" | "attention" | "checkout_reminder";
   recipient_email: string;
   reply_to: string | null;
   subject: string;
@@ -21,6 +25,16 @@ type BillingEmailDelivery = {
   flow: string;
   status: "pending" | "failed" | "sent" | "suppressed";
   attempt_count: number;
+};
+
+type CheckoutReminderContext = {
+  member: { id: string; name: string; email: string; participation_status: string };
+  subscription: {
+    status: string;
+    asaas_checkout_id: string | null;
+    asaas_checkout_url: string | null;
+    asaas_checkout_expires_at: string | null;
+  };
 };
 
 const emailPattern = /^\S+@\S+\.\S+$/;
@@ -119,7 +133,49 @@ function retryDelay(attempt: number) {
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
+async function checkoutReminderContext(memberId: string): Promise<CheckoutReminderContext | null> {
+  const [member, subscription] = await Promise.all([
+    supabaseAdmin<CheckoutReminderContext["member"][]>("members", {
+      query: { select: "id,name,email,participation_status", id: `eq.${memberId}`, limit: "1" },
+    }).then((rows) => rows[0]),
+    supabaseAdmin<CheckoutReminderContext["subscription"][]>("subscriptions", {
+      query: {
+        select: "status,asaas_checkout_id,asaas_checkout_url,asaas_checkout_expires_at",
+        member_id: `eq.${memberId}`,
+        limit: "1",
+      },
+    }).then((rows) => rows[0]),
+  ]);
+  return member && subscription ? { member, subscription } : null;
+}
+
+function activeCheckout(context: CheckoutReminderContext | null) {
+  if (!context) return false;
+  const { member, subscription } = context;
+  return member.participation_status === "awaiting_payment"
+    && subscription.status === "awaiting_payment"
+    && Boolean(subscription.asaas_checkout_id && subscription.asaas_checkout_url)
+    && Boolean(subscription.asaas_checkout_expires_at)
+    && new Date(subscription.asaas_checkout_expires_at || 0).getTime() > Date.now();
+}
+
+async function suppressBillingEmail(delivery: BillingEmailDelivery, reason: string) {
+  const now = new Date().toISOString();
+  await supabaseAdmin("billing_email_deliveries", {
+    method: "PATCH",
+    query: { id: `eq.${delivery.id}`, status: "neq.sent" },
+    body: { status: "suppressed", last_error: reason, updated_at: now },
+  });
+  return "suppressed" as const;
+}
+
 async function deliverBillingEmail(delivery: BillingEmailDelivery) {
+  if (delivery.kind === "checkout_reminder") {
+    const context = await checkoutReminderContext(delivery.member_id);
+    if (!activeCheckout(context) || context?.subscription.asaas_checkout_id !== delivery.checkout_id) {
+      return suppressBillingEmail(delivery, "Checkout pago, substituído ou expirado antes do lembrete.");
+    }
+  }
   const deliveryStatus = await sendAptEmail({
     to: delivery.recipient_email,
     subject: delivery.subject,
@@ -148,7 +204,7 @@ async function deliverBillingEmail(delivery: BillingEmailDelivery) {
 export async function retryBillingEmailDeliveries(limit = 25, dedupeKeys: string[] = []) {
   const deliveries = await supabaseAdmin<BillingEmailDelivery[]>("billing_email_deliveries", {
     query: {
-      select: "id,dedupe_key,recipient_email,reply_to,subject,body_text,flow,status,attempt_count",
+      select: "id,dedupe_key,member_id,payment_id,checkout_id,kind,recipient_email,reply_to,subject,body_text,flow,status,attempt_count",
       status: "in.(pending,failed)",
       next_attempt_at: `lte.${new Date().toISOString()}`,
       ...(dedupeKeys.length ? { dedupe_key: `in.(${dedupeKeys.join(",")})` } : {}),
@@ -157,6 +213,82 @@ export async function retryBillingEmailDeliveries(limit = 25, dedupeKeys: string
     },
   });
   return Promise.all(deliveries.map(deliverBillingEmail));
+}
+
+function checkoutReminderBody(name: string, checkoutUrl: string, reminder: 1 | 2) {
+  return reminder === 1
+    ? `Olá, ${name}.\n\nVimos que seu cadastro no APT foi concluído, mas a mensalidade ainda está pendente. Se você ainda não finalizou, retome pelo checkout seguro do Asaas:\n${checkoutUrl}\n\nSe o pagamento já foi feito, pode desconsiderar esta mensagem. A confirmação acontece automaticamente.`
+    : `Olá, ${name}.\n\nSeu checkout da mensalidade APT expira em breve. Para concluir sua entrada, finalize o pagamento pelo link seguro do Asaas:\n${checkoutUrl}\n\nSe você já pagou, pode desconsiderar. O APT não recebe nem armazena os dados do seu cartão.`;
+}
+
+export async function ensureCheckoutPaymentReminders(memberId: string) {
+  const context = await checkoutReminderContext(memberId);
+  if (!activeCheckout(context)) return { available: false, queued: 0 };
+  const { member, subscription } = context!;
+  const checkoutId = subscription.asaas_checkout_id!;
+  const checkoutUrl = subscription.asaas_checkout_url!;
+  const expiresAt = new Date(subscription.asaas_checkout_expires_at!).getTime();
+  const checkoutCreatedAt = expiresAt - 1_440 * 60_000;
+  const reminders = ([
+    { number: 1 as const, afterMinutes: 60, subject: "Seu pagamento APT ficou pendente", flow: "checkout_payment_reminder_1" },
+    { number: 2 as const, afterMinutes: 1_200, subject: "Seu checkout APT expira em breve", flow: "checkout_payment_reminder_2" },
+  ]).map(({ number, afterMinutes, subject, flow }) => ({
+    dedupe_key: `apt-checkout-reminder-${number}-member-${member.id}-${checkoutId}`,
+    member_id: member.id,
+    payment_id: null,
+    checkout_id: checkoutId,
+    kind: "checkout_reminder",
+    audience: "member",
+    recipient_email: member.email,
+    reply_to: managementReplyTo() || null,
+    subject,
+    body_text: checkoutReminderBody(member.name, checkoutUrl, number),
+    flow,
+    provider_status: "AWAITING_PAYMENT",
+    next_attempt_at: new Date(checkoutCreatedAt + afterMinutes * 60_000).toISOString(),
+  }));
+  await Promise.all(reminders.map((delivery) => supabaseAdmin("billing_email_deliveries", {
+    method: "POST",
+    query: { on_conflict: "dedupe_key" },
+    prefer: "resolution=ignore-duplicates,return=minimal",
+    body: delivery,
+  })));
+  return { available: true, queued: reminders.length };
+}
+
+export async function sendManualCheckoutReminder(memberId: string) {
+  const context = await checkoutReminderContext(memberId);
+  if (!activeCheckout(context)) return { status: "unavailable" as const };
+  const { member, subscription } = context!;
+  const checkoutId = subscription.asaas_checkout_id!;
+  const hourKey = new Date().toISOString().slice(0, 13).replace(/[-T]/g, "");
+  const dedupeKey = `apt-checkout-reminder-manual-member-${member.id}-${checkoutId}-${hourKey}`;
+  await supabaseAdmin("billing_email_deliveries", {
+    method: "POST",
+    query: { on_conflict: "dedupe_key" },
+    prefer: "resolution=ignore-duplicates,return=minimal",
+    body: {
+      dedupe_key: dedupeKey,
+      member_id: member.id,
+      payment_id: null,
+      checkout_id: checkoutId,
+      kind: "checkout_reminder",
+      audience: "member",
+      recipient_email: member.email,
+      reply_to: managementReplyTo() || null,
+      subject: "Seu checkout APT — link para concluir",
+      body_text: checkoutReminderBody(member.name, subscription.asaas_checkout_url!, 1),
+      flow: "checkout_payment_reminder_manual",
+      provider_status: "AWAITING_PAYMENT",
+      next_attempt_at: new Date().toISOString(),
+    },
+  });
+  await retryBillingEmailDeliveries(1, [dedupeKey]);
+  const delivery = (await supabaseAdmin<Array<{ status: "pending" | "failed" | "sent" | "suppressed" }>>(
+    "billing_email_deliveries",
+    { query: { select: "status", dedupe_key: `eq.${dedupeKey}`, limit: "1" } },
+  ))[0];
+  return { status: delivery?.status || "failed" };
 }
 
 async function queueAndProcessBillingEmails(input: {

@@ -1,5 +1,5 @@
 import { asaasCheckoutUrl, asaasRequest } from "../../../lib/asaas";
-import { sendManagementEmail, sendMemberEmail } from "../../../lib/apt-email";
+import { ensureCheckoutPaymentReminders, sendManagementEmail, sendMemberEmail } from "../../../lib/apt-email";
 import { isValidNewPassword } from "../../../lib/auth";
 import { isValidCpf } from "../../../lib/cpf";
 import { requireTrustedOrigin } from "../../../lib/request-security";
@@ -30,6 +30,7 @@ type SubscriptionRow = {
   asaas_checkout_url: string | null;
   asaas_customer_id: string | null;
   checkout_attempted_at: string | null;
+  asaas_checkout_expires_at: string | null;
 };
 type GroupRegistrationLinkRow = {
   id: string;
@@ -274,9 +275,10 @@ export async function POST(request: Request) {
     }
 
     let subscription = (await supabaseAdmin<SubscriptionRow[]>("subscriptions", {
-      query: { select: "id,asaas_checkout_id,asaas_checkout_url,asaas_customer_id,checkout_attempted_at", member_id: `eq.${memberId}`, limit: "1" },
+      query: { select: "id,asaas_checkout_id,asaas_checkout_url,asaas_customer_id,checkout_attempted_at,asaas_checkout_expires_at", member_id: `eq.${memberId}`, limit: "1" },
     }))[0];
     if (subscription?.asaas_checkout_id) {
+      await ensureCheckoutPaymentReminders(memberId).catch(() => undefined);
       return Response.json({
         memberId,
         paymentConfigured: true,
@@ -294,6 +296,7 @@ export async function POST(request: Request) {
         asaas_checkout_url: null,
         asaas_customer_id: null,
         checkout_attempted_at: null,
+        asaas_checkout_expires_at: null,
       };
       await supabaseAdmin("subscriptions", {
         method: "POST",
@@ -362,6 +365,7 @@ export async function POST(request: Request) {
 
     const checkoutId = asaasPayload.id;
     const checkoutUrl = asaasPayload.link || asaasCheckoutUrl(checkoutId);
+    const checkoutExpiresAt = new Date(new Date(attemptedAt).getTime() + 1_440 * 60_000).toISOString();
     try {
       await supabaseAdmin("subscriptions", {
         method: "PATCH",
@@ -371,6 +375,7 @@ export async function POST(request: Request) {
           asaas_checkout_url: checkoutUrl,
           status: "awaiting_payment",
           checkout_attempted_at: null,
+          asaas_checkout_expires_at: checkoutExpiresAt,
           updated_at: new Date().toISOString(),
         },
       });
@@ -416,6 +421,7 @@ export async function POST(request: Request) {
     ]);
 
     await Promise.all([
+      ensureCheckoutPaymentReminders(memberId).catch(() => undefined),
       sendMemberEmail({
         to: email,
         subject: "Seu cadastro APT está pronto para a assinatura",

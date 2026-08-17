@@ -18,6 +18,15 @@ test("keeps member access editing admin-only, auditable and inside safe boundari
   assert.match(portalRoute, /member\.participation_status === "courtesy"/);
   assert.match(client, /MemberOperationsKanban/);
   assert.match(client, /memberOperationsStage/);
+  assert.match(client, /Cadastrou, não pagou/);
+  assert.match(client, /Aguardando pagamento/);
+  assert.match(client, /member\.checkoutStarted/);
+  assert.match(client, /Lembretes automáticos em 1h e 20h/);
+  assert.match(client, /Reenviar checkout/);
+  assert.match(membersRoute, /action: "member\.checkout_reminder_sent"/);
+  assert.match(membersRoute, /sendManualCheckoutReminder/);
+  assert.match(membersRoute, /reconcileMemberBilling\(payload\.id\)/);
+  assert.match(membersRoute, /requireTrustedOrigin/);
   assert.match(client, /cancellation_requested/);
   assert.match(client, /currentPeriodEnd/);
   assert.match(client, /Operação em tempo real, sem movimentação manual/);

@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { retryBillingEmailDeliveries } from "../../../../lib/apt-email";
+import { ensureCheckoutPaymentReminders, retryBillingEmailDeliveries } from "../../../../lib/apt-email";
 import { reconcileMemberBilling } from "../../../../lib/billing-reconciliation";
 import { runtimeEnv, supabaseAdmin } from "../../../../lib/supabase-server";
 
@@ -31,7 +31,11 @@ export async function GET(request: Request) {
   let failed = 0;
   for (let index = 0; index < candidates.length; index += 4) {
     const batch = await Promise.allSettled(
-      candidates.slice(index, index + 4).map(({ member_id }) => reconcileMemberBilling(member_id)),
+      candidates.slice(index, index + 4).map(async ({ member_id }) => {
+        const result = await reconcileMemberBilling(member_id);
+        await ensureCheckoutPaymentReminders(member_id);
+        return result;
+      }),
     );
     reconciled += batch.filter((result) => result.status === "fulfilled").length;
     failed += batch.filter((result) => result.status === "rejected").length;
@@ -44,6 +48,7 @@ export async function GET(request: Request) {
     reconciled,
     failed,
     emailsSent: emailResults.filter((status) => status === "sent").length,
-    emailsPending: emailResults.filter((status) => status !== "sent").length,
+    emailsSuppressed: emailResults.filter((status) => status === "suppressed").length,
+    emailsPending: emailResults.filter((status) => status !== "sent" && status !== "suppressed").length,
   });
 }

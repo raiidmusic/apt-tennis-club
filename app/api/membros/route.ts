@@ -1,4 +1,5 @@
 import { requireAdmin } from "../../../lib/auth";
+import { sendManualCheckoutReminder } from "../../../lib/apt-email";
 import { reconcileMemberBilling } from "../../../lib/billing-reconciliation";
 import { requireTrustedOrigin } from "../../../lib/request-security";
 import { supabaseAdmin } from "../../../lib/supabase-server";
@@ -11,6 +12,7 @@ type MemberRow = {
 type SubscriptionRow = {
   member_id: string; status: string; amount_cents: number; next_due_date: string | null;
   current_period_end: string | null; overdue_since: string | null; cancel_at_period_end: boolean;
+  asaas_checkout_id: string | null; asaas_checkout_url: string | null; asaas_checkout_expires_at: string | null;
 };
 type MemberPayment = { id: string; status: string; value_cents: number; due_date: string | null; paid_at: string | null; invoice_url: string | null; created_at: string };
 type ManagementPaymentRow = { id: string; status: string; value_cents: number; paid_at: string | null; created_at: string };
@@ -37,7 +39,7 @@ export async function GET(request: Request) {
       if (!uuidPattern.test(memberId)) return Response.json({ error: "Integrante inválido." }, { status: 400 });
       const [memberRows, subscriptionRows, payments, notes] = await Promise.all([
         supabaseAdmin<MemberRow[]>("members", { query: { select: "id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", id: `eq.${memberId}`, limit: "1" } }),
-        supabaseAdmin<SubscriptionRow[]>("subscriptions", { query: { select: "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end", member_id: `eq.${memberId}`, limit: "1" } }),
+        supabaseAdmin<SubscriptionRow[]>("subscriptions", { query: { select: "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end,asaas_checkout_id,asaas_checkout_url,asaas_checkout_expires_at", member_id: `eq.${memberId}`, limit: "1" } }),
         supabaseAdmin<MemberPayment[]>("payments", { query: { select: "id,status,value_cents,due_date,paid_at,invoice_url,created_at", member_id: `eq.${memberId}`, order: "created_at.desc", limit: "24" } }),
         supabaseAdmin<MemberNote[]>("admin_notes", { query: { select: "id,body,created_by,created_at", member_id: `eq.${memberId}`, order: "created_at.asc" } }),
       ]);
@@ -53,6 +55,9 @@ export async function GET(request: Request) {
         participationStatus: ["courtesy", "inactive"].includes(member.participation_status) ? member.participation_status : overdueDays >= 7 ? "delinquent" : member.participation_status,
         subscriptionStatus: subscription?.status || "pending_configuration", amountCents: subscription?.amount_cents || 0,
         nextDueDate: subscription?.next_due_date, currentPeriodEnd: subscription?.current_period_end, overdueDays, cancelAtPeriodEnd: subscription?.cancel_at_period_end || false,
+        checkoutExpiresAt: subscription?.asaas_checkout_expires_at,
+        checkoutStarted: Boolean(subscription?.asaas_checkout_id),
+        checkoutAvailable: Boolean(subscription?.status === "awaiting_payment" && subscription.asaas_checkout_id && subscription.asaas_checkout_url && subscription.asaas_checkout_expires_at && new Date(subscription.asaas_checkout_expires_at).getTime() > Date.now()),
         payments, notes,
       } });
     }
@@ -63,7 +68,7 @@ export async function GET(request: Request) {
         query: { select: "id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", order: "name.asc" },
       }),
       supabaseAdmin<SubscriptionRow[]>("subscriptions", {
-        query: { select: "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end" },
+        query: { select: "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end,asaas_checkout_id,asaas_checkout_url,asaas_checkout_expires_at" },
       }),
       supabaseAdmin<ManagementPaymentRow[]>("payments", {
         query: { select: "id,status,value_cents,paid_at,created_at", or: `(created_at.gte.${historyStart},paid_at.gte.${historyStart})`, order: "created_at.asc", limit: "1000" },
@@ -82,6 +87,9 @@ export async function GET(request: Request) {
         participationStatus: ["courtesy", "inactive"].includes(member.participation_status) ? member.participation_status : overdueDays >= 7 ? "delinquent" : member.participation_status,
         subscriptionStatus: subscription?.status || "pending_configuration", amountCents: subscription?.amount_cents || 0,
         nextDueDate: subscription?.next_due_date, currentPeriodEnd: subscription?.current_period_end, overdueDays, cancelAtPeriodEnd: subscription?.cancel_at_period_end || false,
+        checkoutExpiresAt: subscription?.asaas_checkout_expires_at,
+        checkoutStarted: Boolean(subscription?.asaas_checkout_id),
+        checkoutAvailable: Boolean(subscription?.status === "awaiting_payment" && subscription.asaas_checkout_id && subscription.asaas_checkout_url && subscription.asaas_checkout_expires_at && new Date(subscription.asaas_checkout_expires_at).getTime() > Date.now()),
       };
     });
     return Response.json({
@@ -100,17 +108,28 @@ export async function POST(request: Request) {
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
   try {
     const payload = await request.json() as { id?: string; action?: string };
-    if (payload.action !== "refresh_billing" || !payload.id || !uuidPattern.test(payload.id)) {
+    if (!payload.id || !uuidPattern.test(payload.id) || !["refresh_billing", "resend_checkout"].includes(payload.action || "")) {
       return Response.json({ error: "Atualização financeira inválida." }, { status: 400 });
     }
     const result = await reconcileMemberBilling(payload.id);
+    if (payload.action === "resend_checkout") {
+      const delivery = await sendManualCheckoutReminder(payload.id);
+      if (delivery.status === "unavailable" || delivery.status === "suppressed") {
+        return Response.json({ error: "Este checkout já foi pago, substituído ou expirou." }, { status: 409 });
+      }
+      await supabaseAdmin("audit_logs", {
+        method: "POST",
+        body: { actor: admin.email, action: "member.checkout_reminder_sent", entity_type: "member", entity_id: payload.id, metadata: { delivery: delivery.status } },
+      });
+      return Response.json({ reminded: true, delivery: delivery.status, reconciled: result });
+    }
     await supabaseAdmin("audit_logs", {
       method: "POST",
       body: { actor: admin.email, action: "member.billing_reconciled", entity_type: "member", entity_id: payload.id, metadata: result },
     });
     return Response.json({ reconciled: true, ...result });
   } catch {
-    return Response.json({ error: "Não foi possível conciliar este integrante com o Asaas." }, { status: 502 });
+    return Response.json({ error: "Não foi possível confirmar a situação no Asaas antes desta ação." }, { status: 502 });
   }
 }
 

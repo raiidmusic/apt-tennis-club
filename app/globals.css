@@ -645,7 +645,8 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 .member-operations__desktop-board { display: none; }
 /* Native buttons can retain content-box sizing in the browser shell. These cards
    live inside narrow Kanban lanes, so their width must include padding and border. */
-.member-operations-card { box-sizing: border-box; display: grid; gap: 0.7rem; width: 100%; min-width: 0; max-width: 100%; padding: 0.85rem; border: 1px solid var(--line); background: var(--white); color: var(--ink); text-align: left; cursor: pointer; transition: border-color 180ms var(--ease), transform 180ms var(--ease), box-shadow 180ms var(--ease); }
+.member-operations-card { box-sizing: border-box; display: grid; width: 100%; min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--line); background: var(--white); color: var(--ink); text-align: left; transition: border-color 180ms var(--ease), transform 180ms var(--ease), box-shadow 180ms var(--ease); }
+.member-operations-card__body { box-sizing: border-box; display: grid; gap: 0.7rem; width: 100%; min-width: 0; padding: 0.85rem; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .member-operations-card .member-cell { min-width: 0; align-items: flex-start; }
 .member-operations-card .member-cell > div { min-width: 0; display: grid; gap: 0.15rem; }
 .member-operations-card .member-cell strong { display: -webkit-box; overflow: hidden; font-size: 0.84rem; line-height: 1.25; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
@@ -655,6 +656,10 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 .member-operations-card__value { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
 .member-operations-card__value small { color: var(--muted); font-size: 0.68rem; }
 .member-operations-card__value strong { font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.member-operations-card__checkout { display: grid; gap: 0.55rem; padding: 0.7rem 0.85rem 0.85rem; border-top: 1px solid var(--line); background: color-mix(in oklch, var(--clay) 5%, var(--white)); }
+.member-operations-card__checkout small { color: var(--muted); font-size: 0.68rem; line-height: 1.35; }
+.member-operations-card__checkout button { min-height: 2.75rem; width: 100%; border: 1px solid var(--clay); border-radius: var(--radius-sm); background: var(--clay); color: var(--white); font-size: 0.75rem; font-weight: 780; cursor: pointer; transition: background 160ms var(--ease), border-color 160ms var(--ease), transform 160ms var(--ease); }
+.member-operations-card__checkout button:disabled { border-color: var(--line); background: var(--surface-muted); color: var(--muted); cursor: not-allowed; }
 .crm-kanban { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(15rem, 82vw); gap: 0.8rem; overflow-x: auto; margin-top: 1.5rem; padding-bottom: 0.5rem; }
 .crm-column { min-height: 15rem; border: 1px solid var(--line); background: var(--surface-muted); }
 .crm-column > header { display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 0.9rem; border-bottom: 1px solid var(--line); font-size: 0.82rem; }
@@ -801,7 +806,7 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .member-operations__desktop-board { display: grid; gap: 0.7rem; margin-top: 0.75rem; }
   /* Keep a Kanban as one continuous lane sequence: constrained workspaces
      scroll inside the board instead of wrapping a stage onto a second row. */
-  .member-operations__desktop-board:not([data-columns="1"]) { grid-template-columns: repeat(4, minmax(17rem, 1fr)); overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: inline proximity; scrollbar-width: thin; }
+  .member-operations__desktop-board:not([data-columns="1"]) { grid-template-columns: repeat(5, minmax(17rem, 1fr)); overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: inline proximity; scrollbar-width: thin; }
   .member-operations__desktop-board[data-columns="1"] { grid-template-columns: minmax(0, 28rem); }
   .member-operations__lane { min-width: 0; border: 1px solid var(--line); background: var(--surface-muted); }
   .member-operations__desktop-board:not([data-columns="1"]) .member-operations__lane { scroll-snap-align: start; }
@@ -809,6 +814,7 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .member-operations__lane > header { min-height: 5.1rem; align-items: flex-start; }
   .member-operations__lane > header > div { display: grid; gap: 0.25rem; }
   .member-operations__lane > header span { color: var(--muted); font-size: 0.7rem; }
+  .member-operations__lane[data-stage="checkout_pending"] > header { border-top: 2px solid var(--clay-dark); }
   .member-operations__lane[data-stage="attention"] > header { border-top: 2px solid var(--clay); }
   .member-operations__lane[data-stage="active"] > header { border-top: 2px solid var(--success); }
   .member-operations__lane[data-stage="cancellation_requested"] > header { border-top: 2px solid var(--ink); }
@@ -820,7 +826,7 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
    opened or collapsed. Before the workspace fits four lanes, the board itself
    becomes the horizontal scroll surface instead of compressing its cards. */
 @container (min-width: 68rem) {
-  .member-operations__desktop-board:not([data-columns="1"]) { grid-template-columns: repeat(4, minmax(0, 1fr)); overflow-x: visible; }
+  .member-operations__desktop-board:not([data-columns="1"]) { grid-template-columns: repeat(5, minmax(0, 1fr)); overflow-x: visible; }
 }
 
 @container (min-width: 54rem) {
@@ -847,6 +853,7 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .crm-card:hover { transform: translateY(-2px); }
   .crm-card:hover .crm-card__top i, .member-management-card:hover .member-management-card__open i, .member-operations-card:hover .member-management-card__open i { transform: translateX(0.2rem); }
   .member-management-card:hover, .member-operations-card:hover { border-color: var(--navy); transform: translateY(-2px); }
+  .member-operations-card__checkout button:not(:disabled):hover { border-color: var(--clay-dark); background: var(--clay-dark); transform: translateY(-1px); }
   .product-sidebar__item:hover { background: oklch(100% 0 0 / 0.065); color: var(--white); }
   .management-decisions button:hover, .management-health__legend button:hover { background: var(--surface-muted); }
   .management-decisions button:hover > i { transform: translateX(0.2rem); }

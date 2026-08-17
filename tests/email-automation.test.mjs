@@ -20,7 +20,7 @@ test("keeps transactional Resend mail server-only and idempotent", async () => {
 });
 
 test("wires member and management notices to completed canonical events", async () => {
-  const [applications, enrollment, portal, webhook, reconciliation, email, outboxMigration, cron] = await Promise.all([
+  const [applications, enrollment, portal, webhook, reconciliation, email, outboxMigration, reminderMigration, cron] = await Promise.all([
     readFile(new URL("../app/api/requerimentos/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cadastros/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/portal/route.ts", import.meta.url), "utf8"),
@@ -28,6 +28,7 @@ test("wires member and management notices to completed canonical events", async 
     readFile(new URL("../lib/billing-reconciliation.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/apt-email.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608160002_billing_email_outbox.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/202608170001_checkout_payment_reminders.sql", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cron/billing-reconciliation/route.ts", import.meta.url), "utf8"),
   ]);
   for (const route of [applications, enrollment, portal]) {
@@ -50,11 +51,22 @@ test("wires member and management notices to completed canonical events", async 
   assert.match(email, /billing_email_deliveries/);
   assert.match(email, /retryBillingEmailDeliveries/);
   assert.match(email, /resolution=ignore-duplicates/);
+  assert.match(email, /checkout_payment_reminder_1/);
+  assert.match(email, /checkout_payment_reminder_2/);
+  assert.match(email, /afterMinutes: 60/);
+  assert.match(email, /afterMinutes: 1_200/);
+  assert.match(email, /Checkout pago, substituído ou expirado antes do lembrete/);
+  assert.match(email, /sendManualCheckoutReminder/);
   assert.match(outboxMigration, /dedupe_key text not null unique/);
   assert.match(outboxMigration, /enable row level security/);
   assert.match(outboxMigration, /revoke all.*anon, authenticated/);
+  assert.match(reminderMigration, /asaas_checkout_expires_at timestamptz/);
+  assert.match(reminderMigration, /checkout_reminder/);
+  assert.match(reminderMigration, /billing_email_deliveries_target_check/);
+  assert.match(reminderMigration, /revoke all.*anon, authenticated/);
   assert.match(cron, /CRON_SECRET/);
   assert.match(cron, /reconcileMemberBilling/);
+  assert.match(cron, /ensureCheckoutPaymentReminders/);
   assert.match(cron, /retryBillingEmailDeliveries/);
 });
 

@@ -80,8 +80,9 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 .apt-landing main { padding: 0.75rem; }
 #o-apt, #ranking, #temporada, #duvidas, #entrada { scroll-margin-top: 1rem; }
 .apt-site-nav { position: absolute; z-index: var(--z-sticky); top: 1.35rem; left: 1.35rem; right: 1.35rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; color: var(--white); }
-.apt-site-nav__brand { min-width: 3rem; min-height: 3rem; display: inline-flex; align-items: center; }
-.apt-site-nav__brand .brand-lockup img { width: 4.65rem; height: auto; }
+.apt-site-nav__brand { min-width: 0; min-height: 0; block-size: 2.4rem; display: inline-flex; align-items: center; }
+.apt-site-nav__brand .brand-lockup { block-size: 100%; }
+.apt-site-nav__brand .brand-lockup img { width: auto; height: 100%; }
 .apt-site-nav__links, .apt-site-nav__member { display: none; }
 .apt-site-nav__actions { display: flex; align-items: center; gap: 0.75rem; }
 .apt-pill { min-height: 3rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.7rem; padding: 0.72rem 1rem; border-radius: 999px; font-size: 0.78rem; font-weight: 780; line-height: 1; transition: transform 180ms var(--ease), background 180ms var(--ease), color 180ms var(--ease); }
@@ -208,7 +209,7 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 @media (min-width: 48rem) {
   .apt-landing main { padding: 1.25rem; }
   .apt-site-nav { top: 2rem; left: 2rem; right: 2rem; }
-  .apt-site-nav__brand .brand-lockup img { width: 5.8rem; }
+  .apt-site-nav__brand { block-size: 2.65rem; }
   .apt-site-nav__member { min-height: 2.75rem; display: inline-flex; align-items: center; font-size: 0.76rem; font-weight: 720; }
   .apt-hero { min-height: calc(100svh - 2.5rem); }
   .apt-hero__content { padding: 9rem 2.5rem 8.25rem; }
@@ -244,7 +245,7 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 @media (min-width: 64rem) {
   .apt-landing main { padding: 1.75rem; }
   .apt-site-nav { top: 2.75rem; left: 50%; right: auto; width: min(44rem, calc(100% - 7rem)); min-height: 3.2rem; padding: 0.25rem 0.3rem 0.25rem 1rem; border: 1px solid oklch(100% 0 0 / 0.2); border-radius: 999px; background: oklch(12% 0.035 255 / 0.58); backdrop-filter: blur(1rem); transform: translateX(-50%); }
-  .apt-site-nav__brand .brand-lockup img { width: 4.8rem; }
+  .apt-site-nav__brand { block-size: 2.4rem; }
   .apt-site-nav__links { display: flex; align-items: center; gap: 1.15rem; }
   .apt-site-nav__links a { min-height: 2.75rem; display: inline-flex; align-items: center; font-size: 0.68rem; font-weight: 690; }
   .apt-site-nav__member { display: none; }

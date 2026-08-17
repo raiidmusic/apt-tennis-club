@@ -20,6 +20,13 @@ test("keeps the APT landing public and free of server secrets", async () => {
   assert.doesNotMatch(layout, /next\/font\/google|Poppins\(/);
 });
 
+test("keeps the official landing lockup inside the navigation height", async () => {
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(styles, /\.apt-site-nav__brand \{[^}]*block-size: 2\.4rem/);
+  assert.match(styles, /\.apt-site-nav__brand \.brand-lockup \{[^}]*block-size: 100%/);
+  assert.match(styles, /\.apt-site-nav__brand \.brand-lockup img \{[^}]*width: auto; height: 100%/);
+});
+
 test("keeps public, invited, member and management journeys separate", async () => {
   await Promise.all([
     "../app/requerimento/page.tsx",

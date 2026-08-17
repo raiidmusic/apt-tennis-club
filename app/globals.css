@@ -498,41 +498,51 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 .admin-heading--dashboard h2 { max-width: 20ch; font-size: 1.85rem; letter-spacing: -0.02em; }
 .admin-heading--dashboard p { max-width: 54ch; margin: 0.65rem 0 0; color: var(--muted); }
 .management-dashboard { display: grid; gap: 1rem; margin-top: 1.5rem; }
-.management-dashboard-loading { min-height: 26rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; overflow: hidden; margin-top: 1.5rem; border: 1px solid var(--line); background: var(--line); }
+.management-dashboard-loading { min-height: 26rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; overflow: hidden; margin-top: 1.5rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--line); }
 .management-dashboard-loading span { position: relative; min-height: 8rem; overflow: hidden; background: var(--surface-muted); }
 .management-dashboard-loading span::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 25%, oklch(100% 0 0 / 0.7) 50%, transparent 75%); transform: translateX(-100%); animation: dashboard-shimmer 1.35s var(--ease) infinite; }
 .management-dashboard-loading span:first-child { grid-column: 1 / -1; min-height: 10rem; background: color-mix(in oklch, var(--navy-deep) 10%, var(--surface-muted)); }
-.management-ledger { display: grid; border: 1px solid var(--line); background: var(--white); }
-.management-ledger__mrr { min-height: 10rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.75rem; padding: 1rem; background: var(--navy-deep); color: var(--white); }
-.management-ledger__mrr > span, .management-ledger__mrr small { color: oklch(82% 0.012 255); font-size: 0.72rem; }
-.management-ledger__mrr strong { font-size: 2rem; font-variant-numeric: tabular-nums; line-height: 1; letter-spacing: -0.035em; }
-.management-ledger dl { display: grid; margin: 0; }
-.management-ledger dl > div { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 5.5rem; padding: 0.85rem 1rem; border-bottom: 1px solid var(--line); }
-.management-ledger dl > div:last-child { border-bottom: 0; }
-.management-ledger dt { min-width: 0; display: grid; gap: 0.2rem; color: var(--muted); font-size: 0.74rem; }
+.management-ledger { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--white); }
+.management-ledger dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.management-ledger dl > div { min-width: 0; min-height: 7.75rem; display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; padding: 1rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); transition: background-color 180ms var(--ease); }
+.management-ledger dl > div:nth-child(2n) { border-right: 0; }
+.management-ledger dl > div:nth-last-child(-n + 2) { border-bottom: 0; }
+.management-ledger__mrr { background: color-mix(in oklch, var(--navy) 5%, var(--white)); }
+.management-ledger dt { min-width: 0; display: grid; gap: 0.35rem; color: var(--muted); font-size: 0.74rem; }
 .management-ledger dt small { overflow: hidden; font-size: 0.68rem; text-overflow: ellipsis; white-space: nowrap; }
-.management-ledger dd { margin: 0; font-size: 1.2rem; font-weight: 760; font-variant-numeric: tabular-nums; text-align: right; }
+.management-ledger dd { margin: 0; color: var(--ink); font-size: 1.35rem; font-weight: 790; font-variant-numeric: tabular-nums; line-height: 1; letter-spacing: -0.025em; }
 .management-ledger__risk { background: var(--warning-surface); }
 .management-ledger__risk dd { color: var(--clay-dark); }
 .management-dashboard__main { display: grid; gap: 1rem; }
-.management-revenue { min-width: 0; overflow: hidden; padding: 1rem; background: var(--navy-deep); color: var(--white); }
+.management-dashboard__rail { display: grid; gap: 1rem; }
+.management-revenue { min-width: 0; display: flex; flex-direction: column; overflow: hidden; padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--white); color: var(--ink); }
 .management-revenue > header, .management-health > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .management-revenue > header > div, .management-health > header > div { display: grid; gap: 0.25rem; }
-.management-revenue > header span, .management-health > header span { color: var(--clay); font-size: 0.7rem; font-weight: 760; }
-.management-revenue h3, .management-health h3, .management-decisions h3 { margin: 0; font-size: 1.05rem; }
+.management-revenue > header span, .management-health > header span { color: var(--clay-dark); font-size: 0.7rem; font-weight: 760; }
+.management-revenue h3, .management-health h3, .management-decisions h3, .management-vitality h3 { margin: 0; font-size: 1.05rem; }
 .management-revenue > header > strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
-.management-revenue__chart { margin-top: 1rem; }
-.management-revenue svg { width: 100%; height: 12rem; overflow: visible; }
-.management-revenue svg line { stroke: oklch(100% 0 0 / 0.1); stroke-width: 1; }
-.management-revenue svg path { fill: oklch(59% 0.145 42 / 0.16); }
-.management-revenue svg polyline { fill: none; stroke: var(--clay); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; vector-effect: non-scaling-stroke; animation: revenue-line-in 620ms var(--ease-snap) 80ms forwards; }
-.management-revenue svg circle { fill: var(--clay); stroke: var(--navy-deep); stroke-width: 3; vector-effect: non-scaling-stroke; animation: revenue-point-in 280ms var(--ease-snap) 480ms both; }
+.management-revenue__chart { flex: 1; display: grid; grid-template-rows: minmax(14rem, 1fr) auto; margin-top: 1.35rem; }
+.management-revenue svg { width: 100%; height: 14rem; overflow: visible; }
+.management-revenue svg line { stroke: color-mix(in oklch, var(--line) 82%, transparent); stroke-width: 1; }
+.management-revenue svg path { fill: color-mix(in oklch, var(--clay) 14%, transparent); }
+.management-revenue svg polyline { fill: none; stroke: var(--navy); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; vector-effect: non-scaling-stroke; animation: revenue-line-in 620ms var(--ease-snap) 80ms forwards; }
+.management-revenue svg circle { fill: var(--clay-dark); stroke: var(--white); stroke-width: 3; vector-effect: non-scaling-stroke; animation: revenue-point-in 280ms var(--ease-snap) 480ms both; }
 .management-revenue__months { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.25rem; margin-top: 0.35rem; }
 .management-revenue__months > span { min-width: 0; display: grid; gap: 0.15rem; text-align: center; }
-.management-revenue__months small { color: oklch(74% 0.012 255); font-size: 0.62rem; text-transform: uppercase; }
-.management-revenue__months strong { overflow: hidden; color: var(--white); font-size: 0.58rem; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
-.management-revenue > p { margin: 1rem 0 0; color: oklch(78% 0.012 255); font-size: 0.74rem; }
-.management-decisions { border: 1px solid var(--line); background: var(--white); }
+.management-revenue__months small { color: var(--muted); font-size: 0.62rem; text-transform: uppercase; }
+.management-revenue__months strong { overflow: hidden; color: var(--ink); font-size: 0.58rem; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.management-revenue > p { margin: 1rem 0 0; color: var(--muted); font-size: 0.74rem; }
+.management-vitality { min-height: 12rem; display: flex; flex-direction: column; justify-content: space-between; gap: 1.25rem; padding: 1rem; border-radius: var(--radius-md); background: var(--navy-deep); color: var(--white); }
+.management-vitality > header { display: grid; gap: 0.25rem; }
+.management-vitality > header span { color: var(--clay); font-size: 0.7rem; font-weight: 760; }
+.management-vitality > div { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }
+.management-vitality > div strong { font-size: 2.35rem; font-variant-numeric: tabular-nums; line-height: 0.9; letter-spacing: -0.035em; }
+.management-vitality > div small { max-width: 11rem; color: oklch(80% 0.015 255); font-size: 0.72rem; text-align: right; }
+.management-vitality__bar { height: 0.4rem; overflow: hidden; border-radius: 999px; background: oklch(100% 0 0 / 0.12); }
+.management-vitality__bar i { display: block; height: 100%; border-radius: inherit; background: var(--clay); transform-origin: left; animation: health-bar-in 520ms var(--ease-snap) both; }
+.management-vitality > p { margin: 0; color: oklch(82% 0.012 255); font-size: 0.74rem; }
+.management-vitality > p strong { color: var(--white); }
+.management-decisions { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--white); }
 .management-decisions > header { display: grid; gap: 0.25rem; padding: 1rem; border-bottom: 1px solid var(--line); }
 .management-decisions > header > span { color: var(--clay-dark); font-size: 0.7rem; font-weight: 760; }
 .management-decisions > header p { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.76rem; }
@@ -543,7 +553,7 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 .management-decisions button strong { color: var(--clay-dark); font-size: 1.1rem; font-variant-numeric: tabular-nums; }
 .management-decisions button small { color: var(--muted); font-size: 0.76rem; }
 .management-decisions button > i { color: var(--clay-dark); font-style: normal; transition: transform 180ms var(--ease-snap); }
-.management-health { padding: 1rem; border: 1px solid var(--line); background: var(--white); }
+.management-health { padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--white); }
 .management-health > header > strong { font-size: 2rem; font-variant-numeric: tabular-nums; line-height: 1; }
 .management-health__bar { height: 0.65rem; display: flex; overflow: hidden; margin-top: 1.25rem; border-radius: 999px; background: var(--surface-muted); }
 .management-health__segment { height: 100%; transform-origin: left; animation: health-bar-in 520ms var(--ease-snap) both; }
@@ -830,13 +840,17 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
 }
 
 @container (min-width: 54rem) {
-  .management-ledger { grid-template-columns: minmax(18rem, 0.85fr) minmax(0, 1.65fr); }
-  .management-ledger__mrr { min-height: 100%; }
-  .management-ledger dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .management-ledger dl > div { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; min-height: 10rem; border-right: 1px solid var(--line); border-bottom: 0; }
+  .management-ledger dl { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .management-ledger dl > div { min-height: 8.8rem; border-right: 1px solid var(--line); border-bottom: 0; }
+  .management-ledger dl > div:nth-child(2n) { border-right: 1px solid var(--line); }
   .management-ledger dl > div:last-child { border-right: 0; }
-  .management-ledger dd { font-size: 1.45rem; text-align: left; }
-  .management-dashboard__main { grid-template-columns: minmax(0, 1.7fr) minmax(17rem, 0.8fr); }
+  .management-ledger dd { font-size: 1.45rem; }
+  .management-dashboard__main { grid-template-columns: minmax(0, 1.65fr) minmax(17rem, 0.85fr); align-items: stretch; }
+  .management-dashboard__rail { grid-template-rows: minmax(10.5rem, 0.8fr) minmax(0, 1.2fr); }
+  .management-dashboard__rail .management-vitality { min-height: 0; }
+  .management-dashboard__rail .management-decisions { display: flex; flex-direction: column; }
+  .management-dashboard__rail .management-decisions > div { flex: 1; }
+  .management-dashboard__rail .management-decisions button { min-height: 3.75rem; }
   .management-health__legend { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .management-revenue__months strong { font-size: 0.68rem; }
 }
@@ -857,6 +871,7 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .product-sidebar__item:hover { background: oklch(100% 0 0 / 0.065); color: var(--white); }
   .management-decisions button:hover, .management-health__legend button:hover { background: var(--surface-muted); }
   .management-decisions button:hover > i { transform: translateX(0.2rem); }
+  .management-ledger dl > div:not(.management-ledger__risk):hover { background: var(--surface-muted); }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1058,6 +1058,7 @@ function ManagementDashboard({ applications, members, payments, loading, onOpenA
   const revenueDelta = revenuePreviousMonth ? Math.round(((revenueThisMonth - revenuePreviousMonth) / revenuePreviousMonth) * 100) : null;
   const revenueAtRisk = actionMembers.reduce((total, member) => total + member.amountCents, 0);
   const baseTotal = Math.max(members.length, 1);
+  const activeShare = members.length ? Math.round((activeMembers.length / members.length) * 100) : 0;
   const memberGroups = [
     { label: "Ativos", count: activeMembers.length, className: "active" },
     { label: "Pedem ação", count: actionMembers.length, className: "attention" },
@@ -1065,22 +1066,28 @@ function ManagementDashboard({ applications, members, payments, loading, onOpenA
     { label: "Inativos", count: inactiveMembers.length, className: "inactive" },
   ];
   return <div className="management-dashboard" aria-busy={loading}>
-    <section className="management-ledger" aria-label="Indicadores principais">
-      <div className="management-ledger__mrr"><span>MRR ativo</span><strong>{currency(mrr)}</strong><small>{recurringMembers.length} {recurringMembers.length === 1 ? "assinatura recorrente" : "assinaturas recorrentes"} na base atual</small></div>
-      <dl>
-        <div><dt>Recebido no mês<small>{revenueDelta === null ? revenueThisMonth ? "primeiro período comparável" : "sem receita confirmada" : `${revenueDelta >= 0 ? "+" : ""}${revenueDelta}% sobre o mês anterior`}</small></dt><dd>{currency(revenueThisMonth)}</dd></div>
-        <div><dt>Membros ativos<small>{members.length ? `${Math.round((activeMembers.length / members.length) * 100)}% da base cadastrada` : "a base ainda está vazia"}</small></dt><dd>{activeMembers.length}</dd></div>
-        <div className="management-ledger__risk"><dt>Receita em risco<small>{actionMembers.length} {actionMembers.length === 1 ? "membro pede ação" : "membros pedem ação"}</small></dt><dd>{currency(revenueAtRisk)}</dd></div>
-      </dl>
-    </section>
     <div className="management-dashboard__main">
       <RevenuePulse payments={payments} />
-      <section className="management-decisions" aria-labelledby="management-decisions-title"><header><span>Agora</span><h3 id="management-decisions-title">Próximas decisões</h3><p>Atalhos abrem a fila exata, sem alterar nenhum estado.</p></header><div>
-        <button type="button" onClick={onOpenApplications}><span><strong>{attentionApplications.length}</strong><small>requerimentos para decidir</small></span><i aria-hidden="true">→</i></button>
-        <button type="button" onClick={() => onOpenMembers("attention")}><span><strong>{actionMembers.length}</strong><small>membros com ação financeira</small></span><i aria-hidden="true">→</i></button>
-        <button type="button" onClick={() => onOpenMembers("cancellation_requested")}><span><strong>{cancellingMembers.length}</strong><small>{cancellingMembers.length === 1 ? "cancelamento em andamento" : "cancelamentos em andamento"}</small></span><i aria-hidden="true">→</i></button>
-      </div></section>
+      <div className="management-dashboard__rail">
+        <section className="management-vitality" aria-labelledby="management-vitality-title">
+          <header><span>Saúde da base</span><h3 id="management-vitality-title">Membros em operação</h3></header>
+          <div><strong>{activeShare}%</strong><small>{activeMembers.length} de {members.length} ativos hoje</small></div>
+          <span className="management-vitality__bar" aria-hidden="true"><i style={{ width: `${activeShare}%` }} /></span>
+          <p>{actionMembers.length ? <><strong>{actionMembers.length}</strong> {actionMembers.length === 1 ? "membro pede ação financeira agora." : "membros pedem ação financeira agora."}</> : "Nenhuma ação financeira pendente na base."}</p>
+        </section>
+        <section className="management-decisions" aria-labelledby="management-decisions-title"><header><span>Agora</span><h3 id="management-decisions-title">Próximas decisões</h3><p>Atalhos abrem a fila exata, sem alterar nenhum estado.</p></header><div>
+          <button type="button" onClick={onOpenApplications}><span><strong>{attentionApplications.length}</strong><small>requerimentos para decidir</small></span><i aria-hidden="true">→</i></button>
+          <button type="button" onClick={() => onOpenMembers("attention")}><span><strong>{actionMembers.length}</strong><small>membros com ação financeira</small></span><i aria-hidden="true">→</i></button>
+          <button type="button" onClick={() => onOpenMembers("cancellation_requested")}><span><strong>{cancellingMembers.length}</strong><small>{cancellingMembers.length === 1 ? "cancelamento em andamento" : "cancelamentos em andamento"}</small></span><i aria-hidden="true">→</i></button>
+        </div></section>
+      </div>
     </div>
+    <section className="management-ledger" aria-label="Indicadores principais"><dl>
+      <div className="management-ledger__mrr"><dt>MRR ativo<small>{recurringMembers.length} {recurringMembers.length === 1 ? "assinatura recorrente" : "assinaturas recorrentes"}</small></dt><dd>{currency(mrr)}</dd></div>
+      <div><dt>Recebido no mês<small>{revenueDelta === null ? revenueThisMonth ? "primeiro período comparável" : "sem receita confirmada" : `${revenueDelta >= 0 ? "+" : ""}${revenueDelta}% sobre o mês anterior`}</small></dt><dd>{currency(revenueThisMonth)}</dd></div>
+      <div><dt>Membros ativos<small>{members.length ? `${activeShare}% da base cadastrada` : "a base ainda está vazia"}</small></dt><dd>{activeMembers.length}</dd></div>
+      <div className="management-ledger__risk"><dt>Receita em risco<small>{actionMembers.length} {actionMembers.length === 1 ? "membro pede ação" : "membros pedem ação"}</small></dt><dd>{currency(revenueAtRisk)}</dd></div>
+    </dl></section>
     <section className="management-health" aria-labelledby="management-health-title"><header><div><span>Saúde da base</span><h3 id="management-health-title">Como os membros se distribuem hoje</h3></div><strong>{members.length}</strong></header><div className="management-health__bar" aria-hidden="true">{memberGroups.map((group) => <i key={group.className} className={`management-health__segment management-health__segment--${group.className}`} style={{ width: `${(group.count / baseTotal) * 100}%` }} />)}</div><div className="management-health__legend">{memberGroups.map((group) => <button type="button" key={group.className} onClick={() => onOpenMembers(group.className === "attention" ? "attention" : group.className === "cancelling" ? "cancellation_requested" : group.className as "active" | "inactive")}><i className={`management-health__dot management-health__dot--${group.className}`} aria-hidden="true" /><span>{group.label}</span><strong>{group.count}</strong></button>)}</div></section>
   </div>;
 }

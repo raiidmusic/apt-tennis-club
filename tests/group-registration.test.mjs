@@ -22,6 +22,8 @@ test("keeps the community enrollment link private, expiring and protected", asyn
   assert.match(client, /grupo=\$\{encodeURIComponent\(communityToken\)\}/);
   assert.match(client, /groupToken: groupToken\.current/);
   assert.match(client, /Cadastro pelo grupo APT/);
+  assert.match(client, /readOnly=\{!communityEnrollment && !directRegistration\}/);
+  assert.doesNotMatch(client, /readOnly=\{Boolean\(email\)\}/);
   assert.doesNotMatch(migration, /card|cpf|password/i);
 });
 

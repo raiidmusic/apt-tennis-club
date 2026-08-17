@@ -86,11 +86,9 @@ test("keeps payer identity and address inside hosted Asaas Checkout", async () =
     readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(enrollmentRoute, /customerData/);
-  assert.match(enrollmentRoute, /ensureAsaasCustomer/);
-  assert.match(enrollmentRoute, /externalReference: input\.memberId/);
-  assert.match(enrollmentRoute, /cpfCnpj: input\.cpf/);
-  assert.match(enrollmentRoute, /customer: asaasCustomerId/);
-  assert.match(enrollmentRoute, /asaas_customer_id: asaasCustomerId/);
+  assert.doesNotMatch(enrollmentRoute, /ensureAsaasCustomer|customer:\s*asaasCustomerId/);
+  assert.match(enrollmentRoute, /externalReference: memberId/);
+  assert.match(enrollmentRoute, /asaas_checkout_id: checkoutId/);
   assert.match(client, /Endereço e cartão serão informados somente no ambiente seguro do Asaas\./);
 });
 

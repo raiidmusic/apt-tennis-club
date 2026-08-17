@@ -38,63 +38,6 @@ type GroupRegistrationLinkRow = {
   flow: "community" | "direct";
 };
 
-type AsaasCustomer = {
-  id?: string;
-  cpfCnpj?: string;
-  externalReference?: string;
-};
-
-async function ensureAsaasCustomer(input: { memberId: string; name: string; email: string; phone: string; cpf: string }) {
-  const externalReferenceQuery = new URLSearchParams({ externalReference: input.memberId, limit: "2" });
-  const externalReferenceResponse = await asaasRequest(`/customers?${externalReferenceQuery}`);
-  const externalReferencePayload = await externalReferenceResponse.json() as { data?: AsaasCustomer[]; errors?: Array<{ description?: string }> };
-  if (!externalReferenceResponse.ok) {
-    throw new SupabaseRequestError(externalReferencePayload.errors?.[0]?.description || "O Asaas recusou a consulta do pagador.", 502);
-  }
-  const linkedCustomers = (externalReferencePayload.data || []).filter((customer) => customer.id && customer.externalReference === input.memberId);
-  if (linkedCustomers.length === 1) return linkedCustomers[0].id!;
-  if (linkedCustomers.length > 1) throw new SupabaseRequestError("Há mais de um pagador do Asaas vinculado a este membro.", 409);
-
-  const cpfQuery = new URLSearchParams({ cpfCnpj: input.cpf, limit: "10" });
-  const cpfResponse = await asaasRequest(`/customers?${cpfQuery}`);
-  const cpfPayload = await cpfResponse.json() as { data?: AsaasCustomer[]; errors?: Array<{ description?: string }> };
-  if (!cpfResponse.ok) throw new SupabaseRequestError(cpfPayload.errors?.[0]?.description || "O Asaas recusou a consulta do CPF.", 502);
-  const exactCpfCustomers = (cpfPayload.data || []).filter((customer) => customer.id && (customer.cpfCnpj || "").replace(/\D/g, "") === input.cpf);
-  const reusableCustomer = exactCpfCustomers.find((customer) => customer.externalReference === input.memberId)
-    || (exactCpfCustomers.length === 1 && !exactCpfCustomers[0].externalReference ? exactCpfCustomers[0] : undefined);
-  if (!reusableCustomer && exactCpfCustomers.length) {
-    throw new SupabaseRequestError("Este CPF já está associado a outro pagador no Asaas.", 409);
-  }
-
-  if (reusableCustomer?.id) {
-    const updateResponse = await asaasRequest(`/customers/${encodeURIComponent(reusableCustomer.id)}`, {
-      method: "PUT",
-      body: JSON.stringify({ name: input.name, email: input.email, mobilePhone: input.phone, externalReference: input.memberId }),
-    });
-    if (!updateResponse.ok) {
-      const updatePayload = await updateResponse.json() as { errors?: Array<{ description?: string }> };
-      throw new SupabaseRequestError(updatePayload.errors?.[0]?.description || "O Asaas recusou a atualização do pagador.", 502);
-    }
-    return reusableCustomer.id;
-  }
-
-  const createResponse = await asaasRequest("/customers", {
-    method: "POST",
-    body: JSON.stringify({
-      name: input.name,
-      cpfCnpj: input.cpf,
-      email: input.email,
-      mobilePhone: input.phone,
-      externalReference: input.memberId,
-    }),
-  });
-  const createdCustomer = await createResponse.json() as AsaasCustomer & { errors?: Array<{ description?: string }> };
-  if (!createResponse.ok || !createdCustomer.id) {
-    throw new SupabaseRequestError(createdCustomer.errors?.[0]?.description || "O Asaas recusou a criação do pagador.", 502);
-  }
-  return createdCustomer.id;
-}
-
 async function findInvite(inviteToken: string) {
   const inviteHash = await sha256(inviteToken);
   const invites = await supabaseAdmin<InviteRow[]>("invites", {
@@ -375,27 +318,6 @@ export async function POST(request: Request) {
       return Response.json({ error: "Outra tentativa de assinatura já está em andamento." }, { status: 409 });
     }
 
-    let asaasCustomerId = subscription.asaas_customer_id;
-    if (!asaasCustomerId) {
-      try {
-        asaasCustomerId = await ensureAsaasCustomer({ memberId, name, email, phone, cpf });
-      } catch (error) {
-        if (error instanceof SupabaseRequestError) {
-          await supabaseAdmin("subscriptions", {
-            method: "PATCH",
-            query: { id: `eq.${subscription.id}`, asaas_checkout_id: "is.null" },
-            body: { checkout_attempted_at: null, updated_at: new Date().toISOString() },
-          }).catch(() => undefined);
-        }
-        throw error;
-      }
-      await supabaseAdmin("subscriptions", {
-        method: "PATCH",
-        query: { id: `eq.${subscription.id}`, asaas_checkout_id: "is.null" },
-        body: { asaas_customer_id: asaasCustomerId, updated_at: new Date().toISOString() },
-      });
-    }
-
     const origin = currentEnv.APT_PUBLIC_URL?.replace(/\/$/, "") || new URL(request.url).origin;
     const nextDueDate = new Date().toISOString().slice(0, 10);
     let asaasResponse: Response;
@@ -407,7 +329,6 @@ export async function POST(request: Request) {
           chargeTypes: ["RECURRENT"],
           minutesToExpire: 1440,
           externalReference: memberId,
-          customer: asaasCustomerId,
           callback: {
             successUrl: `${origin}/cadastro?status=sucesso`,
             cancelUrl: `${origin}/cadastro?status=cancelado`,
@@ -448,7 +369,6 @@ export async function POST(request: Request) {
         body: {
           asaas_checkout_id: checkoutId,
           asaas_checkout_url: checkoutUrl,
-          asaas_customer_id: asaasCustomerId,
           status: "awaiting_payment",
           checkout_attempted_at: null,
           updated_at: new Date().toISOString(),

@@ -34,6 +34,7 @@ test("keeps manual Pix ownership explicit, provider-backed and audited", async (
   assert.match(members, /payment\.pix_linked_by_operator/);
   assert.match(reconciliation, /oneOffPaymentExpired/);
   assert.match(reconciliation, /PIX_MONTHLY_DUE/);
+  assert.match(reconciliation, /latest\?\.value \? Math\.round\(latest\.value \* 100\)/);
   assert.match(client, /O APT não escolhe por semelhança de nome/);
   assert.match(client, /Confira nome, valor, data e final do CPF/);
   assert.match(client, /Esta é uma mensagem automática do APT Tennis Club/);

@@ -211,7 +211,7 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
         asaas_subscription_id: providerSubscription?.id || localSubscription.asaas_subscription_id,
         asaas_customer_id: providerSubscription?.customer || recoveredCustomerId || localSubscription.asaas_customer_id,
         status: nextSubscriptionStatus,
-        amount_cents: providerSubscription?.value ? Math.round(providerSubscription.value * 100) : localSubscription.amount_cents,
+        amount_cents: providerSubscription?.value ? Math.round(providerSubscription.value * 100) : latest?.value ? Math.round(latest.value * 100) : localSubscription.amount_cents,
         next_due_date: providerSubscription?.nextDueDate || oneOffPeriodEnd || localSubscription.next_due_date,
         current_period_end: providerSubscription?.nextDueDate || oneOffPeriodEnd || localSubscription.current_period_end,
         overdue_since: paymentNeedsAttention ? latestState.failed ? latest?.dueDate || saoPauloDate() : paidThrough : null,

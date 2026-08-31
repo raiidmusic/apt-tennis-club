@@ -11,7 +11,7 @@ test("imports only active athletes and normalizes their contact data", () => {
   ].join("\n"));
   const prepared = prepareAthleteImport(parsed);
   assert.deepEqual(prepared, {
-    athletes: [{ name: "Atleta Um", email: "atleta@example.com", phone: "61999990000" }],
+    athletes: [{ name: "Atleta Um", email: "atleta@example.com", phone: "61999990000", classLevel: null }],
     rejected: [],
   });
 });

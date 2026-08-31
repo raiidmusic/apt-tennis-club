@@ -133,7 +133,18 @@ type MemberRecord = {
   whatsappCommunityUrl?: string | null;
   payments?: Array<{ id: string; status: string; value_cents: number; due_date?: string | null; paid_at?: string | null; invoice_url?: string | null; created_at: string }>;
   notes?: AdminNote[];
+  canDelete?: boolean;
+  deleteBlockedReason?: string | null;
 };
+
+type PixPaymentDetails = {
+  key: string;
+  copyPaste?: string | null;
+  expirationDate?: string | null;
+  invoiceUrl?: string | null;
+};
+
+type PixCandidate = { id: string; payerName: string; cpfLast4?: string | null; valueCents: number; paidAt?: string | null };
 
 type ManagementPayment = {
   id: string;
@@ -532,6 +543,8 @@ export function EnrollmentPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [paymentLink, setPaymentLink] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "pix">("pix");
+  const [pixPayment, setPixPayment] = useState<PixPaymentDetails | null>(null);
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const status = query.get("status");
@@ -560,29 +573,30 @@ export function EnrollmentPage() {
   }, []);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSubmitting(true); setError(""); const data = new FormData(event.currentTarget);
-    try { const response = await fetch("/api/cadastros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inviteToken: inviteToken.current, groupToken: groupToken.current, directToken: directToken.current, name, cpf, email, phone, password: data.get("password"), consent: data.get("consent") === "on" }) }); const payload = await response.json() as { error?: string; checkoutUrl?: string }; if (!response.ok) throw new Error(payload.error || "Não foi possível concluir o cadastro."); setPaymentLink(payload.checkoutUrl || ""); setSubmitted(true); }
+    try { const response = await fetch("/api/cadastros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inviteToken: inviteToken.current, groupToken: groupToken.current, directToken: directToken.current, name, cpf, email, phone, password: data.get("password"), consent: data.get("consent") === "on", paymentMethod }) }); const payload = await response.json() as { error?: string; checkoutUrl?: string; pix?: PixPaymentDetails }; if (!response.ok) throw new Error(payload.error || "Não foi possível concluir o cadastro."); setPaymentLink(payload.checkoutUrl || ""); setPixPayment(payload.pix || null); setSubmitted(true); }
     catch (submissionError) { setError(submissionError instanceof Error ? submissionError.message : "Não foi possível concluir o cadastro."); }
     finally { setSubmitting(false); }
   }
   if (checkoutStatus === "sucesso") return <div className="apt-app"><RouteHeader label="Assinatura APT" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Checkout concluído</p><h1>Recebemos sua assinatura.</h1><p>O Asaas está confirmando o pagamento. Assim que a confirmação chegar, sua área de membro será liberada.</p><a className="primary-button" href="/entrar?next=/membros">Entrar na área do membro <span aria-hidden="true">→</span></a></main></div>;
   if (checkoutStatus === "cancelado" || checkoutStatus === "expirado") return <div className="apt-app"><RouteHeader label="Assinatura APT" /><main className="content-page success-page" id="main-content"><p>Checkout não concluído</p><h1>{checkoutStatus === "expirado" ? "O link de pagamento expirou." : "O pagamento foi cancelado."}</h1><p>Peça à gestão um novo link individual para continuar sua assinatura com segurança.</p><a className="secondary-button" href="/">Voltar ao site</a></main></div>;
-  if (paymentLink && !submitted) return <div className="apt-app"><RouteHeader label="Recadastro APT" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Recadastro concluído</p><h1>Sua assinatura está pronta para ativação.</h1><p>Continue no ambiente seguro do Asaas. O APT não recebe nem armazena os dados completos do seu cartão.</p><a className="primary-button" href={paymentLink}>Abrir checkout seguro <span aria-hidden="true">↗</span></a></main></div>;
   const enrollmentLabel = communityEnrollment ? "Cadastro pelo grupo APT" : directRegistration ? "Cadastro direto APT" : "Cadastro do aprovado";
   const enrollmentHeadline = recadastro ? "Atualize seus dados. Ative sua recorrência." : communityEnrollment || directRegistration ? "Complete seu cadastro. Ative sua participação." : "Você foi aprovado. Agora, vamos ativar sua participação.";
+  if (submitted && pixPayment) return <div className="apt-app"><RouteHeader label={enrollmentLabel} /><main className="content-page success-page pix-success" id="main-content"><span className="success-symbol">✓</span><p>Cadastro recebido</p><h1>Seu Pix está pronto.</h1><p>O Asaas atualizará sua situação automaticamente depois da confirmação. Você pode usar a cobrança identificada ou a chave fixa do APT.</p><div className="pix-payment-box"><span>Chave Pix do APT</span><strong>{pixPayment.key}</strong><button className="secondary-button" type="button" onClick={() => navigator.clipboard.writeText(pixPayment.key)}>Copiar chave Pix</button>{pixPayment.copyPaste && <><span>Pix copia e cola identificado</span><textarea readOnly rows={3} value={pixPayment.copyPaste} aria-label="Pix copia e cola" /><button className="secondary-button" type="button" onClick={() => navigator.clipboard.writeText(pixPayment.copyPaste || "")}>Copiar código identificado</button></>}{pixPayment.invoiceUrl && <a className="primary-button" href={pixPayment.invoiceUrl} target="_blank" rel="noreferrer">Abrir cobrança no Asaas <span aria-hidden="true">↗</span></a>}</div><small>Se outra pessoa fizer o Pix por você, prefira o código identificado ou envie o comprovante à gestão.</small></main></div>;
   if (submitted) return <div className="apt-app"><RouteHeader label={enrollmentLabel} /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Cadastro recebido</p><h1>{paymentLink ? "Sua assinatura está pronta para ativação." : "Seus dados foram vinculados ao requerimento."}</h1><p>{paymentLink ? "Conclua o pagamento no ambiente seguro do Asaas. O APT não recebe nem armazena os dados completos do seu cartão." : "A cobrança será liberada quando valor e vencimento forem confirmados pela gestão."}</p>{paymentLink ? <a className="primary-button" href={paymentLink}>Abrir checkout seguro <span aria-hidden="true">↗</span></a> : <a className="secondary-button" href="/">Voltar ao site</a>}</main></div>;
   return <div className="apt-app"><RouteHeader label={enrollmentLabel} /><main className="enrollment-page" id="main-content">
     <aside className="enrollment-intro"><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Jogador segura uma bola e uma raquete junto à rede" /><div className="enrollment-intro__shade" /><div><span>{communityEnrollment ? "Grupo APT" : "Link privado"}</span><h1>{enrollmentHeadline}</h1><p>O APT guarda somente a proteção criptográfica do CPF e os quatro últimos dígitos. O cartão fica no Asaas.</p></div></aside>
     <section className="enrollment-content">
-      <header><span>{recadastro ? "Recadastro e assinatura" : "Cadastro e assinatura"}</span><h2>Confirme os dados da sua participação.</h2><p>Endereço e cartão serão informados somente no ambiente seguro do Asaas.</p></header>
+      <header><span>{recadastro ? "Recadastro e pagamento" : "Cadastro e pagamento"}</span><h2>Confirme os dados da sua participação.</h2><p>Escolha Pix ou cartão recorrente. Os pagamentos são processados pelo Asaas.</p></header>
       {!profileLoading && !hasInvite && <div className="access-notice"><strong>Este cadastro precisa de um acesso válido.</strong><span>Abra o link de recadastro, seu convite individual ou o link direto da gestão.</span></div>}
       {!profileLoading && hasInvite && !monthlyValue && !error && <div className="access-notice"><strong>A mensalidade ainda não foi liberada.</strong><span>A gestão precisa confirmar o valor antes de gerar a recorrência.</span></div>}
       {profileLoading && <div className="loading-state"><i /><span>Validando seu convite…</span></div>}
       <form className="enrollment-form" onSubmit={submit}>
         <div className="fields-grid"><label className="field-label field-label--compact"><span>Nome completo</span><input required name="name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome e sobrenome" /></label><label className="field-label field-label--compact"><span>CPF</span><input required name="cpf" inputMode="numeric" autoComplete="off" spellCheck={false} value={formatCpf(cpf)} onChange={(event) => setCpf(event.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="000.000.000-00" /></label><label className="field-label field-label--compact"><span>E-mail de acesso</span><input required readOnly={!communityEnrollment && !directRegistration} name="email" type="email" autoComplete="email" spellCheck={false} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@exemplo.com" /></label><label className="field-label field-label--compact"><span>WhatsApp</span><input required name="phone" type="tel" autoComplete="tel" inputMode="tel" spellCheck={false} value={phone} onChange={(event) => setPhone(event.target.value.replace(/\D/g, ""))} placeholder="(61) 99999-9999" /></label><label className="field-label field-label--compact"><span>Crie uma senha</span><input required name="password" type="password" minLength={8} title="Use pelo menos 8 caracteres." autoComplete="new-password" placeholder="Pelo menos 8 caracteres" /></label></div>
-        <div className="plan-row"><div><span>Participação mensal APT</span><strong>{monthlyValue ? `${monthlyValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por mês` : "Valor ainda não configurado"}</strong><small>Renovação automática · cartão de crédito</small></div><span className="status-chip status-chip--ok">Checkout seguro</span></div>
-        <label className="consent-row"><input required name="consent" type="checkbox" /><span>Autorizo o uso destes dados para administrar minha participação, comunicação e cobrança recorrente no APT.</span></label>
+        <div className="plan-row"><div><span>Participação mensal APT</span><strong>{monthlyValue ? `${monthlyValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por mês` : "Valor ainda não configurado"}</strong><small>Escolha como prefere pagar</small></div><span className="status-chip status-chip--ok">Asaas seguro</span></div>
+        <fieldset className="payment-choice"><legend>Forma de pagamento</legend><label className={paymentMethod === "pix" ? "payment-choice__option payment-choice__option--active" : "payment-choice__option"}><input type="radio" name="payment-method" value="pix" checked={paymentMethod === "pix"} onChange={() => setPaymentMethod("pix")} /><span><strong>Pix</strong><small>Pagamento mensal pela chave fixa ou cobrança identificada do Asaas.</small></span></label><label className={paymentMethod === "card" ? "payment-choice__option payment-choice__option--active" : "payment-choice__option"}><input type="radio" name="payment-method" value="card" checked={paymentMethod === "card"} onChange={() => setPaymentMethod("card")} /><span><strong>Cartão recorrente</strong><small>Renovação mensal; você pode cancelar quando quiser pelo APT.</small></span></label></fieldset>
+        <label className="consent-row"><input required name="consent" type="checkbox" /><span>Autorizo o uso destes dados para administrar minha participação, comunicação e cobrança no APT.</span></label>
         {error && <p className="field-error" role="alert">{error}</p>}
-        <button className="primary-button primary-button--wide" type="submit" disabled={!hasInvite || !monthlyValue || profileLoading || submitting}>{submitting ? "Preparando assinatura…" : "Continuar para assinatura"}<span aria-hidden="true">→</span></button>
+        <button className="primary-button primary-button--wide" type="submit" disabled={!hasInvite || !monthlyValue || profileLoading || submitting}>{submitting ? "Preparando pagamento…" : paymentMethod === "pix" ? "Gerar Pix" : "Continuar para o cartão"}<span aria-hidden="true">→</span></button>
       </form>
     </section>
   </main></div>;
@@ -723,6 +737,8 @@ function MemberImportPanel({ onImported }: { onImported: () => Promise<void> }) 
   const [invitations, setInvitations] = useState<MemberInvitation[]>([]);
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
+  const [newAthlete, setNewAthlete] = useState({ name: "", email: "", phone: "", classLevel: "" });
+  const [invitationCopied, setInvitationCopied] = useState(false);
 
   async function requestImport(rows: AthleteImportInput[], commit: boolean) {
     const response = await fetch("/api/membros/importacao", {
@@ -741,6 +757,18 @@ function MemberImportPanel({ onImported }: { onImported: () => Promise<void> }) 
       setInvitations(payload.invitations || []);
       await onImported();
     }
+    return payload;
+  }
+
+  async function addAthlete(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setWorking(true); setError(""); setSummary(null); setInvitations([]); setInvitationCopied(false);
+    try {
+      const payload = await requestImport([{ ...newAthlete, status: "ATIVO" }], true);
+      if (!payload.invitations?.length) throw new Error("Esse e-mail já pertence a um atleta cadastrado.");
+      setNewAthlete({ name: "", email: "", phone: "", classLevel: "" });
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Não foi possível adicionar o atleta.");
+    } finally { setWorking(false); }
   }
 
   async function selectFile(event: ChangeEvent<HTMLInputElement>) {
@@ -778,14 +806,22 @@ function MemberImportPanel({ onImported }: { onImported: () => Promise<void> }) 
     URL.revokeObjectURL(url);
   }
 
+  async function copySingleInvitation() {
+    const invitation = invitations[0];
+    if (!invitation) return;
+    try { await navigator.clipboard.writeText(invitation.url); setInvitationCopied(true); }
+    catch { window.prompt("Copie o link individual de cadastro:", invitation.url); }
+  }
+
   return <section className="member-import-panel">
-    <div><span>Recadastro da base atual</span><h3>Importar atletas e gerar links individuais</h3><p>O arquivo deve ter NOME, EMAIL, TELEFONE e RANQUEADO. Apenas linhas ATIVO entram. CPF e cartão não são importados.</p></div>
-    <label className="secondary-button member-import-file"><input type="file" accept=".csv,text/csv" onChange={selectFile} /><span>{fileName || "Selecionar CSV"}</span></label>
+    <div><span>Novo atleta</span><h3>Adicionar atleta ao CRM</h3><p>Crie o registro e gere um link individual para o atleta completar CPF, senha e forma de pagamento.</p></div>
+    <form className="member-create-form" onSubmit={addAthlete}><label className="field-label field-label--compact"><span>Nome completo</span><input required value={newAthlete.name} onChange={(event) => setNewAthlete((current) => ({ ...current, name: event.target.value }))} /></label><label className="field-label field-label--compact"><span>E-mail</span><input required type="email" value={newAthlete.email} onChange={(event) => setNewAthlete((current) => ({ ...current, email: event.target.value }))} /></label><label className="field-label field-label--compact"><span>WhatsApp</span><input required type="tel" inputMode="tel" value={newAthlete.phone} onChange={(event) => setNewAthlete((current) => ({ ...current, phone: event.target.value.replace(/\D/g, "").slice(0, 13) }))} /></label><label className="field-label field-label--compact"><span>Classe</span><input value={newAthlete.classLevel} maxLength={80} onChange={(event) => setNewAthlete((current) => ({ ...current, classLevel: event.target.value }))} placeholder="Ex.: 4ª classe" /></label><button className="primary-button" type="submit" disabled={working}>{working ? "Adicionando…" : "Adicionar e gerar convite"}<span aria-hidden="true">→</span></button></form>
+    <details className="member-import-batch"><summary>Importar vários atletas por CSV</summary><div><p>O arquivo deve ter NOME, EMAIL, TELEFONE, CLASSE e RANQUEADO. Apenas linhas ATIVO entram. CPF e cartão não são importados.</p><label className="secondary-button member-import-file"><input type="file" accept=".csv,text/csv" onChange={selectFile} /><span>{fileName || "Selecionar CSV"}</span></label></div></details>
     {working && <div className="loading-state"><i /><span>Validando a base…</span></div>}
     {error && <p className="field-error" role="alert">{error}</p>}
     {summary && <div className="member-import-summary"><div><span>Ativos válidos</span><strong>{summary.activeRows}</strong></div><div><span>Novos</span><strong>{summary.newMembers}</strong></div><div><span>Já pendentes</span><strong>{summary.pendingExisting}</strong></div><div><span>Já cadastrados</span><strong>{summary.alreadyRegistered}</strong></div><div><span>Rejeitados</span><strong>{summary.rejected}</strong></div></div>}
     {summary && !invitations.length && <button className="primary-button" type="button" disabled={working || summary.rejected > 0 || summary.newMembers + summary.pendingExisting === 0} onClick={commitImport}>Importar e gerar {summary.newMembers + summary.pendingExisting} links <span aria-hidden="true">→</span></button>}
-    {invitations.length > 0 && <div className="member-import-complete"><strong>{invitations.length} links gerados.</strong><span>Baixe agora: os tokens não ficam armazenados em texto aberto.</span><button className="secondary-button" type="button" onClick={downloadInvitations}>Baixar links de recadastro</button></div>}
+    {invitations.length > 0 && <div className="member-import-complete"><strong>{invitations.length} {invitations.length === 1 ? "link gerado" : "links gerados"}.</strong><span>Guarde agora: os tokens não ficam armazenados em texto aberto.</span>{invitations.length === 1 && <button className="primary-button" type="button" onClick={copySingleInvitation}>{invitationCopied ? "Link copiado" : `Copiar link de ${invitations[0].name}`}</button>}<button className="secondary-button" type="button" onClick={downloadInvitations}>Baixar {invitations.length === 1 ? "link" : "links"} em CSV</button></div>}
   </section>;
 }
 
@@ -853,7 +889,7 @@ function ApplicationReviewDetail({
   </div>;
 }
 
-function MemberManagementDetail({ member, loading, saving, refreshing, error, onClose, onSave, onRefresh }: {
+function MemberManagementDetail({ member, loading, saving, refreshing, error, onClose, onSave, onRefresh, onDeleted }: {
   member: MemberRecord | null;
   loading: boolean;
   saving: boolean;
@@ -862,11 +898,16 @@ function MemberManagementDetail({ member, loading, saving, refreshing, error, on
   onClose: () => void;
   onSave: (changes: { participationStatus?: string; twinnerUrl?: string; whatsappCommunityUrl?: string; note?: string }) => Promise<boolean>;
   onRefresh: () => Promise<void>;
+  onDeleted: (id: string) => void;
 }) {
   const [participationStatus, setParticipationStatus] = useState("");
   const [twinnerUrl, setTwinnerUrl] = useState(member?.twinnerUrl || "");
   const [whatsappCommunityUrl, setWhatsappCommunityUrl] = useState(member?.whatsappCommunityUrl || "");
   const [note, setNote] = useState("");
+  const [pixCandidates, setPixCandidates] = useState<PixCandidate[]>([]);
+  const [pixWorking, setPixWorking] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteWorking, setDeleteWorking] = useState(false);
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) { if (event.key === "Escape") onClose(); }
     document.addEventListener("keydown", closeOnEscape); document.body.classList.add("drawer-open");
@@ -877,6 +918,40 @@ function MemberManagementDetail({ member, loading, saving, refreshing, error, on
   const reminderUrl = member ? paymentReminderUrl(member) : null;
   const directWhatsappUrl = reminderUrl?.replace(/\?text=.*/, "");
   const statusClass = member && ["active", "courtesy"].includes(member.participationStatus) ? "ok" : member?.participationStatus === "pending_payment" ? "pending" : "inactive";
+  async function findPix() {
+    if (!member) return;
+    setPixWorking(true);
+    try {
+      const response = await fetch("/api/membros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: member.id, action: "find_pix" }) });
+      const payload = await response.json() as { candidates?: PixCandidate[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Não foi possível consultar os Pix.");
+      setPixCandidates(payload.candidates || []);
+    } catch (candidateError) { window.alert(candidateError instanceof Error ? candidateError.message : "Não foi possível consultar os Pix."); }
+    finally { setPixWorking(false); }
+  }
+  async function linkPix(candidate: PixCandidate) {
+    if (!member || !window.confirm(`Vincular o Pix de ${candidate.payerName} a ${member.name}? Confira nome, valor, data e final do CPF antes de continuar.`)) return;
+    setPixWorking(true);
+    try {
+      const response = await fetch("/api/membros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: member.id, action: "link_pix", paymentId: candidate.id, confirmation: member.name }) });
+      const payload = await response.json() as { linked?: boolean; error?: string };
+      if (!response.ok || !payload.linked) throw new Error(payload.error || "Não foi possível vincular o Pix.");
+      setPixCandidates([]);
+      await onRefresh();
+    } catch (linkError) { window.alert(linkError instanceof Error ? linkError.message : "Não foi possível vincular o Pix."); }
+    finally { setPixWorking(false); }
+  }
+  async function deleteMember() {
+    if (!member || deleteConfirmation !== member.name) return;
+    setDeleteWorking(true);
+    try {
+      const response = await fetch("/api/membros", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: member.id, confirmation: deleteConfirmation }) });
+      const payload = await response.json() as { deleted?: boolean; error?: string };
+      if (!response.ok || !payload.deleted) throw new Error(payload.error || "Não foi possível excluir o cadastro.");
+      onDeleted(member.id);
+    } catch (deleteError) { window.alert(deleteError instanceof Error ? deleteError.message : "Não foi possível excluir o cadastro."); }
+    finally { setDeleteWorking(false); }
+  }
   return <div className="crm-drawer-shell">
     <button className="crm-drawer-backdrop" type="button" tabIndex={-1} onClick={onClose} aria-label="Fechar ficha do integrante" />
     <section className="crm-drawer" role="dialog" aria-modal="true" aria-labelledby="member-management-title" aria-busy={loading}>
@@ -885,6 +960,7 @@ function MemberManagementDetail({ member, loading, saving, refreshing, error, on
       {member && !loading && <div className="crm-drawer__body">
         <section className="crm-contact-card"><div><span className={`status-chip status-chip--${statusClass}`}>{readableStatus(member.participationStatus, memberStatusLabels)}</span><small>{member.classLevel || "Classe não informada"}</small></div><div className="crm-contact-actions"><a href={`mailto:${member.email}`}>E-mail</a>{directWhatsappUrl && <a href={directWhatsappUrl} target="_blank" rel="noreferrer">WhatsApp</a>}{reminderUrl && <a href={reminderUrl} target="_blank" rel="noreferrer">Cobrar no WhatsApp</a>}</div></section>
         <section className="member-financial-summary"><div><span>Assinatura</span><strong>{readableStatus(member.subscriptionStatus, subscriptionStatusLabels)}</strong></div><div><span>Mensalidade</span><strong>{(member.amountCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></div><div><span>Próximo vencimento</span><strong>{shortDate(member.nextDueDate)}</strong></div><div><span>Atraso</span><strong>{member.overdueDays ? `${member.overdueDays} dias` : "Em dia"}</strong></div><button className="secondary-button member-financial-refresh" type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? "Consultando Asaas…" : "Atualizar no Asaas"}</button></section>
+        <section className="pix-reconciliation"><div><span>Conciliação Pix</span><h4>Pix recebido direto na chave</h4><p>Consulte os recebimentos deste mês e vincule somente depois de conferir o pagador. O APT não escolhe por semelhança de nome.</p></div><button className="secondary-button" type="button" onClick={findPix} disabled={pixWorking}>{pixWorking ? "Consultando Asaas…" : "Localizar Pix não vinculados"}</button>{pixCandidates.length > 0 && <div className="pix-candidate-list">{pixCandidates.map((candidate) => <article key={candidate.id}><div><strong>{candidate.payerName}</strong><span>{(candidate.valueCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · {candidate.paidAt ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${candidate.paidAt.slice(0, 10)}T12:00:00`)) : "Data não informada"}{candidate.cpfLast4 ? ` · CPF final ${candidate.cpfLast4}` : ""}</span></div><button type="button" onClick={() => linkPix(candidate)} disabled={pixWorking}>Conferi e quero vincular</button></article>)}</div>}{!pixWorking && pixCandidates.length === 0 && <small>A lista aparece apenas quando você solicitar a consulta ao Asaas.</small>}</section>
         <form className="member-management-form" onSubmit={async (event) => { event.preventDefault(); const saved = await onSave({ participationStatus: participationStatus || undefined, twinnerUrl: twinnerUrl === initialTweenerUrl ? undefined : twinnerUrl, whatsappCommunityUrl: whatsappCommunityUrl === initialWhatsappUrl ? undefined : whatsappCommunityUrl, note: note || undefined }); if (saved) { setParticipationStatus(""); setNote(""); } }}>
           <div><span>Gestão do integrante</span><h4>Participação, acessos e nota interna</h4></div>
           {error && <p className="field-error" role="alert">{error}</p>}
@@ -896,6 +972,7 @@ function MemberManagementDetail({ member, loading, saving, refreshing, error, on
         </form>
         <section className="crm-notes"><div><span>Histórico interno</span><h4>Notas da gestão</h4></div><div className="crm-notes__history">{member.notes?.length ? member.notes.map((item) => <article key={item.id}><p>{item.body}</p><small>{item.created_by} · {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.created_at))}</small></article>) : <p className="crm-notes__empty">Nenhuma nota registrada.</p>}</div></section>
         <details className="crm-answers" open><summary>Histórico financeiro <span>{member.payments?.length || 0}</span></summary><div className="member-payment-history">{member.payments?.length ? member.payments.map((payment) => <article key={payment.id}><div><strong>{(payment.value_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong><span>{payment.due_date ? shortDate(payment.due_date) : "Sem vencimento"}</span></div><span className={`status-chip status-chip--${payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "ok" : "pending"}`}>{paymentStatusLabel(payment.status)}</span>{payment.invoice_url && <a href={payment.invoice_url} target="_blank" rel="noreferrer">Abrir cobrança</a>}</article>) : <p className="crm-notes__empty">Nenhuma cobrança registrada.</p>}</div></details>
+        <section className="member-lifecycle-actions"><div><span>Ciclo do atleta</span><h4>Inativar ou excluir</h4><p>Inativar preserva todo o histórico e é a opção correta para quem saiu do ranking.</p></div>{member.participationStatus !== "inactive" && <button className="secondary-button" type="button" disabled={saving} onClick={() => onSave({ participationStatus: "inactive" })}>Inativar atleta</button>}{member.participationStatus === "inactive" && <button className="secondary-button" type="button" disabled={saving} onClick={() => onSave({ participationStatus: "pending_payment" })}>Reativar como aguardando pagamento</button>}<div className="member-delete-control"><label className="field-label field-label--compact"><span>Excluir cadastro incompleto</span><input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} placeholder={member.canDelete ? `Digite: ${member.name}` : "Exclusão indisponível"} disabled={!member.canDelete || deleteWorking} /><small>{member.canDelete ? "Disponível porque não há acesso nem histórico financeiro." : member.deleteBlockedReason || "Use a inativação para preservar o histórico."}</small></label><button className="danger-button" type="button" onClick={deleteMember} disabled={!member.canDelete || deleteConfirmation !== member.name || deleteWorking}>{deleteWorking ? "Excluindo…" : "Excluir definitivamente"}</button></div></section>
       </div>}
     </section>
   </div>;
@@ -1281,7 +1358,7 @@ export function AdminPage() {
       {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice("")}>Fechar</button></div>}
       {tab === "painel" && <><header className="admin-heading admin-heading--dashboard"><div><span>Visão executiva</span><h2>O que mudou. O que pede ação.</h2><p>Receita, base e pendências da operação, em um só lugar.</p></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><ManagementDashboard applications={applications} members={members} payments={payments} loading={loading} onOpenApplications={() => setTab("requerimentos")} onOpenMembers={(filter) => { setQuery(""); setMemberFilter(filter); setTab("membros"); }} /></>}
       {tab === "requerimentos" && <><header className="admin-heading"><div><span>Requerimentos</span><h2>Decisões de entrada, com contexto.</h2></div><span className="status-chip status-chip--pending">{attentionCount} {attentionCount === 1 ? "decisão" : "decisões"}</span></header><DirectEnrollmentLinkPanel onNotice={setNotice} />{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state empty-state--bordered"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{!loading && applications.length > 0 && <CrmKanban applications={applications} onOpen={openApplication} />}{(selectedApplication || applicationLoading) && <ApplicationReviewDetail key={selectedApplication?.id || "loading-application"} application={selectedApplication} loading={applicationLoading} saving={applicationSaving} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} onResendInvite={resendApplicationInvite} onCopyInvite={copyInvite} />}</>}
-      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Operação em tempo real, sem movimentação manual.</h2></div></header><div className="admin-toolbar"><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar nome, e-mail ou WhatsApp" /></label><label className="filter-field"><span className="sr-only">Filtrar membros</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value as typeof memberFilter)}><option value="all">Todos os estágios</option><option value="attention">Precisa de ação</option><option value="active">Ativos</option><option value="cancellation_requested">Cancelamento</option><option value="inactive">Inativos</option></select></label><span>{filteredMembers.length} de {members.length}</span></div><PaymentReminderQueue members={members} /><MemberOperationsKanban key={mobileDefaultStage} members={filteredMembers} onManage={openMember} onResendCheckout={resendMemberCheckout} remindingMemberId={checkoutRemindingMemberId} mobileDefaultStage={mobileDefaultStage} /><MemberImportPanel onImported={refreshMembers} />{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Ajuste a busca ou o filtro.</span></div>}{(selectedMember || memberLoading) && <MemberManagementDetail member={selectedMember} loading={memberLoading} saving={memberSaving} refreshing={memberRefreshing} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} onRefresh={refreshMemberBilling} />}</>}
+      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Operação em tempo real, com conciliação segura.</h2></div></header><div className="admin-toolbar"><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar nome, e-mail ou WhatsApp" /></label><label className="filter-field"><span className="sr-only">Filtrar membros</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value as typeof memberFilter)}><option value="all">Todos os estágios</option><option value="attention">Precisa de ação</option><option value="active">Ativos</option><option value="cancellation_requested">Cancelamento</option><option value="inactive">Inativos</option></select></label><span>{filteredMembers.length} de {members.length}</span></div><PaymentReminderQueue members={members} /><MemberOperationsKanban key={mobileDefaultStage} members={filteredMembers} onManage={openMember} onResendCheckout={resendMemberCheckout} remindingMemberId={checkoutRemindingMemberId} mobileDefaultStage={mobileDefaultStage} /><MemberImportPanel onImported={refreshMembers} />{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Ajuste a busca ou o filtro.</span></div>}{(selectedMember || memberLoading) && <MemberManagementDetail member={selectedMember} loading={memberLoading} saving={memberSaving} refreshing={memberRefreshing} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} onRefresh={refreshMemberBilling} onDeleted={(id) => { setMembers((current) => current.filter((member) => member.id !== id)); setSelectedMember(null); setNotice("Cadastro incompleto excluído."); }} />}</>}
     </section>
   </main></div>;
 }

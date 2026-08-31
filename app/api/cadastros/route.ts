@@ -1,4 +1,4 @@
-import { asaasCheckoutUrl, asaasRequest } from "../../../lib/asaas";
+import { asaasCheckoutUrl, asaasRequest, ensureAsaasCustomer } from "../../../lib/asaas";
 import { ensureCheckoutPaymentReminders, sendManagementEmail, sendMemberEmail } from "../../../lib/apt-email";
 import { isValidNewPassword } from "../../../lib/auth";
 import { isValidCpf } from "../../../lib/cpf";
@@ -26,12 +26,26 @@ type MemberRow = {
 };
 type SubscriptionRow = {
   id: string;
+  status?: string;
+  amount_cents?: number;
   asaas_checkout_id: string | null;
   asaas_checkout_url: string | null;
   asaas_customer_id: string | null;
   checkout_attempted_at: string | null;
   asaas_checkout_expires_at: string | null;
 };
+type AsaasPayment = {
+  id?: string;
+  status?: string;
+  value?: number;
+  dueDate?: string;
+  invoiceUrl?: string;
+  customer?: string;
+  billingType?: string;
+  externalReference?: string;
+  errors?: Array<{ description?: string }>;
+};
+type AsaasCollection<T> = { data?: T[] };
 type GroupRegistrationLinkRow = {
   id: string;
   expires_at: string;
@@ -149,6 +163,7 @@ export async function POST(request: Request) {
       phone?: string;
       password?: string;
       consent?: boolean;
+      paymentMethod?: "card" | "pix";
     };
     const inviteToken = payload.inviteToken?.trim() || "";
     const groupToken = payload.groupToken?.trim() || "";
@@ -158,6 +173,7 @@ export async function POST(request: Request) {
     const email = payload.email?.trim().toLowerCase() || "";
     const phone = payload.phone?.replace(/\D/g, "") || "";
     const password = payload.password || "";
+    const paymentMethod = payload.paymentMethod === "pix" ? "pix" : "card";
     if ([inviteToken, groupToken, directToken].filter(Boolean).length !== 1 || !name || !isValidCpf(cpf) || !email || phone.length < 10 || phone.length > 13 || !isValidNewPassword(password) || payload.consent !== true) {
       return Response.json({ error: "Confira o link, os dados e a senha: use pelo menos 8 caracteres." }, { status: 400 });
     }
@@ -275,9 +291,9 @@ export async function POST(request: Request) {
     }
 
     let subscription = (await supabaseAdmin<SubscriptionRow[]>("subscriptions", {
-      query: { select: "id,asaas_checkout_id,asaas_checkout_url,asaas_customer_id,checkout_attempted_at,asaas_checkout_expires_at", member_id: `eq.${memberId}`, limit: "1" },
+      query: { select: "id,status,amount_cents,asaas_checkout_id,asaas_checkout_url,asaas_customer_id,checkout_attempted_at,asaas_checkout_expires_at", member_id: `eq.${memberId}`, limit: "1" },
     }))[0];
-    if (subscription?.asaas_checkout_id) {
+    if (paymentMethod === "card" && subscription?.asaas_checkout_id) {
       await ensureCheckoutPaymentReminders(memberId).catch(() => undefined);
       return Response.json({
         memberId,
@@ -285,13 +301,15 @@ export async function POST(request: Request) {
         checkoutUrl: subscription.asaas_checkout_url || asaasCheckoutUrl(subscription.asaas_checkout_id),
       });
     }
-    if (subscription?.checkout_attempted_at) {
+    if (paymentMethod === "card" && subscription?.checkout_attempted_at) {
       return Response.json({ error: "A criação da assinatura está em conciliação. A gestão precisa verificar o Asaas antes de tentar novamente." }, { status: 409 });
     }
 
     if (!subscription) {
       subscription = {
         id: crypto.randomUUID(),
+        status: "pending_configuration",
+        amount_cents: Math.round(monthlyValue * 100),
         asaas_checkout_id: null,
         asaas_checkout_url: null,
         asaas_customer_id: null,
@@ -308,6 +326,114 @@ export async function POST(request: Request) {
           billing_cycle: "MONTHLY",
         },
       });
+    }
+
+    const pixKey = currentEnv.APT_PIX_KEY?.trim() || "apttennisexclusive@gmail.com";
+    if (paymentMethod === "pix") {
+      const existingQuery = new URLSearchParams({ externalReference: memberId, billingType: "PIX", status: "PENDING", limit: "1", sort: "dateCreated", order: "desc" });
+      const existingResponse = await asaasRequest(`/payments?${existingQuery}`);
+      if (!existingResponse.ok) throw new SupabaseRequestError("O Asaas não respondeu à busca da cobrança Pix.", 502);
+      let pixPayment = ((await existingResponse.json() as AsaasCollection<AsaasPayment>).data || [])[0];
+
+      if (!pixPayment?.id) {
+        const attemptedAt = new Date().toISOString();
+        const claimedAttempt = await supabaseAdmin<Array<{ id: string }>>("subscriptions", {
+          method: "PATCH",
+          query: { id: `eq.${subscription.id}`, checkout_attempted_at: "is.null" },
+          prefer: "return=representation",
+          body: { checkout_attempted_at: attemptedAt, updated_at: attemptedAt },
+        });
+        if (!claimedAttempt[0]) return Response.json({ error: "Outra tentativa de pagamento já está em andamento." }, { status: 409 });
+
+        try {
+          const customerId = await ensureAsaasCustomer({
+            memberId,
+            name,
+            cpf,
+            email,
+            phone,
+            customerId: subscription.asaas_customer_id,
+          });
+          const paymentResponse = await asaasRequest("/payments", {
+            method: "POST",
+            body: JSON.stringify({
+              customer: customerId,
+              billingType: "PIX",
+              value: monthlyValue,
+              dueDate: new Date().toISOString().slice(0, 10),
+              description: "Participação mensal APT Tennis Club",
+              externalReference: memberId,
+            }),
+          });
+          pixPayment = await paymentResponse.json() as AsaasPayment;
+          if (!paymentResponse.ok || !pixPayment.id) {
+            if (paymentResponse.status >= 400 && paymentResponse.status < 500) {
+              await supabaseAdmin("subscriptions", { method: "PATCH", query: { id: `eq.${subscription.id}` }, body: { checkout_attempted_at: null, updated_at: new Date().toISOString() } });
+            }
+            throw new SupabaseRequestError(pixPayment.errors?.[0]?.description || "O Asaas recusou a cobrança Pix.", paymentResponse.status >= 400 && paymentResponse.status < 500 ? 502 : 409);
+          }
+        } catch (error) {
+          if (error instanceof SupabaseRequestError && error.status === 502) {
+            await supabaseAdmin("subscriptions", { method: "PATCH", query: { id: `eq.${subscription.id}` }, body: { checkout_attempted_at: null, updated_at: new Date().toISOString() } }).catch(() => undefined);
+            throw error;
+          }
+          throw new SupabaseRequestError("A criação do Pix ficou inconclusiva. A gestão precisa conciliar no Asaas antes de uma nova tentativa.", 409);
+        }
+      }
+
+      if (!pixPayment?.id) throw new SupabaseRequestError("A cobrança Pix ficou inconclusiva.", 409);
+      const qrResponse = await asaasRequest(`/payments/${encodeURIComponent(pixPayment.id)}/pixQrCode`);
+      const qrCode = qrResponse.ok ? await qrResponse.json() as { payload?: string; expirationDate?: string } : {};
+      await Promise.all([
+        supabaseAdmin("subscriptions", {
+          method: "PATCH",
+          query: { id: `eq.${subscription.id}` },
+          body: { asaas_customer_id: pixPayment.customer || subscription.asaas_customer_id, status: "awaiting_payment", checkout_attempted_at: null, updated_at: new Date().toISOString() },
+        }),
+        supabaseAdmin("payments", {
+          method: "POST",
+          query: { on_conflict: "asaas_payment_id" },
+          prefer: "resolution=merge-duplicates,return=minimal",
+          body: {
+            member_id: memberId,
+            subscription_id: subscription.id,
+            asaas_payment_id: pixPayment.id,
+            status: (pixPayment.status || "PENDING").toUpperCase(),
+            value_cents: Math.round((pixPayment.value || monthlyValue) * 100),
+            due_date: pixPayment.dueDate || new Date().toISOString().slice(0, 10),
+            paid_at: null,
+            invoice_url: pixPayment.invoiceUrl || null,
+            payload: pixPayment,
+            updated_at: new Date().toISOString(),
+          },
+        }),
+        invite ? supabaseAdmin("invites", { method: "PATCH", query: { id: `eq.${invite.id}` }, body: { used_at: new Date().toISOString() } }) : Promise.resolve(),
+        application ? supabaseAdmin("applications", { method: "PATCH", query: { id: `eq.${application.id}` }, body: { status: "registered", updated_at: new Date().toISOString() } }) : Promise.resolve(),
+        supabaseAdmin("audit_logs", {
+          method: "POST",
+          body: { actor: email, action: "member.pix_registration_completed", entity_type: "member", entity_id: memberId, metadata: { consent_version: "2026-08", asaas_payment_id: pixPayment.id } },
+        }),
+        sendMemberEmail({
+          to: email,
+          subject: "Seu cadastro APT está pronto para o Pix",
+          text: `Olá, ${name}.\n\nSeu acesso foi criado. A mensalidade de ${monthlyValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} pode ser paga pelo Pix no Asaas${pixPayment.invoiceUrl ? `:\n${pixPayment.invoiceUrl}` : "."}\n\nChave Pix do APT: ${pixKey}\n\nA situação será atualizada quando o Asaas confirmar o recebimento.`,
+          flow: "registration_pix",
+          idempotencyKey: `apt-registration-pix-member-${memberId}-${pixPayment.id}`,
+        }),
+        sendManagementEmail({
+          replyTo: email,
+          subject: `Cadastro concluído — aguardando Pix de ${name}`,
+          text: `${name} concluiu o cadastro no APT e escolheu Pix.\n\nE-mail: ${email}\nWhatsApp: ${phone}\nCobrança Asaas: ${pixPayment.id}\n\nA situação será atualizada automaticamente quando o Asaas confirmar o pagamento.`,
+          flow: "registration_pix_management",
+          idempotencyKey: `apt-registration-pix-management-${memberId}-${pixPayment.id}`,
+        }),
+      ]);
+      return Response.json({
+        memberId,
+        paymentConfigured: true,
+        paymentMethod: "pix",
+        pix: { key: pixKey, copyPaste: qrCode.payload || null, expirationDate: qrCode.expirationDate || null, invoiceUrl: pixPayment.invoiceUrl || null },
+      }, { status: 201 });
     }
 
     const attemptedAt = new Date().toISOString();

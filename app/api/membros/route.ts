@@ -1,11 +1,12 @@
 import { requireAdmin } from "../../../lib/auth";
+import { asaasRequest } from "../../../lib/asaas";
 import { sendManualCheckoutReminder } from "../../../lib/apt-email";
 import { reconcileMemberBilling } from "../../../lib/billing-reconciliation";
 import { requireTrustedOrigin } from "../../../lib/request-security";
-import { supabaseAdmin } from "../../../lib/supabase-server";
+import { runtimeEnv, supabaseAdmin, SupabaseRequestError } from "../../../lib/supabase-server";
 
 type MemberRow = {
-  id: string; name: string; email: string; whatsapp: string; class_level: string | null;
+  id: string; auth_user_id: string | null; name: string; email: string; whatsapp: string; class_level: string | null;
   participation_status: string; twinner_url: string | null; whatsapp_community_url: string | null;
   joined_at: string | null; created_at: string;
 };
@@ -13,13 +14,32 @@ type SubscriptionRow = {
   member_id: string; status: string; amount_cents: number; next_due_date: string | null;
   current_period_end: string | null; overdue_since: string | null; cancel_at_period_end: boolean;
   asaas_checkout_id: string | null; asaas_checkout_url: string | null; asaas_checkout_expires_at: string | null;
+  asaas_customer_id: string | null; asaas_subscription_id: string | null;
 };
 type MemberPayment = { id: string; status: string; value_cents: number; due_date: string | null; paid_at: string | null; invoice_url: string | null; created_at: string };
 type ManagementPaymentRow = { id: string; status: string; value_cents: number; paid_at: string | null; created_at: string };
 type MemberNote = { id: string; body: string; created_by: string; created_at: string };
+type AsaasPayment = {
+  id?: string; status?: string; value?: number; paymentDate?: string; clientPaymentDate?: string; dateCreated?: string;
+  customer?: string; billingType?: string; externalReference?: string;
+};
+type AsaasCustomer = { id?: string; name?: string; cpfCnpj?: string; externalReference?: string };
+type AsaasCollection<T> = { data?: T[] };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const manualStatuses = new Set(["pending_payment", "courtesy", "inactive"]);
+
+function saoPauloMonthStart(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  if (!year || !month) throw new Error("Não foi possível determinar o mês financeiro.");
+  return `${year}-${month}-01`;
+}
 
 function allowedClubUrl(value: string, host: string) {
   try {
@@ -38,14 +58,16 @@ export async function GET(request: Request) {
     if (memberId) {
       if (!uuidPattern.test(memberId)) return Response.json({ error: "Integrante inválido." }, { status: 400 });
       const [memberRows, subscriptionRows, payments, notes] = await Promise.all([
-        supabaseAdmin<MemberRow[]>("members", { query: { select: "id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", id: `eq.${memberId}`, limit: "1" } }),
-        supabaseAdmin<SubscriptionRow[]>("subscriptions", { query: { select: "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end,asaas_checkout_id,asaas_checkout_url,asaas_checkout_expires_at", member_id: `eq.${memberId}`, limit: "1" } }),
+        supabaseAdmin<MemberRow[]>("members", { query: { select: "id,auth_user_id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", id: `eq.${memberId}`, limit: "1" } }),
+        supabaseAdmin<SubscriptionRow[]>("subscriptions", { query: { select: "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end,asaas_customer_id,asaas_subscription_id,asaas_checkout_id,asaas_checkout_url,asaas_checkout_expires_at", member_id: `eq.${memberId}`, limit: "1" } }),
         supabaseAdmin<MemberPayment[]>("payments", { query: { select: "id,status,value_cents,due_date,paid_at,invoice_url,created_at", member_id: `eq.${memberId}`, order: "created_at.desc", limit: "24" } }),
         supabaseAdmin<MemberNote[]>("admin_notes", { query: { select: "id,body,created_by,created_at", member_id: `eq.${memberId}`, order: "created_at.asc" } }),
       ]);
       const member = memberRows[0];
       if (!member) return Response.json({ error: "Integrante não encontrado." }, { status: 404 });
       const subscription = subscriptionRows[0] || null;
+      const isIncompleteRecord = !member.joined_at && ["pending_payment", "awaiting_payment"].includes(member.participation_status);
+      const canDelete = isIncompleteRecord && !member.auth_user_id && payments.length === 0 && !subscription?.asaas_customer_id && !subscription?.asaas_subscription_id && !subscription?.asaas_checkout_id;
       const overdueDays = subscription?.overdue_since
         ? Math.max(0, Math.floor((Date.now() - new Date(`${subscription.overdue_since}T00:00:00`).getTime()) / 86_400_000))
         : 0;
@@ -58,6 +80,8 @@ export async function GET(request: Request) {
         checkoutExpiresAt: subscription?.asaas_checkout_expires_at,
         checkoutStarted: Boolean(subscription?.asaas_checkout_id),
         checkoutAvailable: Boolean(subscription?.status === "awaiting_payment" && subscription.asaas_checkout_id && subscription.asaas_checkout_url && subscription.asaas_checkout_expires_at && new Date(subscription.asaas_checkout_expires_at).getTime() > Date.now()),
+        canDelete,
+        deleteBlockedReason: canDelete ? null : "Este atleta já possui acesso ou histórico financeiro. Inative o cadastro para preservar a auditoria.",
         payments, notes,
       } });
     }
@@ -65,10 +89,10 @@ export async function GET(request: Request) {
     const historyStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1)).toISOString();
     const [members, subscriptions, payments] = await Promise.all([
       supabaseAdmin<MemberRow[]>("members", {
-        query: { select: "id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", order: "name.asc" },
+        query: { select: "id,auth_user_id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", order: "name.asc" },
       }),
       supabaseAdmin<SubscriptionRow[]>("subscriptions", {
-        query: { select: "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end,asaas_checkout_id,asaas_checkout_url,asaas_checkout_expires_at" },
+        query: { select: "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end,asaas_customer_id,asaas_subscription_id,asaas_checkout_id,asaas_checkout_url,asaas_checkout_expires_at" },
       }),
       supabaseAdmin<ManagementPaymentRow[]>("payments", {
         query: { select: "id,status,value_cents,paid_at,created_at", or: `(created_at.gte.${historyStart},paid_at.gte.${historyStart})`, order: "created_at.asc", limit: "1000" },
@@ -107,10 +131,92 @@ export async function POST(request: Request) {
   const admin = await requireAdmin(request).catch(() => null);
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
   try {
-    const payload = await request.json() as { id?: string; action?: string };
-    if (!payload.id || !uuidPattern.test(payload.id) || !["refresh_billing", "resend_checkout"].includes(payload.action || "")) {
+    const payload = await request.json() as { id?: string; action?: string; paymentId?: string; confirmation?: string };
+    if (!payload.id || !uuidPattern.test(payload.id) || !["refresh_billing", "resend_checkout", "find_pix", "link_pix"].includes(payload.action || "")) {
       return Response.json({ error: "Atualização financeira inválida." }, { status: 400 });
     }
+
+    if (payload.action === "find_pix") {
+      const member = (await supabaseAdmin<MemberRow[]>("members", {
+        query: { select: "id,auth_user_id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", id: `eq.${payload.id}`, limit: "1" },
+      }))[0];
+      if (!member) return Response.json({ error: "Integrante não encontrado." }, { status: 404 });
+      const monthStart = saoPauloMonthStart();
+      const statuses = ["RECEIVED"];
+      const providerCollections = await Promise.all(statuses.map(async (status) => {
+        const query = new URLSearchParams({ billingType: "PIX", status, "paymentDate[ge]": monthStart, limit: "100" });
+        const response = await asaasRequest(`/payments?${query}`);
+        if (!response.ok) throw new SupabaseRequestError("O Asaas não respondeu à consulta dos Pix.", 502);
+        return ((await response.json() as AsaasCollection<AsaasPayment>).data || []);
+      }));
+      const providerPayments = [...new Map(providerCollections.flat().filter((payment) => payment.id).map((payment) => [payment.id!, payment] as const)).values()]
+        .filter((payment) => !payment.externalReference || payment.externalReference === member.id)
+        .slice(0, 40);
+      const candidatePaymentIds = providerPayments.map((payment) => payment.id!);
+      const [localPayments, subscriptions] = await Promise.all([
+        candidatePaymentIds.length
+          ? supabaseAdmin<Array<{ asaas_payment_id: string }>>("payments", { query: { select: "asaas_payment_id", asaas_payment_id: `in.(${candidatePaymentIds.join(",")})` } })
+          : Promise.resolve([]),
+        supabaseAdmin<Array<{ member_id: string; asaas_customer_id: string | null }>>("subscriptions", { query: { select: "member_id,asaas_customer_id" } }),
+      ]);
+      const localPaymentIds = new Set(localPayments.map((payment) => payment.asaas_payment_id));
+      const customerOwner = new Map(subscriptions.filter((subscription) => subscription.asaas_customer_id).map((subscription) => [subscription.asaas_customer_id!, subscription.member_id] as const));
+      const candidates = (await Promise.all(providerPayments.filter((payment) => !localPaymentIds.has(payment.id!)).map(async (payment) => {
+        if (!payment.customer || (customerOwner.has(payment.customer) && customerOwner.get(payment.customer) !== member.id)) return null;
+        const customerResponse = await asaasRequest(`/customers/${encodeURIComponent(payment.customer)}`);
+        if (!customerResponse.ok) return null;
+        const customer = await customerResponse.json() as AsaasCustomer;
+        return {
+          id: payment.id!,
+          payerName: customer.name || "Pagador não identificado",
+          cpfLast4: (customer.cpfCnpj || "").replace(/\D/g, "").slice(-4) || null,
+          valueCents: Math.round((payment.value || 0) * 100),
+          paidAt: payment.paymentDate || payment.clientPaymentDate || payment.dateCreated || null,
+        };
+      }))).filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
+      return Response.json({ candidates });
+    }
+
+    if (payload.action === "link_pix") {
+      if (!payload.paymentId || !/^pay_[a-z0-9_]+$/i.test(payload.paymentId)) return Response.json({ error: "Pix inválido." }, { status: 400 });
+      const member = (await supabaseAdmin<MemberRow[]>("members", {
+        query: { select: "id,auth_user_id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", id: `eq.${payload.id}`, limit: "1" },
+      }))[0];
+      if (!member) return Response.json({ error: "Integrante não encontrado." }, { status: 404 });
+      if (payload.confirmation !== member.name) return Response.json({ error: "Confirme o nome completo do atleta antes de vincular o Pix." }, { status: 400 });
+      const paymentResponse = await asaasRequest(`/payments/${encodeURIComponent(payload.paymentId)}`);
+      if (!paymentResponse.ok) throw new SupabaseRequestError("O Asaas não confirmou esse Pix.", 502);
+      const payment = await paymentResponse.json() as AsaasPayment;
+      if (payment.billingType !== "PIX" || (payment.status || "").toUpperCase() !== "RECEIVED" || !payment.customer) {
+        return Response.json({ error: "Somente um Pix confirmado pode ser vinculado." }, { status: 409 });
+      }
+      if (payment.externalReference && payment.externalReference !== member.id) return Response.json({ error: "Esse Pix já referencia outro cadastro." }, { status: 409 });
+      const [linkedPayment, linkedCustomer, currentSubscription] = await Promise.all([
+        supabaseAdmin<Array<{ member_id: string }>>("payments", { query: { select: "member_id", asaas_payment_id: `eq.${payload.paymentId}`, limit: "1" } }).then((rows) => rows[0]),
+        supabaseAdmin<Array<{ member_id: string }>>("subscriptions", { query: { select: "member_id", asaas_customer_id: `eq.${payment.customer}`, limit: "2" } }),
+        supabaseAdmin<Array<{ id: string; asaas_customer_id: string | null }>>("subscriptions", { query: { select: "id,asaas_customer_id", member_id: `eq.${member.id}`, limit: "1" } }).then((rows) => rows[0]),
+      ]);
+      if (linkedPayment && linkedPayment.member_id !== member.id) return Response.json({ error: "Esse Pix já está vinculado a outro atleta." }, { status: 409 });
+      if (linkedCustomer.some((subscription) => subscription.member_id !== member.id)) return Response.json({ error: "O pagador deste Pix já está vinculado a outro atleta." }, { status: 409 });
+      if (currentSubscription?.asaas_customer_id && currentSubscription.asaas_customer_id !== payment.customer) {
+        return Response.json({ error: "O atleta já possui outro cliente financeiro no Asaas." }, { status: 409 });
+      }
+      let subscriptionId = currentSubscription?.id;
+      if (!subscriptionId) {
+        const monthlyValue = Number(runtimeEnv().ASAAS_MONTHLY_VALUE);
+        if (!Number.isFinite(monthlyValue) || monthlyValue <= 0) return Response.json({ error: "A mensalidade ainda não está configurada." }, { status: 503 });
+        subscriptionId = crypto.randomUUID();
+        await supabaseAdmin("subscriptions", { method: "POST", body: { id: subscriptionId, member_id: member.id, status: "pending_configuration", amount_cents: Math.round(monthlyValue * 100), billing_cycle: "MONTHLY" } });
+      }
+      await supabaseAdmin("subscriptions", { method: "PATCH", query: { id: `eq.${subscriptionId}` }, body: { asaas_customer_id: payment.customer, updated_at: new Date().toISOString() } });
+      const result = await reconcileMemberBilling(member.id, { paymentId: payload.paymentId });
+      await supabaseAdmin("audit_logs", {
+        method: "POST",
+        body: { actor: admin.email, action: "payment.pix_linked_by_operator", entity_type: "member", entity_id: member.id, metadata: { asaas_payment_id: payload.paymentId, provider_status: payment.status, value_cents: Math.round((payment.value || 0) * 100) } },
+      });
+      return Response.json({ linked: true, reconciled: result });
+    }
+
     const result = await reconcileMemberBilling(payload.id);
     if (payload.action === "resend_checkout") {
       const delivery = await sendManualCheckoutReminder(payload.id);
@@ -176,5 +282,35 @@ export async function PATCH(request: Request) {
     return Response.json({ member: { id: member.id, participationStatus: member.participation_status, twinnerUrl: member.twinner_url, whatsappCommunityUrl: member.whatsapp_community_url }, note: savedNote });
   } catch {
     return Response.json({ error: "Não foi possível atualizar o integrante." }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  const blocked = requireTrustedOrigin(request);
+  if (blocked) return blocked;
+  const admin = await requireAdmin(request).catch(() => null);
+  if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
+  try {
+    const payload = await request.json() as { id?: string; confirmation?: string };
+    if (!payload.id || !uuidPattern.test(payload.id)) return Response.json({ error: "Integrante inválido." }, { status: 400 });
+    const [member, subscription, payment] = await Promise.all([
+      supabaseAdmin<MemberRow[]>("members", { query: { select: "id,auth_user_id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", id: `eq.${payload.id}`, limit: "1" } }).then((rows) => rows[0]),
+      supabaseAdmin<Array<{ asaas_customer_id: string | null; asaas_subscription_id: string | null; asaas_checkout_id: string | null }>>("subscriptions", { query: { select: "asaas_customer_id,asaas_subscription_id,asaas_checkout_id", member_id: `eq.${payload.id}`, limit: "1" } }).then((rows) => rows[0]),
+      supabaseAdmin<Array<{ id: string }>>("payments", { query: { select: "id", member_id: `eq.${payload.id}`, limit: "1" } }).then((rows) => rows[0]),
+    ]);
+    if (!member) return Response.json({ error: "Integrante não encontrado." }, { status: 404 });
+    if (payload.confirmation !== member.name) return Response.json({ error: "Digite o nome completo do atleta para confirmar a exclusão." }, { status: 400 });
+    const isIncompleteRecord = !member.joined_at && ["pending_payment", "awaiting_payment"].includes(member.participation_status);
+    if (!isIncompleteRecord || member.auth_user_id || payment || subscription?.asaas_customer_id || subscription?.asaas_subscription_id || subscription?.asaas_checkout_id) {
+      return Response.json({ error: "Este atleta já possui acesso ou histórico financeiro. Inative o cadastro para preservar a auditoria." }, { status: 409 });
+    }
+    await supabaseAdmin("audit_logs", {
+      method: "POST",
+      body: { actor: admin.email, action: "member.incomplete_record_deletion_authorized", entity_type: "member", entity_id: member.id, metadata: { name: member.name, email: member.email } },
+    });
+    await supabaseAdmin("members", { method: "DELETE", query: { id: `eq.${member.id}` } });
+    return Response.json({ deleted: true, id: member.id });
+  } catch {
+    return Response.json({ error: "Não foi possível excluir o cadastro incompleto." }, { status: 500 });
   }
 }

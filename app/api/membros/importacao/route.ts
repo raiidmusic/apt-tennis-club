@@ -52,6 +52,7 @@ export async function POST(request: Request) {
       name: athlete.name,
       email: athlete.email,
       whatsapp: athlete.phone,
+      class_level: athlete.classLevel,
       cpf_hash: null,
       cpf_last4: null,
       participation_status: "awaiting_payment",

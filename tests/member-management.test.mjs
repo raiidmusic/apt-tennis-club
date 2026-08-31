@@ -29,7 +29,7 @@ test("keeps member access editing admin-only, auditable and inside safe boundari
   assert.match(membersRoute, /requireTrustedOrigin/);
   assert.match(client, /cancellation_requested/);
   assert.match(client, /currentPeriodEnd/);
-  assert.match(client, /Operação em tempo real, sem movimentação manual/);
+  assert.match(client, /Operação em tempo real, com conciliação segura/);
   assert.match(client, /Abrir ficha completa/);
   assert.match(client, /Histórico financeiro/);
   assert.match(client, /Nova nota interna/);

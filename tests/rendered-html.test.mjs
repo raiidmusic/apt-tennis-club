@@ -93,10 +93,12 @@ test("keeps payer identity and address inside hosted Asaas Checkout", async () =
     readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(enrollmentRoute, /customerData/);
-  assert.doesNotMatch(enrollmentRoute, /ensureAsaasCustomer|customer:\s*asaasCustomerId/);
+  assert.match(enrollmentRoute, /paymentMethod === "pix"/);
+  assert.match(enrollmentRoute, /ensureAsaasCustomer/);
+  assert.doesNotMatch(enrollmentRoute, /asaasRequest\("\/checkouts"[\s\S]{0,900}customer:/);
   assert.match(enrollmentRoute, /externalReference: memberId/);
   assert.match(enrollmentRoute, /asaas_checkout_id: checkoutId/);
-  assert.match(client, /Endereço e cartão serão informados somente no ambiente seguro do Asaas\./);
+  assert.match(client, /O cartão fica no Asaas\./);
 });
 
 test("keeps paid access after recurring billing is cancelled", async () => {
@@ -162,7 +164,7 @@ test("reconciles billing without collecting card data in the APT portal", async 
   assert.match(webhook, /participation_status: "active"/);
   assert.match(reconciliation, /subscriptions\/\$\{encodeURIComponent\(providerSubscription\.id\)\}\/payments/);
   assert.doesNotMatch(portalRoute, /creditCardHolderInfo|creditCardToken|\bcvv\b/i);
-  assert.doesNotMatch(client, /<input[^>]+(?:card|cvv)/i);
+  assert.doesNotMatch(client, /<input[^>]+(?:cardNumber|cvv|validade|holderName)/i);
   assert.match(client, /APT não recebe número, validade ou CVV/);
 });
 

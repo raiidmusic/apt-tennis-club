@@ -65,7 +65,7 @@ function normalizedEmail(value = "") {
   return value.trim().toLowerCase();
 }
 
-export async function reconcileMemberBilling(memberId: string, hints: { checkoutId?: string } = {}) {
+export async function reconcileMemberBilling(memberId: string, hints: { checkoutId?: string; paymentId?: string } = {}) {
   const [member, localSubscription, localPayment] = await Promise.all([
     supabaseAdmin<LocalMember[]>("members", {
       query: { select: "id,name,email,cpf_last4,participation_status,joined_at", id: `eq.${memberId}`, limit: "1" },
@@ -130,10 +130,15 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
         `/payments?${new URLSearchParams({ externalReference: memberId, limit: "24" })}`,
       ];
   let payments: AsaasPaymentSnapshot[] = [];
-  for (const paymentPath of paymentPaths) {
-    const paymentResponse = await asaasRequest(paymentPath);
-    payments = (await readJson<Collection<AsaasPaymentSnapshot>>(paymentResponse, "O Asaas não respondeu à conciliação das cobranças.")).data || [];
-    if (payments.length) break;
+  if (hints.paymentId) {
+    const paymentResponse = await asaasRequest(`/payments/${encodeURIComponent(hints.paymentId)}`);
+    payments = [await readJson<AsaasPaymentSnapshot>(paymentResponse, "O Asaas não confirmou o Pix selecionado.")];
+  } else {
+    for (const paymentPath of paymentPaths) {
+      const paymentResponse = await asaasRequest(paymentPath);
+      payments = (await readJson<Collection<AsaasPaymentSnapshot>>(paymentResponse, "O Asaas não respondeu à conciliação das cobranças.")).data || [];
+      if (payments.length) break;
+    }
   }
   if (!payments.length && localPayment?.asaas_payment_id) {
     const paymentResponse = await asaasRequest(`/payments/${encodeURIComponent(localPayment.asaas_payment_id)}`);

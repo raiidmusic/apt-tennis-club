@@ -2,6 +2,7 @@ export type AthleteImportInput = {
   name?: unknown;
   email?: unknown;
   phone?: unknown;
+  classLevel?: unknown;
   status?: unknown;
 };
 
@@ -9,6 +10,7 @@ export type PreparedAthlete = {
   name: string;
   email: string;
   phone: string;
+  classLevel: string | null;
 };
 
 export type RejectedAthlete = {
@@ -65,6 +67,7 @@ export function parseAthleteCsv(source: string): AthleteImportInput[] {
     name: headers.findIndex((value) => ["NOME", "NAME"].includes(value)),
     email: headers.findIndex((value) => ["EMAIL", "E-MAIL"].includes(value)),
     phone: headers.findIndex((value) => ["TELEFONE", "WHATSAPP", "PHONE"].includes(value)),
+    classLevel: headers.findIndex((value) => ["CLASSE", "CLASS", "NIVEL"].includes(value)),
     status: headers.findIndex((value) => ["RANQUEADO", "STATUS", "SITUACAO"].includes(value)),
   };
   if (indexes.name < 0 || indexes.email < 0) throw new Error("O CSV precisa das colunas NOME e EMAIL.");
@@ -73,6 +76,7 @@ export function parseAthleteCsv(source: string): AthleteImportInput[] {
     name: values[indexes.name] || "",
     email: values[indexes.email] || "",
     phone: indexes.phone >= 0 ? values[indexes.phone] || "" : "",
+    classLevel: indexes.classLevel >= 0 ? values[indexes.classLevel] || "" : "",
     status: indexes.status >= 0 ? values[indexes.status] || "" : "ATIVO",
   }));
 }
@@ -90,20 +94,22 @@ export function prepareAthleteImport(input: AthleteImportInput[]) {
     const name = text(item.name).replace(/\s+/g, " ");
     const email = text(item.email).toLowerCase();
     const phone = text(item.phone).replace(/\D/g, "");
+    const classLevel = text(item.classLevel).replace(/\s+/g, " ");
     if (name.length < 2 || name.length > 160) {
       rejected.push({ row, reason: "Nome inválido" });
     } else if (!/^\S+@\S+\.\S+$/.test(email) || email.length > 254) {
       rejected.push({ row, reason: "E-mail inválido" });
     } else if (phone && (phone.length < 10 || phone.length > 13)) {
       rejected.push({ row, reason: "Telefone inválido" });
+    } else if (classLevel.length > 80) {
+      rejected.push({ row, reason: "Classe inválida" });
     } else if (seenEmails.has(email)) {
       rejected.push({ row, reason: "E-mail duplicado no arquivo" });
     } else {
       seenEmails.add(email);
-      athletes.push({ name, email, phone });
+      athletes.push({ name, email, phone, classLevel: classLevel || null });
     }
   });
 
   return { athletes, rejected };
 }
-

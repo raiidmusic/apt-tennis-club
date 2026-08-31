@@ -502,6 +502,10 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 .status-chip--ok { background: var(--success-surface); color: var(--olive); }
 .status-chip--pending { background: var(--warning-surface); color: oklch(42% 0.09 70); }
 .status-chip--inactive { background: var(--surface-muted); color: var(--muted); }
+.billing-method-chip { width: max-content; display: inline-flex; align-items: center; min-height: 1.7rem; padding: 0.28rem 0.55rem; border-radius: 999px; font-size: 0.67rem; font-weight: 780; line-height: 1; white-space: nowrap; }
+.billing-method-chip--pix { background: color-mix(in oklch, var(--olive) 14%, var(--white)); color: var(--olive); }
+.billing-method-chip--card { background: color-mix(in oklch, var(--navy) 10%, var(--white)); color: var(--navy); }
+.billing-method-chip--unset { background: var(--surface-muted); color: var(--muted); }
 .admin-heading > div > span { color: var(--muted); }
 .signal-strip { position: relative; display: grid; }
 .signal-strip > div { display: grid; gap: 0.25rem; padding: 1rem; border-bottom: 1px solid var(--line); }
@@ -643,7 +647,7 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 .crm-answers summary span { min-width: 1.65rem; padding: 0.1rem 0.35rem; border-radius: 999px; background: var(--surface-muted); color: var(--muted); text-align: center; font-size: 0.72rem; }
 .crm-answers[open] summary { border-bottom: 1px solid var(--line); }
 .member-financial-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.member-financial-summary > div { display: grid; gap: 0.2rem; padding: 0.9rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.member-financial-summary > div { display: grid; gap: 0.2rem; min-width: 0; padding: 0.9rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .member-financial-refresh { grid-column: 1 / -1; justify-self: start; margin: 0.75rem; }
 .member-financial-summary span, .member-payment-history article > div span { color: var(--muted); font-size: 0.7rem; }
 .member-financial-summary strong { font-size: 0.85rem; overflow-wrap: anywhere; }
@@ -809,7 +813,7 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .crm-drawer__header { padding: 1.5rem 2rem; }
   .crm-drawer__body { padding: 1.5rem 2rem 3rem; }
   .crm-contact-card { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
-  .member-financial-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .member-financial-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .member-financial-summary > div { min-height: 6rem; border-bottom: 0; }
   .member-management-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .member-management-form > div:first-child, .member-management-form > .field-error, .member-management-form > label:last-of-type, .member-management-form > button { grid-column: 1 / -1; }
@@ -860,7 +864,7 @@ td { padding: 0.9rem 1rem; border-top: 1px solid var(--line); font-size: 0.86rem
   .member-operations__lane > header span { color: var(--muted); font-size: 0.7rem; }
   .member-operations__lane[data-stage="checkout_pending"] > header { border-top: 2px solid var(--clay-dark); }
   .member-operations__lane[data-stage="attention"] > header { border-top: 2px solid var(--clay); }
-  .member-operations__lane[data-stage="active"] > header { border-top: 2px solid var(--success); }
+  .member-operations__lane[data-stage="active"] > header { border-top: 2px solid var(--olive); }
   .member-operations__lane[data-stage="cancellation_requested"] > header { border-top: 2px solid var(--ink); }
   .member-operations__lane[data-stage="inactive"] > header { border-top: 2px solid var(--muted); }
   .toast { top: 5.5rem; left: auto; right: 2rem; width: min(28rem, calc(100vw - 4rem)); }

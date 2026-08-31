@@ -22,8 +22,9 @@ test("creates identified Pix charges without weakening the recurring card bounda
 });
 
 test("keeps manual Pix ownership explicit, provider-backed and audited", async () => {
-  const [members, client] = await Promise.all([
+  const [members, reconciliation, client] = await Promise.all([
     readFile(new URL("../app/api/membros/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/billing-reconciliation.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(members, /action === "find_pix"/);
@@ -31,8 +32,14 @@ test("keeps manual Pix ownership explicit, provider-backed and audited", async (
   assert.match(members, /payment\.billingType !== "PIX"/);
   assert.match(members, /reconcileMemberBilling\(member\.id, \{ paymentId: payload\.paymentId \}\)/);
   assert.match(members, /payment\.pix_linked_by_operator/);
+  assert.match(reconciliation, /oneOffPaymentExpired/);
+  assert.match(reconciliation, /PIX_MONTHLY_DUE/);
   assert.match(client, /O APT não escolhe por semelhança de nome/);
   assert.match(client, /Confira nome, valor, data e final do CPF/);
+  assert.match(client, /Esta é uma mensagem automática do APT Tennis Club/);
+  assert.match(client, /Você deseja continuar participando do ranking do APT Tennis Club/);
+  assert.match(client, /billingMethod/);
+  assert.match(reconciliation, /formatToParts/);
 });
 
 test("adds athletes through the canonical invite path and guards permanent deletion", async () => {

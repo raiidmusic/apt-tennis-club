@@ -298,6 +298,7 @@ async function queueAndProcessBillingEmails(input: {
   providerStatus: string;
 }) {
   const confirmed = input.kind === "confirmed";
+  const pixMonthlyDue = input.providerStatus === "PIX_MONTHLY_DUE";
   const management = managementRecipients();
   const memberKey = `apt-payment-${input.kind}-member-${input.paymentId}`;
   const deliveries = [
@@ -309,10 +310,12 @@ async function queueAndProcessBillingEmails(input: {
       audience: "member",
       recipient_email: input.member.email,
       reply_to: null,
-      subject: confirmed ? "Pagamento confirmado — mensalidade APT" : "Atualização necessária na sua mensalidade APT",
+      subject: confirmed ? "Pagamento confirmado — mensalidade APT" : pixMonthlyDue ? "Mensalidade Pix pendente — APT" : "Atualização necessária na sua mensalidade APT",
       body_text: confirmed
         ? `Olá, ${input.member.name}.\n\nO Asaas confirmou e o APT registrou sua mensalidade. Se o seu cadastro já estiver concluído, o acesso está liberado. Caso ainda não esteja, finalize-o pelo link enviado pela gestão.`
-        : `Olá, ${input.member.name}.\n\nO Asaas informou uma atualização na sua mensalidade. Acesse a área de membros para acompanhar a situação ou fale com a gestão do APT.`,
+        : pixMonthlyDue
+          ? `Olá, ${input.member.name}.\n\nSeu período mensal anterior terminou e ainda não identificamos o Pix deste mês. Para continuar no ranking, faça o Pix pela chave habitual do APT ou peça à gestão o link para mensalidade recorrente no cartão. Se já pagou, desconsidere esta mensagem. Caso não queira continuar no ranking, avise a gestão para retirarmos seu nome sem problema.`
+          : `Olá, ${input.member.name}.\n\nO Asaas informou uma atualização na sua mensalidade. Acesse a área de membros para acompanhar a situação ou fale com a gestão do APT.`,
       flow: confirmed ? "payment_confirmed_member" : "payment_attention_member",
       provider_status: input.providerStatus,
     },
@@ -324,10 +327,12 @@ async function queueAndProcessBillingEmails(input: {
       audience: "management",
       recipient_email: management.join(","),
       reply_to: input.member.email,
-      subject: confirmed ? `Pagamento confirmado — ${input.member.name}` : `Mensalidade requer atenção — ${input.member.name}`,
+      subject: confirmed ? `Pagamento confirmado — ${input.member.name}` : pixMonthlyDue ? `Pix mensal pendente — ${input.member.name}` : `Mensalidade requer atenção — ${input.member.name}`,
       body_text: confirmed
         ? `O Asaas confirmou a mensalidade de ${input.member.name}.\n\nE-mail: ${input.member.email}\nStatus do provedor: ${input.providerStatus}\n\nA participação foi atualizada automaticamente no APT.`
-        : `O Asaas informou uma atualização que requer atenção na mensalidade de ${input.member.name}.\n\nE-mail: ${input.member.email}\nStatus do provedor: ${input.providerStatus}\n\nAcesse a gestão para conferir o histórico financeiro.`,
+        : pixMonthlyDue
+          ? `O período pago por Pix de ${input.member.name} terminou sem um novo recebimento confirmado.\n\nE-mail: ${input.member.email}\nStatus do provedor: ${input.providerStatus}\n\nO integrante foi movido para atenção financeira e entrou na fila de cobrança por WhatsApp.`
+          : `O Asaas informou uma atualização que requer atenção na mensalidade de ${input.member.name}.\n\nE-mail: ${input.member.email}\nStatus do provedor: ${input.providerStatus}\n\nAcesse a gestão para conferir o histórico financeiro.`,
       flow: confirmed ? "payment_confirmed_management" : "payment_attention_management",
       provider_status: input.providerStatus,
     }] : []),

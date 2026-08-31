@@ -90,6 +90,12 @@ function shortDate(value?: string | null) {
   return value ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`)) : "A definir";
 }
 
+function billingMethodLabel(method?: "pix" | "card" | null) {
+  if (method === "pix") return "Pix";
+  if (method === "card") return "Cartão recorrente";
+  return "A definir";
+}
+
 const questions: Question[] = [
   { id: "nome", title: "Como você gosta de ser chamado?", helper: "Comece pelo seu nome completo.", type: "text" },
   { id: "email", title: "Qual é o seu melhor e-mail?", helper: "É por aqui que você recebe as próximas etapas.", type: "email" },
@@ -119,6 +125,7 @@ type MemberRecord = {
   classLevel?: string | null;
   participationStatus: string;
   subscriptionStatus: string;
+  billingMethod?: "pix" | "card" | null;
   amountCents: number;
   nextDueDate?: string | null;
   currentPeriodEnd?: string | null;
@@ -178,7 +185,7 @@ function paymentReminderUrl(member: Pick<MemberRecord, "name" | "whatsapp">) {
   const whatsapp = phone.startsWith("55") ? phone : `55${phone}`;
   if (whatsapp.length < 12 || whatsapp.length > 13) return null;
   const firstName = member.name.trim().split(/\s+/)[0] || "tudo bem";
-  const message = `Olá, ${firstName}! Tudo bem?\n\nPassando para lembrar da mensalidade do APT Tennis Club. Se você já realizou o pagamento, pode desconsiderar esta mensagem. Se precisar de ajuda ou do link para pagamento, me avise por aqui.\n\nObrigado!\nEquipe APT`;
+  const message = `Olá, ${firstName}! Tudo bem?\n\nEsta é uma mensagem automática do APT Tennis Club. A mensalidade deste mês ainda não consta como confirmada no sistema.\n\nPara continuar no ranking, você pode pagar por Pix pela chave habitual do APT ou aderir à mensalidade recorrente no cartão, processada pelo Asaas. No cartão, você pode cancelar quando quiser pelo sistema do APT.\n\nVocê deseja continuar participando do ranking do APT Tennis Club? Caso não queira continuar, basta nos avisar e retiraremos seu nome do ranking sem nenhum problema.\n\nSe você já realizou o pagamento, pode desconsiderar esta mensagem. Se precisar de ajuda, fale com a gente por aqui.\n\nEquipe APT`;
   return `https://wa.me/${whatsapp}?text=${encodeURIComponent(message)}`;
 }
 
@@ -959,7 +966,7 @@ function MemberManagementDetail({ member, loading, saving, refreshing, error, on
       {loading && <div className="loading-state"><i /><span>Carregando histórico do integrante…</span></div>}
       {member && !loading && <div className="crm-drawer__body">
         <section className="crm-contact-card"><div><span className={`status-chip status-chip--${statusClass}`}>{readableStatus(member.participationStatus, memberStatusLabels)}</span><small>{member.classLevel || "Classe não informada"}</small></div><div className="crm-contact-actions"><a href={`mailto:${member.email}`}>E-mail</a>{directWhatsappUrl && <a href={directWhatsappUrl} target="_blank" rel="noreferrer">WhatsApp</a>}{reminderUrl && <a href={reminderUrl} target="_blank" rel="noreferrer">Cobrar no WhatsApp</a>}</div></section>
-        <section className="member-financial-summary"><div><span>Assinatura</span><strong>{readableStatus(member.subscriptionStatus, subscriptionStatusLabels)}</strong></div><div><span>Mensalidade</span><strong>{(member.amountCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></div><div><span>Próximo vencimento</span><strong>{shortDate(member.nextDueDate)}</strong></div><div><span>Atraso</span><strong>{member.overdueDays ? `${member.overdueDays} dias` : "Em dia"}</strong></div><button className="secondary-button member-financial-refresh" type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? "Consultando Asaas…" : "Atualizar no Asaas"}</button></section>
+        <section className="member-financial-summary"><div><span>Assinatura</span><strong>{readableStatus(member.subscriptionStatus, subscriptionStatusLabels)}</strong></div><div><span>Pagamento</span><strong>{billingMethodLabel(member.billingMethod)}</strong></div><div><span>Mensalidade</span><strong>{(member.amountCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></div><div><span>Próximo vencimento</span><strong>{shortDate(member.nextDueDate)}</strong></div><div><span>Atraso</span><strong>{member.overdueDays ? `${member.overdueDays} dias` : "Em dia"}</strong></div><button className="secondary-button member-financial-refresh" type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? "Consultando Asaas…" : "Atualizar no Asaas"}</button></section>
         <section className="pix-reconciliation"><div><span>Conciliação Pix</span><h4>Pix recebido direto na chave</h4><p>Consulte os recebimentos deste mês e vincule somente depois de conferir o pagador. O APT não escolhe por semelhança de nome.</p></div><button className="secondary-button" type="button" onClick={findPix} disabled={pixWorking}>{pixWorking ? "Consultando Asaas…" : "Localizar Pix não vinculados"}</button>{pixCandidates.length > 0 && <div className="pix-candidate-list">{pixCandidates.map((candidate) => <article key={candidate.id}><div><strong>{candidate.payerName}</strong><span>{(candidate.valueCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · {candidate.paidAt ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${candidate.paidAt.slice(0, 10)}T12:00:00`)) : "Data não informada"}{candidate.cpfLast4 ? ` · CPF final ${candidate.cpfLast4}` : ""}</span></div><button type="button" onClick={() => linkPix(candidate)} disabled={pixWorking}>Conferi e quero vincular</button></article>)}</div>}{!pixWorking && pixCandidates.length === 0 && <small>A lista aparece apenas quando você solicitar a consulta ao Asaas.</small>}</section>
         <form className="member-management-form" onSubmit={async (event) => { event.preventDefault(); const saved = await onSave({ participationStatus: participationStatus || undefined, twinnerUrl: twinnerUrl === initialTweenerUrl ? undefined : twinnerUrl, whatsappCommunityUrl: whatsappCommunityUrl === initialWhatsappUrl ? undefined : whatsappCommunityUrl, note: note || undefined }); if (saved) { setParticipationStatus(""); setNote(""); } }}>
           <div><span>Gestão do integrante</span><h4>Participação, acessos e nota interna</h4></div>
@@ -1026,7 +1033,7 @@ function MemberOperationCard({ member, onManage, onResendCheckout, reminding }: 
   return <article className="member-operations-card">
     <button className="member-operations-card__body" type="button" onClick={() => onManage(member)} aria-label={`Abrir ficha de ${member.name}`}>
       <div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.classLevel || "Classe não informada"}</small></div></div>
-      <div className="member-operations-card__meta"><span className={`status-chip status-chip--${memberOperationsStatusClass(stage)}`}>{stage === "checkout_pending" ? "Cadastro concluído" : readableStatus(member.participationStatus, memberStatusLabels)}</span><small>{dueLabel}</small></div>
+      <div className="member-operations-card__meta"><span className={`status-chip status-chip--${memberOperationsStatusClass(stage)}`}>{stage === "checkout_pending" ? "Cadastro concluído" : readableStatus(member.participationStatus, memberStatusLabels)}</span><span className={`billing-method-chip billing-method-chip--${member.billingMethod || "unset"}`}>{billingMethodLabel(member.billingMethod)}</span><small>{dueLabel}</small></div>
       <span className="member-operations-card__value"><small>Mensalidade</small><strong>{(member.amountCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></span>
       <span className="member-management-card__open">Abrir ficha completa <i aria-hidden="true">→</i></span>
     </button>

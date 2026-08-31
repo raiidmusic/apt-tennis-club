@@ -25,6 +25,7 @@ type AsaasPayment = {
 };
 type AsaasCustomer = { id?: string; name?: string; cpfCnpj?: string; externalReference?: string };
 type AsaasCollection<T> = { data?: T[] };
+type BillingMethod = "pix" | "card";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const manualStatuses = new Set(["pending_payment", "courtesy", "inactive"]);
@@ -39,6 +40,11 @@ function saoPauloMonthStart(date = new Date()) {
   const month = parts.find((part) => part.type === "month")?.value;
   if (!year || !month) throw new Error("Não foi possível determinar o mês financeiro.");
   return `${year}-${month}-01`;
+}
+
+function billingMethodFor(subscription?: SubscriptionRow | null): BillingMethod | null {
+  if (subscription?.asaas_subscription_id || subscription?.asaas_checkout_id) return "card";
+  return subscription?.asaas_customer_id ? "pix" : null;
 }
 
 function allowedClubUrl(value: string, host: string) {
@@ -75,7 +81,7 @@ export async function GET(request: Request) {
         id: member.id, name: member.name, email: member.email, whatsapp: member.whatsapp, classLevel: member.class_level,
         twinnerUrl: member.twinner_url, whatsappCommunityUrl: member.whatsapp_community_url, joinedAt: member.joined_at, createdAt: member.created_at,
         participationStatus: ["courtesy", "inactive"].includes(member.participation_status) ? member.participation_status : overdueDays >= 7 ? "delinquent" : member.participation_status,
-        subscriptionStatus: subscription?.status || "pending_configuration", amountCents: subscription?.amount_cents || 0,
+        subscriptionStatus: subscription?.status || "pending_configuration", amountCents: subscription?.amount_cents || 0, billingMethod: billingMethodFor(subscription),
         nextDueDate: subscription?.next_due_date, currentPeriodEnd: subscription?.current_period_end, overdueDays, cancelAtPeriodEnd: subscription?.cancel_at_period_end || false,
         checkoutExpiresAt: subscription?.asaas_checkout_expires_at,
         checkoutStarted: Boolean(subscription?.asaas_checkout_id),
@@ -109,7 +115,7 @@ export async function GET(request: Request) {
         classLevel: member.class_level, twinnerUrl: member.twinner_url, whatsappCommunityUrl: member.whatsapp_community_url,
         joinedAt: member.joined_at, createdAt: member.created_at,
         participationStatus: ["courtesy", "inactive"].includes(member.participation_status) ? member.participation_status : overdueDays >= 7 ? "delinquent" : member.participation_status,
-        subscriptionStatus: subscription?.status || "pending_configuration", amountCents: subscription?.amount_cents || 0,
+        subscriptionStatus: subscription?.status || "pending_configuration", amountCents: subscription?.amount_cents || 0, billingMethod: billingMethodFor(subscription),
         nextDueDate: subscription?.next_due_date, currentPeriodEnd: subscription?.current_period_end, overdueDays, cancelAtPeriodEnd: subscription?.cancel_at_period_end || false,
         checkoutExpiresAt: subscription?.asaas_checkout_expires_at,
         checkoutStarted: Boolean(subscription?.asaas_checkout_id),

@@ -19,3 +19,7 @@ export function monthlyAccessEnd(value?: string | null) {
   const lastDay = new Date(Date.UTC(nextYear, nextMonth, 0)).getUTCDate();
   return `${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
 }
+
+export function isDateBefore(value?: string | null, reference?: string | null) {
+  return Boolean(value && reference && /^\d{4}-\d{2}-\d{2}$/.test(value) && /^\d{4}-\d{2}-\d{2}$/.test(reference) && value < reference);
+}

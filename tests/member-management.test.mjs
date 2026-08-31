@@ -34,6 +34,10 @@ test("keeps member access editing admin-only, auditable and inside safe boundari
   assert.match(client, /Histórico financeiro/);
   assert.match(client, /Nova nota interna/);
   assert.match(client, /paymentReminderUrl/);
+  assert.match(membersRoute, /function billingMethodFor/);
+  assert.match(membersRoute, /billingMethod: billingMethodFor\(subscription\)/);
+  assert.match(client, /billing-method-chip/);
+  assert.match(client, /Cartão recorrente/);
   assert.match(client, /Fila de lembretes/);
   assert.match(client, />Cobrar no WhatsApp</);
   assert.match(client, /https:\/\/wa\.me\//);

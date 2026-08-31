@@ -1,6 +1,6 @@
 import { asaasRequest } from "./asaas";
 import { sendBillingTransitionEmails } from "./apt-email";
-import { asaasPaymentState, monthlyAccessEnd } from "./billing-state";
+import { asaasPaymentState, isDateBefore, monthlyAccessEnd } from "./billing-state";
 import { supabaseAdmin, SupabaseRequestError } from "./supabase-server";
 
 export type AsaasPaymentSnapshot = {
@@ -63,6 +63,20 @@ function normalizedName(value = "") {
 
 function normalizedEmail(value = "") {
   return value.trim().toLowerCase();
+}
+
+function saoPauloDate() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) throw new Error("Não foi possível determinar a data financeira.");
+  return `${year}-${month}-${day}`;
 }
 
 export async function reconcileMemberBilling(memberId: string, hints: { checkoutId?: string; paymentId?: string } = {}) {
@@ -178,11 +192,15 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
   const oneOffPeriodEnd = latestState.paid
     ? monthlyAccessEnd(latest?.paymentDate || latest?.clientPaymentDate || latest?.dueDate)
     : null;
+  const providerBackedRecurring = Boolean(providerSubscription?.id || localSubscription.asaas_subscription_id || latest?.subscription);
+  const paidThrough = oneOffPeriodEnd || localSubscription.current_period_end;
+  const oneOffPaymentExpired = !providerBackedRecurring && Boolean(paidThrough && isDateBefore(paidThrough, saoPauloDate()));
+  const paymentNeedsAttention = latestState.failed || oneOffPaymentExpired;
   const protectedManualState = ["courtesy", "inactive", "cancelled", "cancellation_requested"].includes(member.participation_status);
   const nextMemberStatus = protectedManualState
     ? member.participation_status
-    : latestState.paid ? "active" : latestState.failed ? "pending_payment" : member.participation_status;
-  const nextSubscriptionStatus = latestState.paid ? "active" : latestState.failed ? "past_due" : localSubscription.status;
+    : latestState.paid && !oneOffPaymentExpired ? "active" : paymentNeedsAttention ? "pending_payment" : member.participation_status;
+  const nextSubscriptionStatus = latestState.paid && !oneOffPaymentExpired ? "active" : paymentNeedsAttention ? "past_due" : localSubscription.status;
   const now = new Date().toISOString();
 
   await Promise.all([
@@ -196,7 +214,7 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
         amount_cents: providerSubscription?.value ? Math.round(providerSubscription.value * 100) : localSubscription.amount_cents,
         next_due_date: providerSubscription?.nextDueDate || oneOffPeriodEnd || localSubscription.next_due_date,
         current_period_end: providerSubscription?.nextDueDate || oneOffPeriodEnd || localSubscription.current_period_end,
-        overdue_since: latestState.failed ? latest?.dueDate || new Date().toISOString().slice(0, 10) : null,
+        overdue_since: paymentNeedsAttention ? latestState.failed ? latest?.dueDate || saoPauloDate() : paidThrough : null,
         updated_at: now,
       },
     }),
@@ -211,8 +229,8 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
 
   if (latest?.id && latestState.paid) {
     await sendBillingTransitionEmails({ kind: "confirmed", member, paymentId: latest.id, providerStatus: latestState.normalized });
-  } else if (latest?.id && latestState.failed) {
-    await sendBillingTransitionEmails({ kind: "attention", member, paymentId: latest.id, providerStatus: latestState.normalized });
+  } else if (latest?.id && paymentNeedsAttention) {
+    await sendBillingTransitionEmails({ kind: "attention", member, paymentId: latest.id, providerStatus: oneOffPaymentExpired ? "PIX_MONTHLY_DUE" : latestState.normalized });
   }
 
   return { found: Boolean(providerSubscription || snapshots.length), paymentCount: snapshots.length, active: nextMemberStatus === "active" };

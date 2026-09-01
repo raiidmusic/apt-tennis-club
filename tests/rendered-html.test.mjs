@@ -27,6 +27,28 @@ test("keeps the official landing lockup inside the navigation height", async () 
   assert.match(styles, /\.apt-site-nav__brand \.brand-lockup img \{[^}]*width: auto; height: 100%/);
 });
 
+test("publishes the 2026–2027 quarter calendar with one annual Finals", async () => {
+  const [page, navigator, styles] = await Promise.all([
+    readFile(new URL("../app/calendario2026/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/calendario2026/season-navigator.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/calendario2026/calendar.module.css", import.meta.url), "utf8"),
+  ]);
+  await access(new URL("../public/apt-finals-2027.png", import.meta.url));
+  assert.match(page, /Agenda Viva 2026–2027/);
+  assert.match(page, /2026-11-09/);
+  assert.match(page, /2027-12-04/);
+  assert.equal(page.match(/const finalsDate =/g)?.length, 1);
+  assert.equal(page.match(/label: "Q[1-4] 2027"/g)?.length, 4);
+  assert.match(page, /4 sorteios/);
+  assert.match(page, /8 jogos em 8 semanas/);
+  assert.match(page, /export const revalidate = 86400/);
+  assert.match(page, /apt-finals-2027\.png/);
+  assert.doesNotMatch(page, /monthCells|monthsSection/);
+  assert.match(navigator, /aria-pressed/);
+  assert.match(navigator, /initialQuarterId/);
+  assert.match(styles, /prefers-reduced-motion: reduce/);
+});
+
 test("keeps public, invited, member and management journeys separate", async () => {
   await Promise.all([
     "../app/requerimento/page.tsx",

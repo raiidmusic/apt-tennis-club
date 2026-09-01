@@ -351,6 +351,7 @@ export function LandingPage() {
           <a href="#o-apt">O APT</a>
           <a href="#ranking">Ranking</a>
           <a href="#temporada">Temporada</a>
+          <a href="/calendario2026">Calendário</a>
           <a href="#duvidas">Dúvidas</a>
         </nav>
         <div className="apt-site-nav__actions">
@@ -472,7 +473,7 @@ export function LandingPage() {
           <div><h2>Quer jogar no APT?</h2><p>Faça o requerimento. Se houver vaga para o seu nível e o perfil for aprovado, você recebe o link de cadastro.</p><a className="apt-pill apt-pill--light" href="/requerimento">Solicitar entrada <span aria-hidden="true">↗</span></a></div>
         </section>
       </main>
-      <footer className="apt-footer"><div><Brand /><p>APT Tennis Club · Brasília · Desde 2025</p></div><nav><a href="#o-apt">O APT</a><a href="#ranking">Ranking</a><a href="/requerimento">Requerimento</a><a href="/entrar">Área do membro</a></nav><span aria-hidden="true">APT</span></footer>
+      <footer className="apt-footer"><div><Brand /><p>APT Tennis Club · Brasília · Desde 2025</p></div><nav><a href="#o-apt">O APT</a><a href="#ranking">Ranking</a><a href="/calendario2026">Calendário</a><a href="/requerimento">Requerimento</a><a href="/entrar">Área do membro</a></nav><span aria-hidden="true">APT</span></footer>
     </div>
   );
 }

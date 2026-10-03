@@ -492,7 +492,7 @@ export function LandingPage() {
                 { src: "/apt-assets/tennis-green-indian-wells.webp", width: 736, height: 863, alt: "Uma troca de bola na quadra verde" },
                 { src: "/apt-assets/apt-court-photographic.webp", width: 1122, height: 1402, alt: "Composição de marca APT pintada no piso de uma quadra" },
                 { src: "/apt-editorial-hero.jpeg", width: 736, height: 981, alt: "A pausa de um jogador junto à rede" },
-              ].map((photo, index) => <figure key={photo.src}><div className="apt-spread__photo-drift" style={{ "--apt-depth": 0.55 + index * 0.15 } as CSSProperties}><Image {...photo} sizes="(max-width: 1023px) 28vw, (max-width: 1318px) 17vw, 224px" alt={photo.alt} loading="lazy" draggable={false} /></div></figure>)}
+              ].map((photo, index) => <figure key={photo.src}><div className="apt-spread__photo-drift" style={{ "--apt-depth": 0.55 + index * 0.15 } as CSSProperties}><Image {...photo} sizes="(max-width: 767px) calc(50vw - 40px), (max-width: 1023px) calc(33.33vw - 48px), 288px" alt={photo.alt} loading="lazy" draggable={false} /></div></figure>)}
             </div>
           </div>
         </section>

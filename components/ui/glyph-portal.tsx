@@ -126,11 +126,10 @@ export default function GlyphPortal({
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d", { willReadFrequently: true });
     let disposed = false, raf = 0, dirty = true, active = true, ready = false;
-    const mountedAt = performance.now();
-    let browserFrameSeen = false, stalled = false;
+    let browserFrameSeen = false;
     let W = 1, H = 1, travel = 1, startScale = 1, endScale = 1;
     let center = { x: 0, y: 0 }, target: Ink | null = null;
-    let lastProgress = -1;
+    let lastProgress = -1, paintDirty = true;
     let candidates: Ink[] = [], letters: Letter[] = [];
     let choosing = false;
     let bounds = { x: 0, y: 0, width: 1, height: 1 };
@@ -146,7 +145,7 @@ export default function GlyphPortal({
     });
     glyph.style.fontFamily = [...available, DEFAULT_FONT].join(",");
     // A pending requested face may also hold WebKit's render loop. Keep that mount static.
-    stalled = available.length < families.length;
+    const stalled = available.length < families.length;
 
     const readInk = () => {
       if (!context) return false;
@@ -180,6 +179,7 @@ export default function GlyphPortal({
     };
 
     const select = (next: Ink | null) => {
+      paintDirty = true;
       target = next;
       endScale = target ? Math.max(startScale, Math.hypot(W, H) / (target.radius * 1.35)) : startScale;
       section.dataset.gpFocus = target ? Array.from(text.slice(target.index))[0] : "";
@@ -209,22 +209,30 @@ export default function GlyphPortal({
 
     const paint = (progress: number) => {
       const isStatic = motion.matches || !browserFrameSeen || stalled || !target;
+      const mode = isStatic ? "off" : "on";
+      const modeChanged = section.dataset.gpMotion !== mode;
+      if (modeChanged) section.dataset.gpMotion = mode;
       const p = isStatic ? 0 : progress;
+      if (!paintDirty && !modeChanged && p === lastProgress) return;
+      paintDirty = false;
       const t = clamp(p / 0.78);
-      const eased = t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2;
-      const scale = Math.exp(Math.log(startScale) + Math.log(endScale / startScale) * eased);
-      const blend = endScale === startScale ? 0 : (1 / scale - 1 / startScale) / (1 / endScale - 1 / startScale);
-      const cx = center.x + ((target?.x ?? center.x) - center.x) * blend;
-      const cy = center.y + ((target?.y ?? center.y) - center.y) * blend;
-      const roll = -4 * smooth(0.06, 0.5, t) * (1 - smooth(0.62, 0.92, t));
-      const transform = `translate(${W / 2} ${H * 0.46 + H * 0.04 * eased}) scale(${scale}) rotate(${roll}) translate(${-cx} ${-cy})`;
-      // Keep scale on the clip to avoid text paint limits. Text-local translation
-      // follows page zoom in WebKit; translation on an HTML clip reference does not.
-      const radians = roll * Math.PI / 180;
-      const dx = W / 2 / scale, dy = (H * .46 + H * .04 * eased) / scale;
-      clip.setAttribute("transform", `scale(${scale}) rotate(${roll})`);
-      glyph.setAttribute("transform", `translate(${Math.cos(radians) * dx + Math.sin(radians) * dy - cx} ${-Math.sin(radians) * dx + Math.cos(radians) * dy - cy})`);
-      marks.setAttribute("transform", transform);
+      // Once unclipped, SVG camera updates cannot change the visible field.
+      if (t < 1) {
+        const eased = t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2;
+        const scale = Math.exp(Math.log(startScale) + Math.log(endScale / startScale) * eased);
+        const blend = endScale === startScale ? 0 : (1 / scale - 1 / startScale) / (1 / endScale - 1 / startScale);
+        const cx = center.x + ((target?.x ?? center.x) - center.x) * blend;
+        const cy = center.y + ((target?.y ?? center.y) - center.y) * blend;
+        const roll = -4 * smooth(0.06, 0.5, t) * (1 - smooth(0.62, 0.92, t));
+        const transform = `translate(${W / 2} ${H * 0.46 + H * 0.04 * eased}) scale(${scale}) rotate(${roll}) translate(${-cx} ${-cy})`;
+        // Keep scale on the clip to avoid text paint limits. Text-local translation
+        // follows page zoom in WebKit; translation on an HTML clip reference does not.
+        const radians = roll * Math.PI / 180;
+        const dx = W / 2 / scale, dy = (H * .46 + H * .04 * eased) / scale;
+        clip.setAttribute("transform", `scale(${scale}) rotate(${roll})`);
+        glyph.setAttribute("transform", `translate(${Math.cos(radians) * dx + Math.sin(radians) * dy - cx} ${-Math.sin(radians) * dx + Math.cos(radians) * dy - cy})`);
+        marks.setAttribute("transform", transform);
+      }
       marks.style.opacity = String(1 - smooth(0.015, 0.17, p));
       const wasChoosing = choosing;
       choosing = interactive && !isStatic && p < .04;
@@ -234,7 +242,8 @@ export default function GlyphPortal({
       choices.inert = !choosing;
       section.dataset.gpChoosing = String(choosing);
       // Drop the clip only after the camera has already filled the viewport with ink.
-      field.style.clipPath = t >= 1 ? "none" : `url(#${clipId})`;
+      const clipPath = t >= 1 ? "none" : `url("#${clipId}")`;
+      if (field.style.clipPath !== clipPath) field.style.clipPath = clipPath;
       section.style.setProperty("--gp-caption", String(1 - smooth(0.01, 0.16, p)));
       section.style.setProperty("--gp-reveal", String(isStatic ? 1 : smooth(0.78, 0.9, p)));
       section.style.setProperty("--gp-field-scale", String(1 + .16 * smooth(0, .82, p)));
@@ -246,11 +255,14 @@ export default function GlyphPortal({
 
     const layout = () => {
       if (!section.clientWidth) return;
-      W = pin.clientWidth;
+      const width = pin.clientWidth;
       // A 100svh probe keeps browser chrome from continually changing the scroll distance.
       const smallViewport = section.querySelector<HTMLElement>("[data-gp-viewport]")!.offsetHeight;
       const viewportHeight = Math.max(1, Math.min(root?.clientHeight ?? smallViewport, smallViewport));
-      H = motion.matches ? Math.min(viewportHeight * 0.75, 480) : viewportHeight;
+      const height = motion.matches ? Math.min(viewportHeight * 0.75, 480) : viewportHeight;
+      // Mobile browser chrome can resize without changing the stable svh geometry.
+      if (!fontDirty && width === W && height === H) return;
+      W = width; H = height;
       section.style.setProperty("--gp-height", `${H}px`);
       travel = H * length;
       art.setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -272,21 +284,19 @@ export default function GlyphPortal({
       section.style.setProperty("--gp-word-top", `${H * .46 - bounds.height * startScale / 2}px`);
       section.style.setProperty("--gp-word-bottom", `${H * .46 + bounds.height * startScale / 2}px`);
       section.dataset.gpReady = "true";
-      section.dataset.gpMotion = !motion.matches && browserFrameSeen && !stalled && target ? "on" : "off";
-
     };
 
     const frame = (time?: number) => {
       raf = 0;
       if (disposed) return;
       if (time !== undefined && !browserFrameSeen) {
-        browserFrameSeen = true; stalled ||= performance.now() - mountedAt > 2500; dirty = true;
+        browserFrameSeen = true;
       }
       if (dirty) { dirty = false; layout(); }
       if (ready) paint(position());
     };
-    const schedule = () => { if (!raf && active) raf = requestAnimationFrame(frame); };
-    const resize = () => { cancelAnimationFrame(raf); dirty = true; frame(); };
+    const schedule = () => { if (!disposed && !raf && active) raf = requestAnimationFrame(frame); };
+    const resize = () => { dirty = true; schedule(); };
     const scroll = () => schedule();
     const choose = (event: Event) => {
       if (!choosing || position() >= .04) return;
@@ -328,7 +338,7 @@ export default function GlyphPortal({
     motion.addEventListener("change", resize);
     frame();
     // WebKit can withhold frames, timers and scroll events behind an initial hung font.
-    // Begin in reading flow. Enable motion only when the browser starts rendering promptly.
+    // Begin in reading flow; enable motion when the browser starts rendering.
     schedule();
     return () => {
       disposed = true;

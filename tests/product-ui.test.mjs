@@ -22,7 +22,8 @@ const state = await import('../lib/billing-state.ts');
 const imports = await import('../lib/member-import.ts');
 const require = createRequire(import.meta.url);
 const glyphModule = { exports: {} };
-vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../components/ui/glyph-portal.tsx', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: glyphModule.exports, require, React });
+const glyphSource = ts.transpileModule(readFileSync(new URL('../components/ui/glyph-portal.tsx', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 } }).outputText;
+vm.runInNewContext(glyphSource, { exports: glyphModule.exports, require, React });
 const source = ts.transpileModule(`${readFileSync(new URL('../app/apt-app.tsx', import.meta.url), 'utf8')}\nexport { MemberRecordsTable, ManagementDashboard, MemberManagementDetail, MemberImportPanel, ApplicationReviewDetail, HeroRotatingStatement };`, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 } }).outputText;
 
 // Render and invoke the shipped components and handlers. Network is always local fixture data.
@@ -168,6 +169,95 @@ test('the closing portal server-renders the real invitation and a direct entry l
   assert.match(html, /Entrada por indicação/);
   assert.match(html, /href="\/requerimento"[^>]*>Solicitar entrada/);
   assert.doesNotMatch(html, /https:\/\/cdn\.21st\.dev|Loading type|SUBLIME/);
+});
+
+// Exercise the actual browser effect with controllable viewport, observer and RAF events.
+function glyph({ fontsReady = true, reducedMotion = false, canvasReady = true } = {}) {
+  const effects = [], cleanups = [], observers = [], frames = new Map(), progress = [];
+  const counts = { layouts: 0, paints: 0 };
+  let width = 390, height = 600, top = 0, time = 0, nextFrame = 0;
+  const eventTarget = () => {
+    const listeners = new Map();
+    return { listeners, addEventListener: (name, callback) => listeners.set(name, callback), removeEventListener: name => listeners.delete(name), emit: name => listeners.get(name)?.() };
+  };
+  const element = () => ({ ...eventTarget(), dataset: {}, style: { setProperty() {} }, setAttribute() {}, removeAttribute() {} });
+  const nodes = Object.fromEntries(['pin', 'field', 'art', 'clip', 'glyph', 'marks', 'choices', 'select', 'viewport'].map(name => [name, element()]));
+  nodes.art.setAttribute = () => counts.layouts++;
+  nodes.clip.setAttribute = () => counts.paints++;
+  nodes.marks.querySelector = () => element();
+  nodes.choices.querySelectorAll = () => [];
+  nodes.choices.contains = () => false;
+  nodes.select.value = ''; nodes.select.options = [];
+  Object.defineProperty(nodes.pin, 'clientWidth', { get: () => width });
+  Object.defineProperty(nodes.viewport, 'offsetHeight', { get: () => height });
+  const section = { ...element(), parentElement: null, get clientWidth() { return width; }, getBoundingClientRect: () => ({ top }), querySelector: selector => nodes[selector.startsWith('#') ? 'clip' : selector.match(/data-gp-(.+)\]/)[1]] };
+  const motion = { ...eventTarget(), matches: reducedMotion };
+  const window = { ...eventTarget(), visualViewport: eventTarget(), matchMedia: () => motion };
+  const canvas = { width: 1, height: 1, getContext: () => canvasReady ? context : null };
+  const context = { canvas, measureText: text => ({ width: text.length * 30, actualBoundingBoxLeft: 0, actualBoundingBoxRight: text.length * 30, actualBoundingBoxAscent: 30, actualBoundingBoxDescent: 0 }), fillText() {}, getImageData: () => ({ data: new Uint8ClampedArray(canvas.width * canvas.height * 4).fill(255) }) };
+  class Observer {
+    constructor(callback) { this.callback = callback; observers.push(this); }
+    observe() {}
+    disconnect() { this.disconnected = true; }
+  }
+  const hooks = { ...React, useId: () => 'glyph-fixture', useRef: current => ({ current }), useLayoutEffect: effect => effects.push(effect) };
+  const module = { exports: {} };
+  vm.runInNewContext(glyphSource, { exports: module.exports, require: name => name === 'react' ? hooks : require(name), React: hooks,
+    window, document: { activeElement: null, fonts: { check: () => fontsReady }, createElement: () => canvas },
+    getComputedStyle: () => ({ fontFamily: 'Georgia, serif', fontWeight: '700' }), performance: { now: () => time }, ResizeObserver: Observer, IntersectionObserver: Observer,
+    requestAnimationFrame: callback => { const id = ++nextFrame; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id),
+  });
+  const tree = module.exports.default({ word: 'JOGAR', interactive: false, fontFamily: 'Georgia, serif', fontWeight: 700, scrollLength: 1, onProgress: value => progress.push(value) });
+  tree.props.ref.current = section;
+  for (const effect of effects) { const cleanup = effect(); if (cleanup) cleanups.push(cleanup); }
+  return { section, nodes, motion, window, observers, frames, counts, progress,
+    geometry(next) { width = next.width ?? width; height = next.height ?? height; top = next.top ?? top; },
+    frame(at = time + 16) { time = at; const pending = [...frames]; frames.clear(); for (const [, callback] of pending) callback(time); },
+    unmount() { for (const cleanup of cleanups.reverse()) cleanup(); },
+  };
+}
+
+test('Glyph coalesces mobile toolbar resize and scroll, recalculates only changed geometry, and catches up after visibility', () => {
+  const ui = glyph(); ui.frame();
+  const layouts = ui.counts.layouts, paints = ui.counts.paints;
+  for (let i = 0; i < 20; i++) { ui.window.visualViewport.emit('resize'); ui.window.emit('resize'); ui.observers[0].callback(); }
+  ui.geometry({ top: -300 }); ui.window.emit('scroll'); ui.window.emit('scroll');
+  assert.equal(ui.frames.size, 1); assert.equal(ui.counts.layouts, layouts); assert.equal(ui.counts.paints, paints);
+  ui.frame(); assert.equal(ui.counts.layouts, layouts); assert.equal(ui.progress.at(-1), 0.5);
+  const painted = ui.counts.paints;
+  for (let i = 0; i < 20; i++) ui.window.emit('scroll');
+  ui.frame(); assert.equal(ui.counts.paints, painted);
+  ui.geometry({ width: 430, height: 700 }); ui.window.emit('resize'); ui.window.visualViewport.emit('resize');
+  ui.frame(); assert.equal(ui.counts.layouts, layouts + 1); assert.equal(ui.progress.at(-1), 300 / 700);
+  const clipped = ui.counts.paints;
+  ui.geometry({ top: -630 }); ui.window.emit('scroll'); ui.frame();
+  assert.equal(ui.nodes.field.style.clipPath, 'none'); assert.equal(ui.counts.paints, clipped); assert.equal(ui.nodes.marks.style.opacity, '0');
+  ui.observers[1].callback([{ isIntersecting: false }]); ui.geometry({ top: -700 }); ui.window.emit('scroll');
+  assert.equal(ui.frames.size, 0);
+  ui.observers[1].callback([{ isIntersecting: true }]); ui.frame(); assert.equal(ui.progress.at(-1), 1);
+  ui.geometry({ top: -70 }); ui.window.emit('scroll'); ui.frame(); assert.equal(ui.progress.at(-1), 0.1);
+  assert.match(ui.nodes.field.style.clipPath, /^url\("#gp-/); assert.equal(ui.counts.paints, clipped + 1);
+  ui.window.emit('scroll'); ui.unmount();
+  assert.equal(ui.frames.size, 0); assert.equal(ui.window.listeners.size, 0); assert.equal(ui.window.visualViewport.listeners.size, 0); assert.equal(ui.motion.listeners.size, 0);
+  assert.ok(ui.observers.every(observer => observer.disconnected));
+  ui.observers[0].callback(); ui.observers[1].callback([{ isIntersecting: true }]); assert.equal(ui.frames.size, 0);
+});
+
+test('Glyph resumes after a late first RAF while retaining reduced motion, pending font and Canvas fallbacks', () => {
+  const ui = glyph();
+  assert.equal(ui.section.dataset.gpMotion, 'off');
+  ui.frame(3000); assert.equal(ui.section.dataset.gpMotion, 'on');
+  ui.geometry({ top: -300 }); ui.window.emit('scroll'); ui.frame(); assert.equal(ui.progress.at(-1), 0.5);
+  ui.motion.matches = true; ui.motion.emit('change'); ui.frame();
+  assert.equal(ui.section.dataset.gpMotion, 'off'); assert.equal(ui.progress.at(-1), 0);
+  ui.motion.matches = false; ui.motion.emit('change'); ui.frame();
+  assert.equal(ui.section.dataset.gpMotion, 'on'); assert.equal(ui.progress.at(-1), 0.5); ui.unmount();
+  for (const options of [{ fontsReady: false }, { reducedMotion: true }, { canvasReady: false }]) {
+    const fallback = glyph(options); fallback.frame(3000);
+    assert.equal(fallback.section.dataset.gpMotion, 'off');
+    if (options.canvasReady === false) assert.equal(fallback.section.dataset.gpReady, undefined);
+    fallback.unmount();
+  }
 });
 
 test('login accepts local destinations and rejects backslash, protocol-relative and control-character redirects', async () => {

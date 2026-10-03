@@ -369,17 +369,16 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
     @media (max-width: 63.999rem) {
       .apt-spread { min-height: 130svh; }
       .apt-spread__stage { height: min(72svh,30rem); top: calc((100svh - min(72svh,30rem)) / 2); }
-      .apt-spread__copy { inset-inline: 30%; }
-      .apt-spread__copy h2 { font-size: clamp(1.5rem,6cqw,3.25rem); }
-      .apt-spread__copy > p:last-child { font-size: 1rem; line-height: 1.45; }
-      .apt-spread__photos figure { width: min(28cqw,26cqh); height: min(38cqw,28cqh); --apt-y: -34cqh; }
-      .apt-spread__photos figure:nth-child(-n+3) { --apt-x: -35cqw; }
-      .apt-spread__photos figure:nth-child(2) { --apt-y: 0cqh; }
-      .apt-spread__photos figure:nth-child(3) { --apt-y: 34cqh; }
-      .apt-spread__photos figure:nth-child(n+4) { --apt-x: 35cqw; }
-      .apt-spread__photos figure:nth-child(4) { --apt-y: -34cqh; }
-      .apt-spread__photos figure:nth-child(5) { --apt-y: 0cqh; }
-      .apt-spread__photos figure:nth-child(6) { --apt-y: 34cqh; }
+      .apt-spread__copy { inset-inline: 23%; }
+      .apt-spread__copy h2 { font-size: clamp(1.75rem,8.5cqw,3.25rem); }
+      .apt-spread__copy > p:last-child { font-size: 0.9375rem; line-height: 1.45; }
+      .apt-spread__photos figure { width: var(--apt-photo-width); height: var(--apt-photo-height); }
+      .apt-spread__photos figure:nth-child(1) { --apt-x: -34cqw; --apt-y: -36cqh; --apt-open-turn: -5deg; --apt-photo-width: min(22cqw,23cqh); --apt-photo-height: min(30cqw,20cqh); }
+      .apt-spread__photos figure:nth-child(2) { --apt-x: -47cqw; --apt-y: -1cqh; --apt-open-turn: 3deg; --apt-photo-width: min(29cqw,28cqh); --apt-photo-height: min(42cqw,32cqh); }
+      .apt-spread__photos figure:nth-child(3) { --apt-x: -29cqw; --apt-y: 40cqh; --apt-open-turn: -7deg; --apt-photo-width: min(27cqw,30cqh); --apt-photo-height: min(27cqw,19cqh); }
+      .apt-spread__photos figure:nth-child(4) { --apt-x: 39cqw; --apt-y: -36cqh; --apt-open-turn: 5deg; --apt-photo-width: min(27cqw,27cqh); --apt-photo-height: min(37cqw,27cqh); }
+      .apt-spread__photos figure:nth-child(5) { --apt-x: 48cqw; --apt-y: 10cqh; --apt-open-turn: -4deg; --apt-photo-width: min(28cqw,28cqh); --apt-photo-height: min(29cqw,21cqh); }
+      .apt-spread__photos figure:nth-child(6) { --apt-x: 30cqw; --apt-y: 40cqh; --apt-open-turn: 6deg; --apt-photo-width: min(22cqw,25cqh); --apt-photo-height: min(38cqw,29cqh); }
       @media (hover: hover) and (pointer: fine) {
         .apt-spread__photo-drift { translate: clamp(-0.6cqw,calc(var(--apt-pointer-x,0px) * var(--apt-depth,1)),0.6cqw) clamp(-0.6cqh,calc(var(--apt-pointer-y,0px) * var(--apt-depth,1)),0.6cqh); }
       }
@@ -388,7 +387,7 @@ button:not(:disabled):active, a:active { transform: scale(0.985); }
 }
 @keyframes apt-stack-spread {
   from, 12% { transform: translate(calc(-50% + var(--apt-pile)),-50%) rotate(var(--apt-turn)) scale(0.95); }
-  90%, to { transform: translate(calc(-50% + var(--apt-x)),calc(-50% + var(--apt-y))) rotate(0deg) scale(1); }
+  90%, to { transform: translate(calc(-50% + var(--apt-x)),calc(-50% + var(--apt-y))) rotate(var(--apt-open-turn,0deg)) scale(1); }
 }
 @keyframes apt-stack-copy { from, 35% { opacity: 0; scale: 0.85; } 63%, to { opacity: 1; } 90%, to { scale: 1; } }
 @keyframes apt-ritual-drift { from { translate: 0 0.75rem; } to { translate: 0 -0.75rem; } }

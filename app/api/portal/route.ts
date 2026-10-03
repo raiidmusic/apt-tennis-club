@@ -1,9 +1,11 @@
 import { getSession } from "../../../lib/auth";
 import { asaasRequest } from "../../../lib/asaas";
 import { sendManagementEmail, sendMemberEmail } from "../../../lib/apt-email";
+import { financialPayment, memberFinancialView, type BillingPaymentRow, type BillingSubscriptionRow } from "../../../lib/billing-view";
+import { isProtectedMembership, saoPauloDate } from "../../../lib/billing-state";
 import { reconcileMemberBilling } from "../../../lib/billing-reconciliation";
 import { requireTrustedOrigin } from "../../../lib/request-security";
-import { supabaseAdmin, SupabaseRequestError } from "../../../lib/supabase-server";
+import { supabaseAdmin, supabaseAll, SupabaseRequestError } from "../../../lib/supabase-server";
 
 type MemberRow = {
   id: string; name: string; email: string; whatsapp: string; cpf_last4: string;
@@ -17,37 +19,28 @@ const clubLinks = {
 };
 
 async function portalPayload(memberId: string) {
-    const [members, subscriptions, payments] = await Promise.all([
-      supabaseAdmin<MemberRow[]>("members", {
-        query: { select: "id,name,email,whatsapp,cpf_last4,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at", id: `eq.${memberId}`, limit: "1" },
-      }),
-      supabaseAdmin<Array<Record<string, unknown>>>("subscriptions", {
-        query: { select: "id,status,amount_cents,next_due_date,current_period_end,cancel_at_period_end,asaas_subscription_id,asaas_checkout_url", member_id: `eq.${memberId}`, limit: "1" },
-      }),
-      supabaseAdmin<Array<Record<string, unknown>>>("payments", {
-        query: { select: "id,status,value_cents,due_date,paid_at,invoice_url,created_at", member_id: `eq.${memberId}`, order: "created_at.desc", limit: "24" },
-      }),
-    ]);
-    const member = members[0];
-    if (!member) throw new SupabaseRequestError("Cadastro não encontrado.", 404);
-    const subscription = subscriptions[0] || null;
-    const currentPeriodEnd = typeof subscription?.current_period_end === "string" ? subscription.current_period_end : null;
-    const paidAccessRemains = member.participation_status === "cancellation_requested" &&
-      Boolean(currentPeriodEnd && currentPeriodEnd >= new Date().toISOString().slice(0, 10));
-    const accessActive = member.participation_status === "active" || member.participation_status === "courtesy" || paidAccessRemains;
-    return {
-      member: {
-        id: member.id, name: member.name, email: member.email, whatsapp: member.whatsapp,
-        cpfMasked: `***.***.***-${member.cpf_last4}`, classLevel: member.class_level,
-        participationStatus: member.participation_status,
-        twinnerUrl: accessActive ? member.twinner_url || clubLinks.tweenerUrl : null,
-        whatsappCommunityUrl: accessActive ? member.whatsapp_community_url || clubLinks.whatsappCommunityUrl : null,
-        accessActive,
-        joinedAt: member.joined_at,
-      },
-      subscription,
-      payments,
-    };
+  const [members, subscriptions, payments] = await Promise.all([
+    supabaseAdmin<MemberRow[]>("members", { query: { select: "id,name,email,whatsapp,cpf_last4,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at", id: `eq.${memberId}`, limit: "1" } }),
+    supabaseAdmin<Array<BillingSubscriptionRow & { id: string }>>("subscriptions", { query: { select: "id,status,amount_cents,next_due_date,current_period_end,cancel_at_period_end,asaas_customer_id,asaas_subscription_id,asaas_checkout_id,asaas_checkout_url,asaas_checkout_expires_at", member_id: `eq.${memberId}`, limit: "1" } }),
+    supabaseAll<BillingPaymentRow>("payments", { query: { select: "id,member_id,asaas_payment_id,status,value_cents,due_date,paid_at,invoice_url,created_at,payload", member_id: `eq.${memberId}`, order: "created_at.desc,id.desc" } }),
+  ]);
+  const member = members[0];
+  if (!member) throw new SupabaseRequestError("Cadastro não encontrado.", 404);
+  const subscription = subscriptions[0] || null;
+  const financial = memberFinancialView(member.participation_status, subscription, payments, saoPauloDate());
+  const accessActive = member.participation_status === "courtesy" || (!["inactive", "cancelled"].includes(member.participation_status) && financial.covered);
+  return {
+    member: {
+      id: member.id, name: member.name, email: member.email, whatsapp: member.whatsapp,
+      cpfMasked: member.cpf_last4 ? `***.***.***-${member.cpf_last4}` : "Ainda não confirmado", classLevel: member.class_level,
+      participationStatus: financial.participationStatus,
+      twinnerUrl: accessActive ? member.twinner_url || clubLinks.tweenerUrl : null,
+      whatsappCommunityUrl: accessActive ? member.whatsapp_community_url || clubLinks.whatsappCommunityUrl : null,
+      accessActive, joinedAt: member.joined_at,
+    },
+    subscription: subscription ? { status: financial.subscriptionStatus, amount_cents: subscription.amount_cents, next_due_date: financial.nextInvoiceDueDate, current_period_end: financial.paidThrough, cancel_at_period_end: subscription.cancel_at_period_end, asaas_checkout_url: financial.checkoutAvailable ? subscription.asaas_checkout_url : null } : null,
+    financial, payments: payments.map(financialPayment),
+  };
 }
 
 export async function GET(request: Request) {
@@ -94,13 +87,11 @@ export async function PATCH(request: Request) {
     }
 
     if (payload.action === "request_card_change") {
-      const subscriptions = await supabaseAdmin<Array<{ asaas_subscription_id: string | null; asaas_checkout_url: string | null; status: string }>>("subscriptions", {
-        query: { select: "asaas_subscription_id,asaas_checkout_url,status", member_id: `eq.${session.memberId}`, limit: "1" },
-      });
-      const subscription = subscriptions[0];
-      if (!subscription) return Response.json({ error: "Assinatura não encontrada." }, { status: 404 });
-      if (!subscription.asaas_subscription_id && subscription.asaas_checkout_url) {
-        return Response.json({ requested: false, checkoutUrl: subscription.asaas_checkout_url });
+      const current = await portalPayload(session.memberId);
+      if (current.financial.billingMethod === "pix") return Response.json({ error: "Sua participação usa Pix mensal manual. Peça à gestão uma nova adesão ao cartão." }, { status: 409 });
+      if (!current.financial.recurring) {
+        if (current.financial.checkoutAvailable && current.subscription?.asaas_checkout_url) return Response.json({ requested: false, checkoutUrl: current.subscription.asaas_checkout_url });
+        return Response.json({ error: "Não há cartão recorrente comprovado nem checkout válido para este cadastro." }, { status: 409 });
       }
       const message = "Solicitação do membro: trocar o cartão da assinatura por um novo checkout hospedado do Asaas.";
       await Promise.all([
@@ -118,6 +109,8 @@ export async function PATCH(request: Request) {
     }
 
     if (payload.action !== "request_cancellation") return Response.json({ error: "Ação inválida." }, { status: 400 });
+    const current = await portalPayload(session.memberId);
+    if (!current.financial.recurring) return Response.json({ error: "Não há uma renovação de cartão comprovada para cancelar." }, { status: 409 });
     const subscriptions = await supabaseAdmin<Array<{ id: string; asaas_subscription_id: string | null; status: string; current_period_end: string | null }>>("subscriptions", {
       query: { select: "id,asaas_subscription_id,status,current_period_end", member_id: `eq.${session.memberId}`, limit: "1" },
     });
@@ -135,21 +128,31 @@ export async function PATCH(request: Request) {
       }
     }
 
-    const accessUntil = subscription.current_period_end;
-    const accessRemains = Boolean(accessUntil && accessUntil >= new Date().toISOString().slice(0, 10));
-    await Promise.all([
-      supabaseAdmin("members", {
-        method: "PATCH", query: { id: `eq.${session.memberId}` },
-        body: { participation_status: accessRemains ? "cancellation_requested" : "cancelled", updated_at: new Date().toISOString() },
-      }),
-      supabaseAdmin("subscriptions", {
-        method: "PATCH", query: { member_id: `eq.${session.memberId}` },
-        body: { status: "cancelled", cancel_at_period_end: false, updated_at: new Date().toISOString() },
-      }),
-      supabaseAdmin("audit_logs", {
-        method: "POST", body: { actor: session.email, action: "membership.cancelled", entity_type: "member", entity_id: session.memberId },
-      }),
+    const expectedMemberStatus = current.financial.storedParticipationStatus;
+    const [memberRows, subscriptionRows] = await Promise.all([
+      supabaseAdmin<Array<{ participation_status: string }>>("members", { query: { select: "participation_status", id: `eq.${session.memberId}`, limit: "1" } }),
+      supabaseAdmin<Array<{ status: string; asaas_subscription_id: string | null }>>("subscriptions", { query: { select: "status,asaas_subscription_id", id: `eq.${subscription.id}`, member_id: `eq.${session.memberId}`, limit: "1" } }),
     ]);
+    if (memberRows[0]?.participation_status !== expectedMemberStatus || subscriptionRows[0]?.status !== subscription.status || subscriptionRows[0]?.asaas_subscription_id !== subscription.asaas_subscription_id) throw new SupabaseRequestError("A gestão alterou este cadastro durante o cancelamento. Atualize para conferir o resultado no Asaas.", 409);
+    const refreshed = await portalPayload(session.memberId);
+    let accessUntil = refreshed.financial.paidThrough;
+    let accessRemains = refreshed.member.accessActive && refreshed.financial.covered;
+    const memberWrite = await supabaseAdmin<Array<{ id: string }>>("members", {
+      method: "PATCH", prefer: "return=representation", query: { id: `eq.${session.memberId}`, participation_status: `eq.${expectedMemberStatus}` },
+      body: { participation_status: isProtectedMembership(expectedMemberStatus) ? expectedMemberStatus : accessRemains ? "cancellation_requested" : "cancelled", updated_at: new Date().toISOString() },
+    });
+    if (memberWrite.length !== 1) throw new SupabaseRequestError("A participação mudou durante o cancelamento. Atualize para conferir.", 409);
+    const subscriptionWrite = await supabaseAdmin<Array<{ id: string }>>("subscriptions", {
+      method: "PATCH", prefer: "return=representation", query: { id: `eq.${subscription.id}`, member_id: `eq.${session.memberId}`, status: `eq.${subscription.status}`, asaas_subscription_id: subscription.asaas_subscription_id ? `eq.${subscription.asaas_subscription_id}` : "is.null" },
+      body: { status: "cancelled", cancel_at_period_end: false, current_period_end: accessUntil, updated_at: new Date().toISOString() },
+    });
+    if (subscriptionWrite.length !== 1) throw new SupabaseRequestError("A assinatura mudou durante o cancelamento. Atualize para conferir.", 409);
+    await supabaseAdmin("audit_logs", {
+      method: "POST", body: { actor: session.email, action: "membership.cancelled", entity_type: "member", entity_id: session.memberId },
+    });
+    const completed = await portalPayload(session.memberId);
+    accessUntil = completed.financial.paidThrough;
+    accessRemains = completed.member.accessActive && completed.financial.covered;
     await Promise.all([
       sendMemberEmail({
         to: session.email,

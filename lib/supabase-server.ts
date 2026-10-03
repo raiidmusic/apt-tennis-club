@@ -41,11 +41,13 @@ function supabaseSecretHeaders(secretKey: string) {
 }
 
 type AdminRequestOptions = {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "HEAD" | "POST" | "PATCH" | "DELETE";
   query?: Record<string, string>;
   body?: unknown;
   prefer?: string;
   single?: boolean;
+  signal?: AbortSignal;
+  count?: boolean;
 };
 
 export async function supabaseAdmin<T>(
@@ -60,12 +62,18 @@ export async function supabaseAdmin<T>(
       ...supabaseSecretHeaders(secretKey),
       Accept: options.single ? "application/vnd.pgrst.object+json" : "application/json",
       "Content-Type": "application/json",
-      ...(options.prefer ? { Prefer: options.prefer } : {}),
+      ...((options.prefer || options.count) ? { Prefer: [options.prefer, options.count ? "count=exact" : ""].filter(Boolean).join(",") } : {}),
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     cache: "no-store",
+    signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
   });
 
+  if (options.count && response.ok) {
+    const count = response.headers.get("content-range")?.split("/")[1];
+    if (!count || !/^\d+$/.test(count)) throw new SupabaseRequestError("Contagem operacional indisponível.", 502);
+    return Number(count) as T;
+  }
   if (response.status === 204) return undefined as T;
   const text = await response.text();
   const payload = text ? JSON.parse(text) : null;
@@ -77,6 +85,21 @@ export async function supabaseAdmin<T>(
     );
   }
   return payload as T;
+}
+
+export async function supabaseAll<T>(resource: string, options: AdminRequestOptions = {}) {
+  const rows: T[] = [];
+  const signal = options.signal || AbortSignal.timeout(45_000);
+  // ponytail: 10,000 rows per screen; fail explicitly before returning incomplete financial totals.
+  const total = await supabaseAdmin<number>(resource, { ...options, method: "HEAD", count: true, signal });
+  if (total > 10_000) throw new SupabaseRequestError("O histórico excede 10.000 registros. A gestão precisa revisar o recorte antes de calcular os totais.", 409);
+  for (let offset = 0; offset < total;) {
+    const page = await supabaseAdmin<T[]>(resource, { ...options, query: { ...options.query, order: options.query?.order || "id.asc", limit: "500", offset: String(offset) }, signal });
+    if (!Array.isArray(page) || !page.length || rows.length + page.length > total) throw new SupabaseRequestError("Histórico financeiro mudou ou está incompleto. Atualize a consulta.", 409);
+    rows.push(...page);
+    offset += page.length;
+  }
+  return rows;
 }
 
 export async function createAuthUser(input: {

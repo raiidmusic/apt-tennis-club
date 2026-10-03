@@ -32,15 +32,15 @@ test("keeps manual Pix ownership explicit, provider-backed and audited", async (
   assert.match(members, /payment\.billingType !== "PIX"/);
   assert.match(members, /reconcileMemberBilling\(member\.id, \{ paymentId: payload\.paymentId \}\)/);
   assert.match(members, /payment\.pix_linked_by_operator/);
-  assert.match(reconciliation, /oneOffPaymentExpired/);
-  assert.match(reconciliation, /PIX_MONTHLY_DUE/);
+  assert.match(reconciliation, /billingDecision/);
+  assert.match(reconciliation, /decision\.notice/);
   assert.match(reconciliation, /latest\?\.value \? Math\.round\(latest\.value \* 100\)/);
   assert.match(client, /O APT não escolhe por semelhança de nome/);
   assert.match(client, /Confira nome, valor, data e final do CPF/);
   assert.match(client, /Esta é uma mensagem automática do APT Tennis Club/);
   assert.match(client, /Você deseja continuar participando do ranking do APT Tennis Club/);
   assert.match(client, /billingMethod/);
-  assert.match(reconciliation, /formatToParts/);
+  assert.match(reconciliation, /saoPauloDate/);
 });
 
 test("adds athletes through the canonical invite path and guards permanent deletion", async () => {

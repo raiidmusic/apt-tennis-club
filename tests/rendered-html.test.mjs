@@ -130,7 +130,7 @@ test("keeps paid access after recurring billing is cancelled", async () => {
   ]);
   assert.match(portalRoute, /current_period_end/);
   assert.match(portalRoute, /accessActive/);
-  assert.match(portalRoute, /participation_status: accessRemains \? "cancellation_requested" : "cancelled"/);
+  assert.match(portalRoute, /participation_status: isProtectedMembership\(expectedMemberStatus\) \? expectedMemberStatus : accessRemains \? "cancellation_requested" : "cancelled"/);
   assert.match(client, /if \(cancelling\) return/);
   assert.match(client, /Cancelando no Asaas/);
 });
@@ -153,7 +153,7 @@ test("reconciles billing without collecting card data in the APT portal", async 
   const [portalRoute, reconciliation, webhook, client] = await Promise.all([
     readFile(new URL("../app/api/portal/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/billing-reconciliation.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/webhooks/asaas/route.ts", import.meta.url), "utf8"),
+    Promise.all([readFile(new URL("../app/api/webhooks/asaas/route.ts", import.meta.url), "utf8"), readFile(new URL("../lib/asaas-events.ts", import.meta.url), "utf8")]).then((parts) => parts.join("\n")),
     readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(portalRoute, /refresh_billing/);
@@ -175,15 +175,16 @@ test("reconciles billing without collecting card data in the APT portal", async 
   assert.match(webhook, /resolveMemberId/);
   assert.match(webhook, /payment\?\.checkoutSession/);
   assert.match(webhook, /payment\?\.customer/);
-  assert.match(webhook, /asaas_customer_id: payload\.checkout\.customer/);
+  assert.match(webhook, /claimBillingCustomer\(memberId, verifiedSubscription, payload\.checkout\.customer, signal\)/);
   assert.match(webhook, /sha256\(`\$\{cpfSecret\}:\$\{customerCpf\}`\)/);
   assert.match(webhook, /cpf_hash: `eq\.\$\{cpfHash\}`/);
   assert.match(webhook, /subscription\.amount_cents !== Math\.round\(payment\.value \* 100\)/);
   assert.doesNotMatch(webhook, /normalizedName|customer\.email/);
   assert.match(webhook, /after\(async \(\) =>/);
-  assert.match(webhook, /processPendingEvents/);
+  assert.match(webhook, /processAsaasEvent/);
   assert.match(webhook, /received: true, queued: true/);
-  assert.match(webhook, /participation_status: "active"/);
+  assert.doesNotMatch(webhook, /participation_status: "active"/);
+  assert.match(webhook, /reconcileMemberBilling\(memberId, \{ checkoutId, signal \}\)/);
   assert.match(reconciliation, /subscriptions\/\$\{encodeURIComponent\(providerSubscription\.id\)\}\/payments/);
   assert.doesNotMatch(portalRoute, /creditCardHolderInfo|creditCardToken|\bcvv\b/i);
   assert.doesNotMatch(client, /<input[^>]+(?:cardNumber|cvv|validade|holderName)/i);
@@ -269,7 +270,7 @@ test("protects browser writes and sensitive API responses at the application bou
   const [security, nextConfig, webhook, ...browserWriteRoutes] = await Promise.all([
     readFile(new URL("../lib/request-security.ts", import.meta.url), "utf8"),
     readFile(new URL("../next.config.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/webhooks/asaas/route.ts", import.meta.url), "utf8"),
+    Promise.all([readFile(new URL("../app/api/webhooks/asaas/route.ts", import.meta.url), "utf8"), readFile(new URL("../lib/asaas-events.ts", import.meta.url), "utf8")]).then((parts) => parts.join("\n")),
     ...[
       "../app/api/requerimentos/route.ts", "../app/api/cadastros/route.ts", "../app/api/portal/route.ts",
       "../app/api/membros/route.ts", "../app/api/membros/importacao/route.ts", "../app/api/auth/login/route.ts",

@@ -5,6 +5,9 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "re
 import { ClipboardList, CreditCard, Home, LayoutDashboard, LogOut, Trophy, UserRound, UsersRound } from "lucide-react";
 import { ProductSidebar } from "@/components/ui/sidebar";
 import { AthleteImportInput, parseAthleteCsv } from "../lib/member-import";
+import { billingCalendarDate, billingMonthKeys, financialMetricRows, type FinancialPayment, type FinancialMetric, type MemberFinancialView } from "../lib/billing-view";
+import { isProtectedMembership, saoPauloDate } from "../lib/billing-state";
+import type { MemberEmailCommunications } from "../lib/email-observability";
 
 type QuestionType = "text" | "email" | "tel" | "number" | "choice" | "multi" | "textarea";
 type AnswerValue = string | string[];
@@ -79,7 +82,8 @@ function readableStatus(status: string, labels: Record<string, string>) {
 }
 
 function paymentStatusLabel(status: string) {
-  if (status.includes("RECEIVED") || status.includes("CONFIRMED")) return "Pago";
+  if (["RECEIVED", "RECEIVED_IN_CASH"].includes(status)) return "Recebido";
+  if (status === "CONFIRMED") return "Confirmado · em liquidação";
   if (status.includes("OVERDUE")) return "Vencido";
   if (status.includes("REFUND")) return "Estornado";
   if (status.includes("CANCEL") || status.includes("DELETE")) return "Cancelado";
@@ -87,11 +91,12 @@ function paymentStatusLabel(status: string) {
 }
 
 function shortDate(value?: string | null) {
-  return value ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`)) : "A definir";
+  const day = billingCalendarDate(value);
+  return day ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${day}T12:00:00`)) : "A definir";
 }
 
 function billingMethodLabel(method?: "pix" | "card" | null) {
-  if (method === "pix") return "Pix";
+  if (method === "pix") return "Pix mensal manual";
   if (method === "card") return "Cartão recorrente";
   return "A definir";
 }
@@ -126,6 +131,10 @@ type MemberRecord = {
   participationStatus: string;
   subscriptionStatus: string;
   billingMethod?: "pix" | "card" | null;
+  financial: MemberFinancialView;
+  billingLastAttemptAt?: string | null; billingLastSuccessAt?: string | null; billingIssue?: string | null; communicationIssue?: boolean;
+  communications?: MemberEmailCommunications;
+  emailConfiguration?: { webhookSecretConfigured: boolean; trackingVerification: string };
   amountCents: number;
   nextDueDate?: string | null;
   currentPeriodEnd?: string | null;
@@ -138,7 +147,7 @@ type MemberRecord = {
   createdAt?: string;
   twinnerUrl?: string | null;
   whatsappCommunityUrl?: string | null;
-  payments?: Array<{ id: string; status: string; value_cents: number; due_date?: string | null; paid_at?: string | null; invoice_url?: string | null; created_at: string }>;
+  payments?: FinancialPayment[];
   notes?: AdminNote[];
   canDelete?: boolean;
   deleteBlockedReason?: string | null;
@@ -151,23 +160,18 @@ type PixPaymentDetails = {
   invoiceUrl?: string | null;
 };
 
-type PixCandidate = { id: string; payerName: string; cpfLast4?: string | null; valueCents: number; paidAt?: string | null };
+type PixCandidate = { id: string; payerName: string; cpfLast4?: string | null; valueCents: number; paidAt?: string | null; identityMatch: "reference" | "customer" | "unverified" };
 
-type ManagementPayment = {
-  id: string;
-  status: string;
-  valueCents: number;
-  paidAt?: string | null;
-  createdAt: string;
-};
+type ManagementPayment = FinancialPayment;
 
 type PortalPayload = {
   member: {
     name: string; email: string; whatsapp: string; cpfMasked: string; classLevel?: string | null;
     participationStatus: string; accessActive: boolean; twinnerUrl?: string | null; whatsappCommunityUrl?: string | null; joinedAt?: string | null;
   };
-  subscription: { status?: string; amount_cents?: number; next_due_date?: string; current_period_end?: string; cancel_at_period_end?: boolean; asaas_checkout_url?: string } | null;
-  payments: Array<{ id: string; status: string; value_cents: number; due_date?: string; paid_at?: string; invoice_url?: string; created_at?: string }>;
+  subscription: { status?: string; amount_cents?: number; next_due_date?: string; current_period_end?: string; cancel_at_period_end?: boolean; asaas_checkout_url?: string | null } | null;
+  financial: MemberFinancialView;
+  payments: FinancialPayment[];
 };
 
 type MemberImportSummary = {
@@ -697,17 +701,17 @@ export function PortalPage() {
   }
   if (loading) return <div className="apt-app"><RouteHeader label="Área do membro" /><main className="access-state"><div className="loading-state"><i /><span>Carregando sua participação…</span></div></main></div>;
   if (authRequired || !data) return <div className="apt-app"><RouteHeader label="Área do membro" /><main className="access-state"><span>Área reservada</span><h1>Entre para ver sua assinatura.</h1><p>Pagamentos, links do clube e dados pessoais ficam protegidos.</p><a className="primary-button" href="/entrar?next=/membros">Entrar na área do membro</a></main></div>;
-  const { member, subscription, payments } = data;
+  const { member, subscription, payments, financial } = data;
   const initials = member.name.split(" ").map((part) => part[0]).slice(0, 2).join("");
   const courtesy = member.participationStatus === "courtesy";
   const nextDue = courtesy ? "Cortesia" : subscription?.next_due_date ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long" }).format(new Date(`${subscription.next_due_date}T12:00:00`)) : "A definir";
   const active = member.accessActive;
-  const amount = ((subscription?.amount_cents || 2290) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  const lastPaid = payments.find((payment) => payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED"));
-  const accessLabel = courtesy ? "Cortesia ativa" : active ? "Mensalidade em dia" : member.participationStatus === "pending_payment" ? "Pagamento pendente" : "Confirmação em andamento";
+  const amount = ((subscription?.amount_cents || 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const lastReceived = financial.lastReceivedAt;
+  const accessLabel = courtesy ? "Cortesia ativa" : member.participationStatus === "inactive" ? "Participação inativa" : member.participationStatus === "cancelled" ? "Participação encerrada" : member.participationStatus === "cancellation_requested" ? active ? "Renovação cancelada · acesso vigente" : "Renovação cancelada" : active ? "Mensalidade em dia" : member.participationStatus === "pending_payment" ? "Pagamento pendente" : "Confirmação em andamento";
   const rankingLink = member.twinnerUrl;
   const communityLink = member.whatsappCommunityUrl;
-  const openLockedRanking = () => showNotice("O acesso ao Tweener é liberado assim que o Asaas confirma a mensalidade.");
+  const openLockedRanking = () => showNotice(isProtectedMembership(member.participationStatus) ? "Fale com a gestão do APT para conferir sua participação e o acesso ao clube." : "O acesso ao Tweener é liberado assim que o Asaas confirma a mensalidade.");
   return <div className="apt-app apt-product-app"><a className="skip-link" href="#main-content">Pular para o conteúdo</a><main className="member-page" id="main-content">
     <ProductSidebar
       ariaLabel="Área do membro"
@@ -726,9 +730,9 @@ export function PortalPage() {
     />
     <section className="member-content">
       {notice && <div className="toast" role="status">{notice}</div>}
-      {tab === "inicio" && <><header className="member-welcome"><div><p>Olá, {member.name.split(" ")[0]}.</p><h1>Seu APT em um só lugar.</h1></div><span className={`status-chip ${active ? "status-chip--ok" : "status-chip--pending"}`}>{accessLabel}</span></header><section className="membership-hero"><div><span>Mensalidade</span><strong>{amount}</strong><small>{courtesy ? "Acesso liberado pela gestão" : `Próxima data: ${nextDue}`}</small></div><div><span>Último pagamento</span><strong>{lastPaid?.paid_at ? shortDate(lastPaid.paid_at.slice(0, 10)) : "Ainda não confirmado"}</strong><small>{billingRefreshing ? "Consultando o Asaas…" : readableStatus(subscription?.status || "pending", subscriptionStatusLabels)}</small></div>{!courtesy && <button className="secondary-button" onClick={refreshBilling} disabled={billingRefreshing}>{billingRefreshing ? "Atualizando…" : "Atualizar situação"}</button>}</section><section className="portal-shortcuts" aria-label="Acessos rápidos"><article><div><span className="shortcut-mark">T</span><div><strong>Ranking no Tweener</strong><small>{active ? "Ranking, jogos e evolução" : "Liberado após confirmação"}</small></div></div>{rankingLink ? <a href={rankingLink} target="_blank" rel="noreferrer">Abrir Tweener <span aria-hidden="true">↗</span></a> : <button type="button" onClick={openLockedRanking}>Ver situação</button>}</article><article><div><span className="shortcut-mark shortcut-mark--whatsapp">W</span><div><strong>Comunidade APT</strong><small>{active ? "Avisos e conversas do clube" : "Liberada com a participação"}</small></div></div>{communityLink ? <a href={communityLink} target="_blank" rel="noreferrer">Abrir WhatsApp <span aria-hidden="true">↗</span></a> : <button type="button" onClick={openLockedRanking}>Ver situação</button>}</article></section><section className="member-list"><header><h2>Últimos movimentos</h2><span>{payments.length} registros</span></header>{payments.slice(0, 3).map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>Mensalidade APT</strong><span>{payment.due_date ? `Vencimento em ${shortDate(payment.due_date)}` : "Cobrança registrada"}</span></div><strong>{paymentStatusLabel(payment.status)}</strong></div>)}{payments.length === 0 && <div className="empty-state"><strong>Aguardando o primeiro retorno do Asaas.</strong><span>Use “Atualizar situação” se você acabou de concluir o checkout.</span></div>}</section></>}
-      {tab === "pagamentos" && <><header className="member-welcome"><div><p>Pagamentos</p><h1>Mensalidade sem surpresa.</h1></div><span className={`status-chip ${active ? "status-chip--ok" : "status-chip--pending"}`}>{accessLabel}</span></header><section className="payment-overview"><div><span>Valor mensal</span><strong>{amount}</strong></div><div><span>Próxima data</span><strong>{nextDue}</strong></div><div><span>Renovação</span><strong>{subscription?.cancel_at_period_end ? "Cancelada" : "Automática"}</strong></div></section><section className="payment-method"><div><span className="card-glyph">••••</span><div><strong>Cartão protegido pelo Asaas</strong><span>APT não recebe número, validade ou CVV.</span></div></div><div className="payment-method__action"><p>{subscription?.asaas_checkout_url && !subscription?.status?.includes("active") ? "Conclua o checkout hospedado para ativar sua recorrência." : "Precisa usar outro cartão? A solicitação entra direto na ficha da gestão."}</p><button className="secondary-button" type="button" onClick={requestCardChange} disabled={cardRequesting}>{cardRequesting ? "Registrando…" : subscription?.asaas_checkout_url && !subscription?.status?.includes("active") ? "Concluir no Asaas" : "Solicitar troca de cartão"}</button></div></section><section className="member-list"><header><h2>Histórico</h2><span>{payments.length} cobranças</span></header>{payments.map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>{(payment.value_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong><span>{payment.due_date ? shortDate(payment.due_date) : "Sem vencimento informado"}</span></div>{payment.invoice_url ? <a href={payment.invoice_url} target="_blank" rel="noreferrer">{paymentStatusLabel(payment.status)} ↗</a> : <strong>{paymentStatusLabel(payment.status)}</strong>}</div>)}{payments.length === 0 && <div className="empty-state"><strong>Nenhuma cobrança registrada.</strong><span>O histórico será preenchido assim que o Asaas confirmar o primeiro evento.</span></div>}</section></>}
-      {tab === "perfil" && <><header className="member-welcome"><div><p>Meu cadastro</p><h1>Seus dados, sob seu controle.</h1></div></header><form className="profile-form" onSubmit={saveProfile}><label className="field-label"><span>Nome completo</span><input name="member-name" value={profileName} minLength={2} maxLength={100} onChange={(event) => setProfileName(event.target.value)} /></label><label className="field-label"><span>WhatsApp com DDD</span><input name="member-whatsapp" type="tel" inputMode="tel" value={profileWhatsapp} minLength={10} maxLength={18} onChange={(event) => setProfileWhatsapp(event.target.value)} /></label><div className="profile-readonly"><div><span>E-mail de acesso</span><strong>{member.email}</strong></div><div><span>Classe</span><strong>{member.classLevel || "A confirmar"}</strong></div><div><span>CPF protegido</span><strong>{member.cpfMasked}</strong></div></div><div className="profile-actions"><button className="primary-button" type="submit" disabled={profileSaving}>{profileSaving ? "Salvando…" : "Salvar alterações"}</button><a className="secondary-button" href="/recuperar-senha">Alterar senha</a><a className="text-button" href="mailto:apttennisexclusive@gmail.com">Falar com o APT</a></div></form><section className="exit-section"><h2>Cancelar renovação</h2><p>Interrompe novas mensalidades. Se houver período já pago, o acesso segue até o final dele.</p>{!exitRequested && <><button className="text-button text-button--danger" onClick={() => setExitOpen((open) => !open)}>{exitOpen ? "Manter renovação" : "Cancelar minha renovação"}</button>{exitOpen && <div className="exit-confirm"><p>Ao confirmar, nenhuma nova mensalidade será criada.</p><button className="danger-button" onClick={requestCancellation} disabled={cancelling}>{cancelling ? "Cancelando no Asaas…" : "Confirmar cancelamento"}</button></div>}</>}{exitRequested && <p className="success-message" role="status">Renovação cancelada. Nenhuma nova cobrança será criada.</p>}</section></>}
+      {tab === "inicio" && <><header className="member-welcome"><div><p>Olá, {member.name.split(" ")[0]}.</p><h1>Seu APT em um só lugar.</h1></div><span className={`status-chip ${active ? "status-chip--ok" : "status-chip--pending"}`}>{accessLabel}</span></header><section className="membership-hero"><div><span>Mensalidade</span><strong>{amount}</strong><small>{courtesy ? "Acesso liberado pela gestão" : `Cobertura paga até: ${shortDate(financial.paidThrough)}`}</small></div><div><span>Último recebimento</span><strong>{lastReceived ? shortDate(lastReceived) : "Sem recebimento registrado"}</strong><small>{billingRefreshing ? "Consultando o Asaas…" : readableStatus(subscription?.status || "pending", subscriptionStatusLabels)}</small></div>{!courtesy && <button className="secondary-button" onClick={refreshBilling} disabled={billingRefreshing}>{billingRefreshing ? "Atualizando…" : "Atualizar situação"}</button>}</section><section className="portal-shortcuts" aria-label="Acessos rápidos"><article><div><span className="shortcut-mark">T</span><div><strong>Ranking no Tweener</strong><small>{active ? "Ranking, jogos e evolução" : isProtectedMembership(member.participationStatus) ? "Acesso definido pela gestão" : "Liberado após confirmação"}</small></div></div>{rankingLink ? <a href={rankingLink} target="_blank" rel="noreferrer">Abrir Tweener <span aria-hidden="true">↗</span></a> : <button type="button" onClick={openLockedRanking}>Ver situação</button>}</article><article><div><span className="shortcut-mark shortcut-mark--whatsapp">W</span><div><strong>Comunidade APT</strong><small>{active ? "Avisos e conversas do clube" : isProtectedMembership(member.participationStatus) ? "Acesso definido pela gestão" : "Liberada com a participação"}</small></div></div>{communityLink ? <a href={communityLink} target="_blank" rel="noreferrer">Abrir WhatsApp <span aria-hidden="true">↗</span></a> : <button type="button" onClick={openLockedRanking}>Ver situação</button>}</article></section><section className="member-list"><header><h2>Últimos movimentos</h2><span>{payments.length} registros</span></header>{payments.slice(0, 3).map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>Mensalidade APT</strong><span>{payment.dueDate ? `Vencimento em ${shortDate(payment.dueDate)}` : "Cobrança registrada"}</span></div><strong>{paymentStatusLabel(payment.status)}</strong></div>)}{payments.length === 0 && <div className="empty-state"><strong>Aguardando o primeiro retorno do Asaas.</strong><span>Use “Atualizar situação” se você acabou de concluir o checkout.</span></div>}</section></>}
+      {tab === "pagamentos" && <><header className="member-welcome"><div><p>Pagamentos</p><h1>Mensalidade sem surpresa.</h1></div><span className={`status-chip ${active ? "status-chip--ok" : "status-chip--pending"}`}>{accessLabel}</span></header><section className="payment-overview"><div><span>Valor mensal</span><strong>{amount}</strong></div><div><span>Próxima data</span><strong>{nextDue}</strong></div><div><span>Renovação</span><strong>{subscription?.cancel_at_period_end || subscription?.status === "cancelled" ? "Cancelada" : financial.recurring ? "Automática no cartão" : financial.billingMethod === "pix" ? "Pix mensal manual" : "A confirmar"}</strong></div></section><section className="payment-method"><div><span className="card-glyph">{financial.billingMethod === "pix" ? "Pix" : "••••"}</span><div><strong>{billingMethodLabel(financial.billingMethod)}</strong><span>{financial.billingMethod === "pix" ? "Cada mensalidade precisa de um novo pagamento. Não há débito automático." : financial.recurring ? "Cartão e renovação permanecem no Asaas. O APT não recebe número, validade ou CVV." : "O método depende de confirmação financeira."}</span></div></div><div className="payment-method__action"><p>{financial.billingMethod === "pix" ? "Use sua cobrança identificada ou fale com a gestão para renovar a participação." : financial.checkoutAvailable ? "Conclua o checkout válido para ativar a recorrência." : financial.recurring ? "Peça à gestão um novo checkout para trocar o cartão." : "Fale com a gestão para conferir a configuração."}</p>{(financial.recurring || (financial.checkoutAvailable && financial.billingMethod !== "pix")) ? <button className="secondary-button" type="button" onClick={requestCardChange} disabled={cardRequesting}>{cardRequesting ? "Registrando…" : financial.checkoutAvailable && !financial.recurring ? "Concluir no Asaas" : "Solicitar troca de cartão"}</button> : <a className="secondary-button" href="mailto:apttennisexclusive@gmail.com">Falar com a gestão</a>}</div></section><section className="member-list"><header><h2>Histórico</h2><span>{payments.length} cobranças</span></header>{payments.map((payment) => <div className="movement-row" key={payment.id}><i className={payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "movement-dot movement-dot--ok" : "movement-dot"} /><div><strong>{(payment.valueCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong><span>{payment.dueDate ? shortDate(payment.dueDate) : "Sem vencimento informado"}</span></div>{payment.invoiceUrl ? <a href={payment.invoiceUrl} target="_blank" rel="noreferrer">{paymentStatusLabel(payment.status)} ↗</a> : <strong>{paymentStatusLabel(payment.status)}</strong>}</div>)}{payments.length === 0 && <div className="empty-state"><strong>Nenhuma cobrança registrada.</strong><span>O histórico será preenchido assim que o Asaas confirmar o primeiro evento.</span></div>}</section></>}
+      {tab === "perfil" && <><header className="member-welcome"><div><p>Meu cadastro</p><h1>Seus dados, sob seu controle.</h1></div></header><form className="profile-form" onSubmit={saveProfile}><label className="field-label"><span>Nome completo</span><input name="member-name" value={profileName} minLength={2} maxLength={100} onChange={(event) => setProfileName(event.target.value)} /></label><label className="field-label"><span>WhatsApp com DDD</span><input name="member-whatsapp" type="tel" inputMode="tel" value={profileWhatsapp} minLength={10} maxLength={18} onChange={(event) => setProfileWhatsapp(event.target.value)} /></label><div className="profile-readonly"><div><span>E-mail de acesso</span><strong>{member.email}</strong></div><div><span>Classe</span><strong>{member.classLevel || "A confirmar"}</strong></div><div><span>CPF protegido</span><strong>{member.cpfMasked}</strong></div></div><div className="profile-actions"><button className="primary-button" type="submit" disabled={profileSaving}>{profileSaving ? "Salvando…" : "Salvar alterações"}</button><a className="secondary-button" href="/recuperar-senha">Alterar senha</a><a className="text-button" href="mailto:apttennisexclusive@gmail.com">Falar com o APT</a></div></form>{financial.recurring && <section className="exit-section"><h2>Cancelar renovação</h2><p>Interrompe novas mensalidades. Se houver período já pago, o acesso segue até o final dele.</p>{!exitRequested && <><button className="text-button text-button--danger" onClick={() => setExitOpen((open) => !open)}>{exitOpen ? "Manter renovação" : "Cancelar minha renovação"}</button>{exitOpen && <div className="exit-confirm"><p>Ao confirmar, nenhuma nova mensalidade será criada.</p><button className="danger-button" onClick={requestCancellation} disabled={cancelling}>{cancelling ? "Cancelando no Asaas…" : "Confirmar cancelamento"}</button></div>}</>}{exitRequested && <p className="success-message" role="status">Renovação cancelada. Nenhuma nova cobrança será criada.</p>}</section>}</>}
     </section>
   </main></div>;
 }
@@ -914,6 +918,11 @@ function MemberManagementDetail({ member, loading, saving, refreshing, error, on
   const [note, setNote] = useState("");
   const [pixCandidates, setPixCandidates] = useState<PixCandidate[]>([]);
   const [pixWorking, setPixWorking] = useState(false);
+  const [pixTo, setPixTo] = useState(saoPauloDate());
+  const [pixFrom, setPixFrom] = useState(() => new Date(Date.parse(`${saoPauloDate()}T00:00:00Z`) - 89 * 86_400_000).toISOString().slice(0, 10));
+  const [pixNextOffset, setPixNextOffset] = useState<number | null>(null);
+  const [pixSearched, setPixSearched] = useState(false);
+  const [pixError, setPixError] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteWorking, setDeleteWorking] = useState(false);
   useEffect(() => {
@@ -926,15 +935,17 @@ function MemberManagementDetail({ member, loading, saving, refreshing, error, on
   const reminderUrl = member ? paymentReminderUrl(member) : null;
   const directWhatsappUrl = reminderUrl?.replace(/\?text=.*/, "");
   const statusClass = member && ["active", "courtesy"].includes(member.participationStatus) ? "ok" : member?.participationStatus === "pending_payment" ? "pending" : "inactive";
-  async function findPix() {
+  async function findPix(offset = 0) {
     if (!member) return;
-    setPixWorking(true);
+    setPixWorking(true); setPixError("");
+    if (offset === 0) { setPixCandidates([]); setPixNextOffset(null); setPixSearched(false); }
     try {
-      const response = await fetch("/api/membros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: member.id, action: "find_pix" }) });
-      const payload = await response.json() as { candidates?: PixCandidate[]; error?: string };
+      const response = await fetch("/api/membros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: member.id, action: "find_pix", from: pixFrom, to: pixTo, offset }) });
+      const payload = await response.json() as { candidates?: PixCandidate[]; nextOffset?: number | null; error?: string };
       if (!response.ok) throw new Error(payload.error || "Não foi possível consultar os Pix.");
-      setPixCandidates(payload.candidates || []);
-    } catch (candidateError) { window.alert(candidateError instanceof Error ? candidateError.message : "Não foi possível consultar os Pix."); }
+      setPixCandidates((current) => offset ? [...current, ...(payload.candidates || [])] : payload.candidates || []);
+      setPixNextOffset(payload.nextOffset ?? null); setPixSearched(true);
+    } catch (candidateError) { setPixError(candidateError instanceof Error ? candidateError.message : "Não foi possível consultar os Pix."); }
     finally { setPixWorking(false); }
   }
   async function linkPix(candidate: PixCandidate) {
@@ -944,7 +955,7 @@ function MemberManagementDetail({ member, loading, saving, refreshing, error, on
       const response = await fetch("/api/membros", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: member.id, action: "link_pix", paymentId: candidate.id, confirmation: member.name }) });
       const payload = await response.json() as { linked?: boolean; error?: string };
       if (!response.ok || !payload.linked) throw new Error(payload.error || "Não foi possível vincular o Pix.");
-      setPixCandidates([]);
+      setPixCandidates([]); setPixNextOffset(null); setPixSearched(false);
       await onRefresh();
     } catch (linkError) { window.alert(linkError instanceof Error ? linkError.message : "Não foi possível vincular o Pix."); }
     finally { setPixWorking(false); }
@@ -967,8 +978,9 @@ function MemberManagementDetail({ member, loading, saving, refreshing, error, on
       {loading && <div className="loading-state"><i /><span>Carregando histórico do integrante…</span></div>}
       {member && !loading && <div className="crm-drawer__body">
         <section className="crm-contact-card"><div><span className={`status-chip status-chip--${statusClass}`}>{readableStatus(member.participationStatus, memberStatusLabels)}</span><small>{member.classLevel || "Classe não informada"}</small></div><div className="crm-contact-actions"><a href={`mailto:${member.email}`}>E-mail</a>{directWhatsappUrl && <a href={directWhatsappUrl} target="_blank" rel="noreferrer">WhatsApp</a>}{reminderUrl && <a href={reminderUrl} target="_blank" rel="noreferrer">Cobrar no WhatsApp</a>}</div></section>
-        <section className="member-financial-summary"><div><span>Assinatura</span><strong>{readableStatus(member.subscriptionStatus, subscriptionStatusLabels)}</strong></div><div><span>Pagamento</span><strong>{billingMethodLabel(member.billingMethod)}</strong></div><div><span>Mensalidade</span><strong>{(member.amountCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></div><div><span>Próximo vencimento</span><strong>{shortDate(member.nextDueDate)}</strong></div><div><span>Atraso</span><strong>{member.overdueDays ? `${member.overdueDays} dias` : "Em dia"}</strong></div><button className="secondary-button member-financial-refresh" type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? "Consultando Asaas…" : "Atualizar no Asaas"}</button></section>
-        <section className="pix-reconciliation"><div><span>Conciliação Pix</span><h4>Pix recebido direto na chave</h4><p>Consulte os recebimentos deste mês e vincule somente depois de conferir o pagador. O APT não escolhe por semelhança de nome.</p></div><button className="secondary-button" type="button" onClick={findPix} disabled={pixWorking}>{pixWorking ? "Consultando Asaas…" : "Localizar Pix não vinculados"}</button>{pixCandidates.length > 0 && <div className="pix-candidate-list">{pixCandidates.map((candidate) => <article key={candidate.id}><div><strong>{candidate.payerName}</strong><span>{(candidate.valueCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · {candidate.paidAt ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${candidate.paidAt.slice(0, 10)}T12:00:00`)) : "Data não informada"}{candidate.cpfLast4 ? ` · CPF final ${candidate.cpfLast4}` : ""}</span></div><button type="button" onClick={() => linkPix(candidate)} disabled={pixWorking}>Conferi e quero vincular</button></article>)}</div>}{!pixWorking && pixCandidates.length === 0 && <small>A lista aparece apenas quando você solicitar a consulta ao Asaas.</small>}</section>
+        <section className="member-financial-summary"><div><span>Método comprovado</span><strong>{billingMethodLabel(member.billingMethod)}</strong></div><div><span>Cobertura paga até</span><strong>{shortDate(member.financial?.paidThrough)}</strong></div><div><span>Último recebimento</span><strong>{shortDate(member.financial?.lastReceivedAt)}</strong></div><div><span>Próxima cobrança emitida</span><strong>{shortDate(member.financial?.nextInvoiceDueDate)}</strong></div><div><span>Dívida emitida vencida</span><strong>{currency(member.financial?.overdueCents || 0)}</strong></div><div><span>Mensalidade</span><strong>{member.amountCents ? currency(member.amountCents) : "Não definida"}</strong></div><p className="member-financial-reason">{financialReasons[member.financial?.reason] || "Conferir situação financeira"}{member.financial?.divergence && " · A participação registrada diverge da evidência financeira."}</p><button className="secondary-button member-financial-refresh" type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? "Consultando Asaas…" : "Atualizar no Asaas"}</button></section>
+        <section className="member-monitoring"><header><span>Conciliação automática</span><h4>Monitoramento do cadastro</h4></header><dl><div><dt>Última tentativa</dt><dd>{dateTime(member.billingLastAttemptAt)}</dd></div><div><dt>Último sucesso</dt><dd>{dateTime(member.billingLastSuccessAt)}</dd></div><div><dt>Exceção</dt><dd>{member.billingIssue ? ({ missing_subscription: "Sem assinatura local", missing_provider: "Sem vínculo com o Asaas", provider_unresolved: "Cobrança não confirmada no Asaas", reconciliation_failed: "Falha de conciliação" } as Record<string, string>)[member.billingIssue] || "Revisão necessária" : "Nenhuma registrada"}</dd></div></dl></section>
+        <section className="pix-reconciliation"><div><span>Conciliação Pix</span><h4>Recebimentos sem vínculo</h4><p>Escolha o período e confira o pagador antes de vincular. O APT não escolhe por semelhança de nome.</p></div><div className="pix-period"><label>De<input type="date" value={pixFrom} max={pixTo} disabled={pixWorking} onChange={(event) => { setPixFrom(event.target.value); setPixCandidates([]); setPixNextOffset(null); setPixSearched(false); }} /></label><label>Até<input type="date" value={pixTo} min={pixFrom} max={saoPauloDate()} disabled={pixWorking} onChange={(event) => { setPixTo(event.target.value); setPixCandidates([]); setPixNextOffset(null); setPixSearched(false); }} /></label><button className="secondary-button" type="button" onClick={() => findPix()} disabled={pixWorking}>{pixWorking ? "Consultando…" : "Localizar Pix"}</button></div>{pixError && <p className="field-error" role="alert">{pixError}</p>}{pixCandidates.length > 0 && <div className="pix-candidate-list">{pixCandidates.map((candidate) => <article key={candidate.id}><div><strong>{candidate.payerName}</strong><span>{currency(candidate.valueCents)} · {shortDate(candidate.paidAt)}{candidate.cpfLast4 ? ` · CPF final ${candidate.cpfLast4}` : " · CPF indisponível"}</span><small>{candidate.id} · {candidate.identityMatch === "reference" ? "Referência exata deste cadastro" : candidate.identityMatch === "customer" ? "Cliente já vinculado ao atleta" : "Identidade ainda não confirmada"}</small></div><button type="button" onClick={() => linkPix(candidate)} disabled={pixWorking}>Conferi e quero vincular</button></article>)}</div>}{pixNextOffset !== null && <button className="secondary-button" type="button" disabled={pixWorking} onClick={() => findPix(pixNextOffset)}>Carregar próxima página</button>}{!pixWorking && pixSearched && pixCandidates.length === 0 && <small>Nenhum Pix elegível nesta página do período consultado.{pixNextOffset !== null && " Há outra página para conferir."}</small>}{!pixSearched && <small>A consulta é feita somente quando solicitada.</small>}</section>
         <form className="member-management-form" onSubmit={async (event) => { event.preventDefault(); const saved = await onSave({ participationStatus: participationStatus || undefined, twinnerUrl: twinnerUrl === initialTweenerUrl ? undefined : twinnerUrl, whatsappCommunityUrl: whatsappCommunityUrl === initialWhatsappUrl ? undefined : whatsappCommunityUrl, note: note || undefined }); if (saved) { setParticipationStatus(""); setNote(""); } }}>
           <div><span>Gestão do integrante</span><h4>Participação, acessos e nota interna</h4></div>
           {error && <p className="field-error" role="alert">{error}</p>}
@@ -979,7 +991,8 @@ function MemberManagementDetail({ member, loading, saving, refreshing, error, on
           <button className="primary-button" type="submit" disabled={saving}>{saving ? "Salvando…" : "Salvar ficha"}<span aria-hidden="true">→</span></button>
         </form>
         <section className="crm-notes"><div><span>Histórico interno</span><h4>Notas da gestão</h4></div><div className="crm-notes__history">{member.notes?.length ? member.notes.map((item) => <article key={item.id}><p>{item.body}</p><small>{item.created_by} · {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.created_at))}</small></article>) : <p className="crm-notes__empty">Nenhuma nota registrada.</p>}</div></section>
-        <details className="crm-answers" open><summary>Histórico financeiro <span>{member.payments?.length || 0}</span></summary><div className="member-payment-history">{member.payments?.length ? member.payments.map((payment) => <article key={payment.id}><div><strong>{(payment.value_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong><span>{payment.due_date ? shortDate(payment.due_date) : "Sem vencimento"}</span></div><span className={`status-chip status-chip--${payment.status.includes("RECEIVED") || payment.status.includes("CONFIRMED") ? "ok" : "pending"}`}>{paymentStatusLabel(payment.status)}</span>{payment.invoice_url && <a href={payment.invoice_url} target="_blank" rel="noreferrer">Abrir cobrança</a>}</article>) : <p className="crm-notes__empty">Nenhuma cobrança registrada.</p>}</div></details>
+        <details className="crm-answers" open><summary>Histórico financeiro <span>{member.payments?.length || 0}</span></summary><InvoiceTable payments={member.payments || []} /></details>
+        <section className="member-communications"><header><span>Comunicações</span><h4>Envio, entrega e sinais coletados</h4><p>{member.emailConfiguration?.webhookSecretConfigured ? "Autenticação do webhook configurada. Tracking externo ainda não verificado." : "Webhook sem configuração confirmada neste ambiente."} Abertura e clique são sinais técnicos; não comprovam leitura humana.</p></header>{member.communications ? <><small>{member.communications.messages.length} de {member.communications.total} mensagens{member.communications.truncated ? " · exibindo as mais recentes" : ""}</small>{member.communications.messages.map((message) => <article key={message.id}><div><strong>{message.kind === "confirmed" ? "Confirmação financeira" : message.kind === "attention" ? "Atenção financeira" : "Lembrete de checkout"}</strong><span>{message.audience === "management" ? "Gestão" : "Membro"} · {message.deliveryIssue ? "Resultado do envio requer revisão" : message.sendingStatus === "sent" ? "Aceito pelo remetente" : message.sendingStatus === "suppressed" ? "Envio suprimido" : message.sendingStatus === "failed" ? "Falha de envio" : "Envio pendente"}</span></div><dl><div><dt>Aceito</dt><dd>{dateTime(message.acceptedAt)}</dd></div><div><dt>Servidor destinatário</dt><dd>{dateTime(message.recipientServerDeliveredAt)}</dd></div><div><dt>Abertura coletada</dt><dd>{dateTime(message.openedAt)}</dd></div><div><dt>Clique coletado</dt><dd>{dateTime(message.clickedAt)}</dd></div></dl><details><summary>Falhas e adiamentos coletados</summary><dl><div><dt>Entrega adiada</dt><dd>{dateTime(message.delayedAt)}</dd></div><div><dt>Falha</dt><dd>{dateTime(message.failedAt)}</dd></div><div><dt>Rejeição</dt><dd>{dateTime(message.bouncedAt)}</dd></div><div><dt>Reclamação</dt><dd>{dateTime(message.complainedAt)}</dd></div><div><dt>Suprimido pelo provedor</dt><dd>{dateTime(message.providerSuppressedAt)}</dd></div></dl></details>{!message.correlationAvailable && <small>Sem ID do provedor: sinais não correlacionados.</small>}{message.events.length > 0 && <details><summary>Eventos coletados ({message.events.length}{message.eventsTruncated ? ` de ${message.eventTotal}` : ""})</summary><ul>{message.events.map((event, index) => <li key={`${event.type}-${index}`}>{({ "email.sent": "Aceito", "email.delivered": "Entregue ao servidor", "email.opened": "Abertura", "email.clicked": "Clique", "email.delivery_delayed": "Entrega adiada", "email.bounced": "Rejeitado", "email.complained": "Reclamação", "email.failed": "Falha", "email.suppressed": "Suprimido" } as Record<string, string>)[event.type] || event.type} · {dateTime(event.occurredAt)}</li>)}</ul></details>}</article>)}{!member.communications.messages.length && <p>Nenhuma comunicação financeira registrada.</p>}</> : <p>Comunicações indisponíveis. Atualize a ficha para conferir.</p>}</section>
         <section className="member-lifecycle-actions"><div><span>Ciclo do atleta</span><h4>Inativar ou excluir</h4><p>Inativar preserva todo o histórico e é a opção correta para quem saiu do ranking.</p></div>{member.participationStatus !== "inactive" && <button className="secondary-button" type="button" disabled={saving} onClick={() => onSave({ participationStatus: "inactive" })}>Inativar atleta</button>}{member.participationStatus === "inactive" && <button className="secondary-button" type="button" disabled={saving} onClick={() => onSave({ participationStatus: "pending_payment" })}>Reativar como aguardando pagamento</button>}<div className="member-delete-control"><label className="field-label field-label--compact"><span>Excluir cadastro incompleto</span><input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} placeholder={member.canDelete ? `Digite: ${member.name}` : "Exclusão indisponível"} disabled={!member.canDelete || deleteWorking} /><small>{member.canDelete ? "Disponível porque não há acesso nem histórico financeiro." : member.deleteBlockedReason || "Use a inativação para preservar o histórico."}</small></label><button className="danger-button" type="button" onClick={deleteMember} disabled={!member.canDelete || deleteConfirmation !== member.name || deleteWorking}>{deleteWorking ? "Excluindo…" : "Excluir definitivamente"}</button></div></section>
       </div>}
     </section>
@@ -987,7 +1000,7 @@ function MemberManagementDetail({ member, loading, saving, refreshing, error, on
 }
 
 function PaymentReminderQueue({ members }: { members: MemberRecord[] }) {
-  const contacts = members.filter((member) => ["awaiting_payment", "pending_payment", "delinquent"].includes(member.participationStatus) && paymentReminderUrl(member));
+  const contacts = members.filter((member) => !member.financial.covered && ["awaiting_payment", "pending_payment", "delinquent"].includes(member.financial.participationStatus) && paymentReminderUrl(member));
   const [current, setCurrent] = useState(0);
   if (!contacts.length) return null;
   const member = contacts[current] || contacts[0];
@@ -1010,12 +1023,13 @@ const memberOperationsStages: Array<{ id: MemberOperationsStage; label: string; 
 const memberOperationsDesktopStages = memberOperationsStages.filter((stage) => stage.id !== "inactive");
 
 function memberOperationsStage(member: MemberRecord): MemberOperationsStage {
-  const periodEnded = Boolean(member.currentPeriodEnd && member.currentPeriodEnd < new Date().toISOString().slice(0, 10));
-  if (member.participationStatus === "cancellation_requested") return periodEnded ? "inactive" : "cancellation_requested";
+  if (member.participationStatus === "cancellation_requested") return member.financial?.covered ? "cancellation_requested" : "inactive";
   if (["inactive", "cancelled"].includes(member.participationStatus)) return "inactive";
-  if (["active", "courtesy"].includes(member.participationStatus)) return "active";
-  if (["pending_payment", "delinquent"].includes(member.participationStatus) || ["past_due", "overdue"].includes(member.subscriptionStatus)) return "attention";
-  if (member.checkoutStarted) return "checkout_pending";
+  if (member.participationStatus === "courtesy") return "active";
+  if (member.financial?.overdueCents || member.financial?.pixRenewalDue || (!member.financial?.covered && ["pending_payment", "active", "delinquent"].includes(member.participationStatus))) return "attention";
+  if (member.financial?.configurationRequired) return "awaiting_payment";
+  if (member.financial?.covered) return "active";
+  if (member.checkoutStarted && member.checkoutAvailable) return "checkout_pending";
   return "awaiting_payment";
 }
 
@@ -1034,7 +1048,7 @@ function MemberOperationCard({ member, onManage, onResendCheckout, reminding }: 
   return <article className="member-operations-card">
     <button className="member-operations-card__body" type="button" onClick={() => onManage(member)} aria-label={`Abrir ficha de ${member.name}`}>
       <div className="member-cell"><span>{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><small>{member.classLevel || "Classe não informada"}</small></div></div>
-      <div className="member-operations-card__meta"><span className={`status-chip status-chip--${memberOperationsStatusClass(stage)}`}>{stage === "checkout_pending" ? "Cadastro concluído" : readableStatus(member.participationStatus, memberStatusLabels)}</span><span className={`billing-method-chip billing-method-chip--${member.billingMethod || "unset"}`}>{billingMethodLabel(member.billingMethod)}</span><small>{dueLabel}</small></div>
+      <div className="member-operations-card__meta"><span className={`status-chip status-chip--${memberOperationsStatusClass(stage)}`}>{stage === "checkout_pending" ? "Cadastro concluído" : readableStatus(member.participationStatus, memberStatusLabels)}</span><span className={`billing-method-chip billing-method-chip--${member.billingMethod || "unset"}`}>{billingMethodLabel(member.billingMethod)}</span><small>{financialReasons[member.financial?.reason] || dueLabel}</small><small>Coberto até {shortDate(member.financial?.paidThrough)}</small></div>
       <span className="member-operations-card__value"><small>Mensalidade</small><strong>{(member.amountCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></span>
       <span className="member-management-card__open">Abrir ficha completa <i aria-hidden="true">→</i></span>
     </button>
@@ -1084,96 +1098,61 @@ function currency(valueCents: number) {
   return (valueCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function paidPayment(payment: ManagementPayment) {
-  return payment.status.includes("CONFIRMED") || payment.status.includes("RECEIVED");
-}
+const financialReasons: Record<string, string> = { manual: "Estado definido pela gestão", overdue: "Cobrança emitida e vencida", pix_renewal: "Pix com cobertura encerrada", configuration: "Conferir configuração financeira", uncovered: "Sem cobertura paga vigente", divergence: "Conferir divergência financeira", covered: "Cobertura paga vigente" };
+const financialMetricLabels: Record<FinancialMetric, string> = { recurring: "Cartão recorrente", received: "Recebido no mês", confirmed: "Confirmado no mês", overdue: "Emitido vencido", pix_renewal: "Renovação Pix", configuration: "Configuração pendente" };
 
-function monthKey(value: Date | string) {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" }).formatToParts(typeof value === "string" ? new Date(value) : value);
-  return `${parts.find((part) => part.type === "year")!.value}-${parts.find((part) => part.type === "month")!.value}`;
+function InvoiceTable({ payments, members, onManage }: { payments: FinancialPayment[]; members?: MemberRecord[]; onManage?: (member: MemberRecord) => void }) {
+  return <div className="invoice-table-scroll"><table className="invoice-table"><caption className="sr-only">Cobranças e datas financeiras confirmadas pelo Asaas</caption><thead><tr>{members && <th scope="col">Atleta</th>}<th scope="col">Cobrança</th><th scope="col">Método / situação</th><th scope="col">Datas do provedor</th><th scope="col">Valor</th><th scope="col">Ação</th></tr></thead><tbody>{payments.map((payment) => {
+    const member = members?.find((item) => item.id === payment.memberId);
+    return <tr key={payment.id}>{members && <td>{member ? <button type="button" className="invoice-athlete" onClick={() => onManage?.(member)}>{member.name}</button> : "Vínculo indisponível"}</td>}<td><strong>{payment.providerId || payment.id}</strong><small>Vence {shortDate(payment.dueDate)}</small></td><td><strong>{payment.billingType === "PIX" ? "Pix" : payment.billingType === "CREDIT_CARD" ? "Cartão" : "Método não confirmado"}</strong><span className={`status-chip status-chip--${payment.receivedAt || payment.confirmedAt ? "ok" : "pending"}`}>{paymentStatusLabel(payment.status)}</span></td><td><span>Recebido: {payment.receivedAt ? shortDate(payment.receivedAt) : "—"}</span><span>Confirmado: {payment.confirmedAt ? shortDate(payment.confirmedAt) : "—"}</span></td><td className="invoice-value">{currency(payment.valueCents)}</td><td>{payment.invoiceUrl ? <a href={payment.invoiceUrl} target="_blank" rel="noreferrer">Abrir no Asaas ↗</a> : <span>Sem link</span>}</td></tr>;
+  })}</tbody></table>{!payments.length && <p className="ledger-empty">Nenhuma cobrança neste recorte.</p>}</div>;
 }
 
 function RevenuePulse({ payments }: { payments: ManagementPayment[] }) {
-  const now = new Date();
-  const months = Array.from({ length: 6 }, (_, index) => new Date(now.getFullYear(), now.getMonth() - 5 + index, 1));
-  const totals = months.map((month) => payments.filter((payment) => paidPayment(payment) && monthKey(payment.paidAt || payment.createdAt) === monthKey(month)).reduce((sum, payment) => sum + payment.valueCents, 0));
+  const months = billingMonthKeys(saoPauloDate());
+  const monthLabel = (month: string, long = false) => new Date(`${month}-01T12:00:00Z`).toLocaleDateString("pt-BR", { timeZone: "UTC", month: long ? "long" : "short", ...(long ? { year: "numeric" } : {}) }).replace(".", "");
+  const totals = months.map((month) => financialMetricRows("received", [], payments, month).valueCents);
   const maximum = Math.max(...totals, 1);
   const points = totals.map((total, index) => ({ x: 26 + index * 109.6, y: 174 - (total / maximum) * 132 }));
   const line = points.map(({ x, y }) => `${x},${y}`).join(" ");
   const area = `M ${points[0].x} 174 L ${points.map(({ x, y }) => `${x} ${y}`).join(" L ")} L ${points.at(-1)!.x} 174 Z`;
   const total = totals.reduce((sum, value) => sum + value, 0);
   return <section className="management-revenue" aria-labelledby="revenue-pulse-title">
-    <header><div><span>Receita confirmada</span><h3 id="revenue-pulse-title">Pulso dos últimos seis meses</h3></div><strong>{currency(total)}</strong></header>
+    <header><div><span>Recebimento no Asaas</span><h3 id="revenue-pulse-title">Pulso dos últimos seis meses</h3></div><strong>{currency(total)}</strong></header>
     <div className="management-revenue__chart">
       <svg viewBox="0 0 600 194" role="img" aria-labelledby="revenue-chart-title revenue-chart-description" preserveAspectRatio="none">
-        <title id="revenue-chart-title">Receita confirmada nos últimos seis meses</title>
-        <desc id="revenue-chart-description">A curva mostra valores que o Asaas confirmou e que foram persistidos na base APT.</desc>
+        <title id="revenue-chart-title">Recebimento no Asaas nos últimos seis meses</title>
+        <desc id="revenue-chart-description">A curva soma somente cobranças recebidas, pela data do provedor. Confirmações em liquidação ficam separadas.</desc>
         {[42, 86, 130, 174].map((y) => <line key={y} x1="26" x2="574" y1={y} y2={y} />)}
         <path d={area} />
         <polyline points={line} pathLength="1" />
-        {points.map((point, index) => <circle key={monthKey(months[index])} cx={point.x} cy={point.y} r="4"><title>{`${months[index].toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}: ${currency(totals[index])}`}</title></circle>)}
+        {points.map((point, index) => <circle key={months[index]} cx={point.x} cy={point.y} r="4"><title>{`${monthLabel(months[index], true)}: ${currency(totals[index])}`}</title></circle>)}
       </svg>
-      <div className="management-revenue__months">{months.map((month, index) => <span key={monthKey(month)}><small>{month.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</small><strong>{totals[index] ? currency(totals[index]) : "—"}</strong></span>)}</div>
+      <div className="management-revenue__months">{months.map((month, index) => <span key={month}><small>{monthLabel(month)}</small><strong>{totals[index] ? currency(totals[index]) : "—"}</strong></span>)}</div>
     </div>
-    {!total && <p>Nenhum recebimento confirmado neste recorte. O gráfico começa a ganhar forma com os pagamentos reais.</p>}
+    {!total && <p>Nenhum recebimento com data do provedor neste recorte. O gráfico começa a ganhar forma com os pagamentos reais.</p>}
   </section>;
 }
 
-function ManagementDashboard({ applications, members, payments, loading, onOpenApplications, onOpenMembers }: {
-  applications: ApplicationRecord[];
-  members: MemberRecord[];
-  payments: ManagementPayment[];
-  loading: boolean;
-  onOpenApplications: () => void;
-  onOpenMembers: (filter: "attention" | "active" | "cancellation_requested" | "inactive") => void;
+function ManagementDashboard({ applications, members, payments, loading, error, operations, onRetry, onManageMember, onOpenApplications, onOpenMembers }: {
+  applications: ApplicationRecord[]; members: MemberRecord[]; payments: ManagementPayment[]; loading: boolean; error: string;
+  operations: OperationsSummary | null; onRetry: () => void; onManageMember: (member: MemberRecord) => void;
+  onOpenApplications: () => void; onOpenMembers: (filter: MemberFilter) => void;
 }) {
+  const [metric, setMetric] = useState<FinancialMetric | null>(null);
   if (loading) return <div className="management-dashboard-loading" role="status" aria-label="Atualizando os indicadores da gestão"><span /><span /><span /><span /></div>;
-  const now = new Date();
-  const currentMonth = monthKey(now);
-  const previousMonth = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
-  const activeMembers = members.filter((member) => memberOperationsStage(member) === "active");
-  const recurringMembers = members.filter((member) => member.participationStatus === "active" && member.subscriptionStatus === "active" && member.amountCents > 0);
+  if (error || members.some((member) => !member.financial)) return <section className="financial-error" role="alert"><h3>Indicadores indisponíveis</h3><p>{error || "A base financeira chegou incompleta."}</p><button className="secondary-button" type="button" onClick={onRetry}>Consultar novamente</button></section>;
+  const month = saoPauloDate().slice(0, 7);
+  const metrics = (["recurring", "received", "confirmed", "overdue", "pix_renewal", "configuration"] as FinancialMetric[]).map((key) => ({ key, ...financialMetricRows(key, members, payments, month) }));
+  const selected = metrics.find((item) => item.key === metric);
+  const missingDates = payments.filter((payment) => (["RECEIVED", "RECEIVED_IN_CASH"].includes(payment.status) && !payment.receivedAt) || (payment.status === "CONFIRMED" && !payment.confirmedAt)).length;
   const actionMembers = members.filter((member) => ["checkout_pending", "awaiting_payment", "attention"].includes(memberOperationsStage(member)));
-  const cancellingMembers = members.filter((member) => memberOperationsStage(member) === "cancellation_requested");
-  const inactiveMembers = members.filter((member) => memberOperationsStage(member) === "inactive");
   const attentionApplications = applications.filter((application) => ["new", "in_review", "awaiting_info"].includes(application.status));
-  const mrr = recurringMembers.reduce((total, member) => total + member.amountCents, 0);
-  const revenueThisMonth = payments.filter((payment) => paidPayment(payment) && monthKey(payment.paidAt || payment.createdAt) === currentMonth).reduce((total, payment) => total + payment.valueCents, 0);
-  const revenuePreviousMonth = payments.filter((payment) => paidPayment(payment) && monthKey(payment.paidAt || payment.createdAt) === previousMonth).reduce((total, payment) => total + payment.valueCents, 0);
-  const revenueDelta = revenuePreviousMonth ? Math.round(((revenueThisMonth - revenuePreviousMonth) / revenuePreviousMonth) * 100) : null;
-  const revenueAtRisk = actionMembers.reduce((total, member) => total + member.amountCents, 0);
-  const baseTotal = Math.max(members.length, 1);
-  const activeShare = members.length ? Math.round((activeMembers.length / members.length) * 100) : 0;
-  const memberGroups = [
-    { label: "Ativos", count: activeMembers.length, className: "active" },
-    { label: "Pedem ação", count: actionMembers.length, className: "attention" },
-    { label: "Cancelando", count: cancellingMembers.length, className: "cancelling" },
-    { label: "Inativos", count: inactiveMembers.length, className: "inactive" },
-  ];
-  return <div className="management-dashboard" aria-busy={loading}>
-    <div className="management-dashboard__main">
-      <RevenuePulse payments={payments} />
-      <div className="management-dashboard__rail">
-        <section className="management-vitality" aria-labelledby="management-vitality-title">
-          <header><span>Saúde da base</span><h3 id="management-vitality-title">Membros em operação</h3></header>
-          <div><strong>{activeShare}%</strong><small>{activeMembers.length} de {members.length} ativos hoje</small></div>
-          <span className="management-vitality__bar" aria-hidden="true"><i style={{ width: `${activeShare}%` }} /></span>
-          <p>{actionMembers.length ? <><strong>{actionMembers.length}</strong> {actionMembers.length === 1 ? "membro pede ação financeira agora." : "membros pedem ação financeira agora."}</> : "Nenhuma ação financeira pendente na base."}</p>
-        </section>
-        <section className="management-decisions" aria-labelledby="management-decisions-title"><header><span>Agora</span><h3 id="management-decisions-title">Próximas decisões</h3><p>Atalhos abrem a fila exata, sem alterar nenhum estado.</p></header><div>
-          <button type="button" onClick={onOpenApplications}><span><strong>{attentionApplications.length}</strong><small>requerimentos para decidir</small></span><i aria-hidden="true">→</i></button>
-          <button type="button" onClick={() => onOpenMembers("attention")}><span><strong>{actionMembers.length}</strong><small>membros com ação financeira</small></span><i aria-hidden="true">→</i></button>
-          <button type="button" onClick={() => onOpenMembers("cancellation_requested")}><span><strong>{cancellingMembers.length}</strong><small>{cancellingMembers.length === 1 ? "cancelamento em andamento" : "cancelamentos em andamento"}</small></span><i aria-hidden="true">→</i></button>
-        </div></section>
-      </div>
-    </div>
-    <section className="management-ledger" aria-label="Indicadores principais"><dl>
-      <div className="management-ledger__mrr"><dt>MRR ativo<small>{recurringMembers.length} {recurringMembers.length === 1 ? "assinatura recorrente" : "assinaturas recorrentes"}</small></dt><dd>{currency(mrr)}</dd></div>
-      <div><dt>Recebido no mês<small>{revenueDelta === null ? revenueThisMonth ? "primeiro período comparável" : "sem receita confirmada" : `${revenueDelta >= 0 ? "+" : ""}${revenueDelta}% sobre o mês anterior`}</small></dt><dd>{currency(revenueThisMonth)}</dd></div>
-      <div><dt>Membros ativos<small>{members.length ? `${activeShare}% da base cadastrada` : "a base ainda está vazia"}</small></dt><dd>{activeMembers.length}</dd></div>
-      <div className="management-ledger__risk"><dt>Receita em risco<small>{actionMembers.length} {actionMembers.length === 1 ? "membro pede ação" : "membros pedem ação"}</small></dt><dd>{currency(revenueAtRisk)}</dd></div>
-    </dl></section>
-    <section className="management-health" aria-labelledby="management-health-title"><header><div><span>Saúde da base</span><h3 id="management-health-title">Como os membros se distribuem hoje</h3></div><strong>{members.length}</strong></header><div className="management-health__bar" aria-hidden="true">{memberGroups.map((group) => <i key={group.className} className={`management-health__segment management-health__segment--${group.className}`} style={{ width: `${(group.count / baseTotal) * 100}%` }} />)}</div><div className="management-health__legend">{memberGroups.map((group) => <button type="button" key={group.className} onClick={() => onOpenMembers(group.className === "attention" ? "attention" : group.className === "cancelling" ? "cancellation_requested" : group.className as "active" | "inactive")}><i className={`management-health__dot management-health__dot--${group.className}`} aria-hidden="true" /><span>{group.label}</span><strong>{group.count}</strong></button>)}</div></section>
+  return <div className="management-dashboard">
+    <section className="financial-metrics" aria-label="Indicadores financeiros e suas listas">{metrics.map((item) => <button key={item.key} type="button" aria-expanded={metric === item.key} aria-controls="financial-ledger" data-metric={item.key} onClick={() => setMetric(metric === item.key ? null : item.key)}><span>{financialMetricLabels[item.key]}</span><strong>{item.key === "configuration" ? item.athletes.length : currency(item.valueCents)}</strong><small>{item.key === "recurring" ? `${item.athletes.length} recorrências ativas · por mês` : item.key === "pix_renewal" ? `${item.athletes.length} renovações · referência mensal` : item.key === "configuration" ? "Cadastros para conferir" : `${item.invoices.length} cobranças · ver composição`}</small><i aria-hidden="true">↗</i></button>)}</section>
+    <p className="financial-definition">Pix a renovar é uma referência mensal, sem duplicar cobrança vencida. Confirmado ainda em liquidação fica separado do recebido.{missingDates > 0 && ` ${missingDates} pagamentos sem data financeira ficam fora dos totais mensais.`}</p>
+    {selected && <section className="financial-ledger" id="financial-ledger" aria-label={`Composição de ${financialMetricLabels[selected.key]}`}><header><div><span>Composição do indicador</span><h3>{financialMetricLabels[selected.key]}</h3><p>{selected.key === "received" || selected.key === "confirmed" ? `Calendário do provedor · ${month}` : selected.key === "pix_renewal" ? "Uma mensalidade de referência por atleta, sem dívida emitida duplicada." : "Registros exatos que formam este indicador."}</p></div><button type="button" className="secondary-button" onClick={() => setMetric(null)}>Fechar lista</button></header>{["received", "confirmed", "overdue"].includes(selected.key) ? <InvoiceTable payments={selected.invoices} members={members} onManage={onManageMember} /> : <div className="financial-athletes">{selected.athletes.map((athlete) => { const member = members.find((item) => item.id === athlete.id)!; return <button type="button" key={athlete.id} onClick={() => onManageMember(member)}><span><strong>{member.name}</strong><small>{financialReasons[member.financial.reason]} · {billingMethodLabel(member.billingMethod)}</small></span><strong>{selected.key === "configuration" ? "Abrir ficha →" : currency(member.amountCents)}</strong></button>; })}{!selected.athletes.length && <p className="ledger-empty">Nenhum atleta neste recorte.</p>}</div>}</section>}
+    <div className="management-dashboard__main"><RevenuePulse payments={payments} /><div className="management-dashboard__rail"><section className="management-decisions"><header><span>Agora</span><h3>Próximas decisões</h3><p>Abra a fila, confira a identidade e escolha a ação.</p></header><div><button type="button" onClick={onOpenApplications}><span><strong>{attentionApplications.length}</strong><small>requerimentos para decidir</small></span><i aria-hidden="true">→</i></button><button type="button" onClick={() => onOpenMembers("attention")}><span><strong>{actionMembers.length}</strong><small>membros com ação financeira</small></span><i aria-hidden="true">→</i></button><button type="button" onClick={() => onOpenMembers("communication")}><span><strong>{members.filter((member) => member.communicationIssue).length}</strong><small>falhas ou revisão de comunicação</small></span><i aria-hidden="true">→</i></button></div></section><section className="automation-health"><span>Monitoramento da operação</span><h3>Conciliação e comunicações</h3>{operations ? <><p>Última execução: {dateTime(operations.latestRun?.recordedAt)} · {operations.latestRun?.timedOut ? "Prazo atingido" : operations.latestRun?.ok === true ? "Concluída" : operations.latestRun?.ok === false ? "Com falha" : "Resultado não registrado"}</p><dl><div><dt>Cadastros conferidos</dt><dd>{operations.latestRun?.checked ?? "—"}</dd></div><div><dt>Falhas na última execução</dt><dd>{operations.latestRun?.failed ?? "—"}</dd></div><div><dt>Exceções na última execução</dt><dd>{operations.latestRun?.exceptions ?? "—"}</dd></div><div><dt>Webhooks pendentes</dt><dd>{operations.webhooks.pending}</dd></div><div><dt>Webhooks com falha</dt><dd>{operations.webhooks.failed}</dd></div><div><dt>Tentativas esgotadas</dt><dd>{operations.webhooks.exhausted}</dd></div><div><dt>Emails pendentes</dt><dd>{operations.emails.pending}</dd></div><div><dt>Falhas de envio</dt><dd>{operations.emails.failed}</dd></div><div><dt>Emails em revisão</dt><dd>{operations.emails.reviewRequired}</dd></div><div><dt>Exceções financeiras</dt><dd>{operations.exceptionCount}</dd></div></dl></> : <p>Monitoramento indisponível. Consulte novamente para conferir a operação.</p>}</section></div></div>
   </div>;
 }
 
@@ -1199,14 +1178,20 @@ function DirectEnrollmentLinkPanel({ onNotice }: { onNotice: (message: string) =
   return <section className="crm-stage-card direct-invite" aria-labelledby="direct-link-title"><div><span>Link direto</span><h3 id="direct-link-title">Onboarding já aprovado?</h3><p>Gere uma única vez, guarde e envie este link apenas para quem você já aprovou. Ele não cria requerimento nem exige preenchimento na gestão.</p></div><div className="direct-link-actions"><button className="primary-button" type="button" onClick={generate} disabled={submitting}>{submitting ? "Gerando…" : link ? "Substituir link direto" : "Gerar link direto"}<span aria-hidden="true">→</span></button>{link && <><code>{link}</code><button className="invite-copy" type="button" onClick={copyLink}>Copiar link direto</button></>}{error && <p className="field-error" role="alert">{error}</p>}<small>Ao substituir, o link anterior é revogado. Este vale por um ano.</small></div></section>;
 }
 
+type MemberFilter = "all" | "attention" | "active" | "cancellation_requested" | "inactive" | "overdue" | "pix_renewal" | "configuration" | "divergence" | "communication";
+type OperationsSummary = { latestRun: { recordedAt: string; ok?: boolean; timedOut?: boolean; checked?: number; exceptions?: number; failed?: number } | null; webhooks: { pending: number; failed: number; exhausted: number }; emails: { pending: number; failed: number; reviewRequired: number }; exceptionCount: number };
+function dateTime(value?: string | null) { return value ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)) : "Não registrada"; }
+
 export function AdminPage() {
   const [tab, setTab] = useState<"painel" | "requerimentos" | "membros">("painel");
   const [query, setQuery] = useState("");
-  const [memberFilter, setMemberFilter] = useState<"all" | "attention" | "active" | "cancellation_requested" | "inactive">("all");
+  const [memberFilter, setMemberFilter] = useState<MemberFilter>("all");
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
   const [members, setMembers] = useState<MemberRecord[]>([]);
   const [payments, setPayments] = useState<ManagementPayment[]>([]);
   const [asaasConnected, setAsaasConnected] = useState(false);
+  const [financialError, setFinancialError] = useState("");
+  const [operations, setOperations] = useState<OperationsSummary | null>(null);
   const [notice, setNotice] = useState("");
   const [selectedApplication, setSelectedApplication] = useState<ApplicationDetail | null>(null);
   const [applicationLoading, setApplicationLoading] = useState(false);
@@ -1226,10 +1211,14 @@ export function AdminPage() {
     const stage = memberOperationsStage(member);
     const matchesStatus = memberFilter === "all" ||
       (memberFilter === "attention" && ["checkout_pending", "awaiting_payment", "attention"].includes(stage)) ||
-      memberFilter === stage;
+      (memberFilter === "overdue" && member.financial?.overdueCents > 0) ||
+      (memberFilter === "pix_renewal" && member.financial?.pixRenewalDue) ||
+      (memberFilter === "configuration" && member.financial?.configurationRequired) ||
+      (memberFilter === "divergence" && (member.financial?.divergence || member.billingIssue === "reconciliation_failed")) ||
+      (memberFilter === "communication" && member.communicationIssue) || memberFilter === stage;
     return matchesQuery && matchesStatus;
   });
-  const mobileDefaultStage: MemberOperationsStage | "action" | "all" = query.trim() ? "all" : memberFilter === "all" || memberFilter === "attention" ? "action" : memberFilter;
+  const mobileDefaultStage: MemberOperationsStage | "action" | "all" = query.trim() || ["overdue", "pix_renewal", "configuration", "divergence", "communication"].includes(memberFilter) ? "all" : memberFilter === "all" || memberFilter === "attention" ? "action" : memberFilter as MemberOperationsStage;
   useEffect(() => {
     fetch("/api/auth/session").then(async (sessionResponse) => {
       const sessionPayload = await sessionResponse.json() as { user?: { role?: string } };
@@ -1247,9 +1236,11 @@ export function AdminPage() {
       if (memberResponse.ok) {
         setMembers(memberPayload.members || []);
         setPayments(memberPayload.payments || []);
-      } else setNotice(memberPayload.error || "Não foi possível carregar os integrantes.");
+      } else { setFinancialError(memberPayload.error || "Não foi possível carregar os integrantes."); setNotice(memberPayload.error || "Não foi possível carregar os integrantes."); }
       setAsaasConnected(Boolean(asaasPayload.connected));
-    }).catch(() => setNotice("Não foi possível atualizar os dados agora.")).finally(() => { setLoading(false); setAuthChecking(false); });
+      const operationsResponse = await fetch("/api/membros?operations=1").catch(() => null);
+      if (operationsResponse?.ok) { const result = await operationsResponse.json() as { operations?: OperationsSummary }; setOperations(result.operations || null); }
+    }).catch(() => { setFinancialError("Não foi possível atualizar os dados financeiros agora."); setNotice("Não foi possível atualizar os dados agora."); }).finally(() => { setLoading(false); setAuthChecking(false); });
   }, []);
   async function openApplication(id: string) {
     setApplicationLoading(true); setSelectedApplication(null); setReviewNote("");
@@ -1291,9 +1282,9 @@ export function AdminPage() {
     setMemberError(""); setSelectedMember(member); setMemberLoading(true);
     try {
       const response = await fetch(`/api/membros?id=${encodeURIComponent(member.id)}`);
-      const payload = await response.json() as { member?: MemberRecord; error?: string };
+      const payload = await response.json() as { member?: MemberRecord; emailConfiguration?: MemberRecord["emailConfiguration"]; error?: string };
       if (!response.ok || !payload.member) throw new Error(payload.error || "Não foi possível abrir o integrante.");
-      setSelectedMember(payload.member);
+      setSelectedMember({ ...payload.member, emailConfiguration: payload.emailConfiguration });
     } catch (error) { setMemberError(error instanceof Error ? error.message : "Não foi possível abrir o integrante."); }
     finally { setMemberLoading(false); }
   }
@@ -1307,6 +1298,8 @@ export function AdminPage() {
       if (!response.ok || !payload.member) throw new Error(payload.error);
       setMembers((current) => current.map((member) => member.id === payload.member!.id ? { ...member, ...payload.member! } : member));
       setSelectedMember((current) => current ? { ...current, ...payload.member!, notes: payload.note ? [...(current.notes || []), payload.note] : current.notes } : current);
+      await refreshMembers();
+      await openMember({ ...selectedMember, ...payload.member });
       setNotice("Ficha do integrante atualizada.");
       return true;
     } catch (error) { setMemberError(error instanceof Error ? error.message : "Não foi possível atualizar o integrante."); return false; }
@@ -1343,7 +1336,7 @@ export function AdminPage() {
     try { await navigator.clipboard.writeText(url); setNotice("Link individual copiado."); }
     catch { window.prompt("Copie o link individual de cadastro:", url); }
   }
-  async function refreshMembers() { const response = await fetch("/api/membros"); const payload = await response.json() as { members?: MemberRecord[]; payments?: ManagementPayment[] }; if (response.ok) { setMembers(payload.members || []); setPayments(payload.payments || []); } }
+  async function refreshMembers() { try { const response = await fetch("/api/membros"); const payload = await response.json() as { members?: MemberRecord[]; payments?: ManagementPayment[]; error?: string }; if (!response.ok) throw new Error(payload.error || "Não foi possível carregar as finanças."); setMembers(payload.members || []); setPayments(payload.payments || []); setFinancialError(""); setOperations(null); const health = await fetch("/api/membros?operations=1").catch(() => null); if (health?.ok) { const result = await health.json() as { operations?: OperationsSummary }; setOperations(result.operations || null); } } catch (error) { setFinancialError(error instanceof Error ? error.message : "Não foi possível carregar as finanças."); } }
   if (authChecking) return <div className="apt-app"><RouteHeader label="Gestão APT" /><main className="access-state"><span>Acesso administrativo</span><h1>Verificando acesso.</h1><p>A gestão é carregada somente para contas autorizadas.</p></main></div>;
   if (authRequired) return <div className="apt-app"><RouteHeader label="Gestão APT" /><main className="access-state"><span>Acesso administrativo</span><h1>Entre com uma conta autorizada.</h1><p>A base de candidatos, integrantes e pagamentos não fica exposta publicamente.</p><a className="primary-button" href="/entrar?next=/gestao">Entrar na gestão</a></main></div>;
   const attentionCount = applications.filter((item) => ["new", "in_review", "awaiting_info"].includes(item.status)).length;
@@ -1364,9 +1357,9 @@ export function AdminPage() {
     />
     <section className="admin-content">
       {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice("")}>Fechar</button></div>}
-      {tab === "painel" && <><header className="admin-heading admin-heading--dashboard"><div><span>Visão executiva</span><h2>O que mudou. O que pede ação.</h2><p>Receita, base e pendências da operação, em um só lugar.</p></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><ManagementDashboard applications={applications} members={members} payments={payments} loading={loading} onOpenApplications={() => setTab("requerimentos")} onOpenMembers={(filter) => { setQuery(""); setMemberFilter(filter); setTab("membros"); }} /></>}
+      {tab === "painel" && <><header className="admin-heading admin-heading--dashboard"><div><span>Visão executiva</span><h2>O que mudou. O que pede ação.</h2><p>Receita, base e pendências da operação, em um só lugar.</p></div><span className={asaasConnected ? "status-chip status-chip--ok" : "status-chip status-chip--pending"}>{asaasConnected ? "Asaas conectado" : "Integração pendente"}</span></header><ManagementDashboard applications={applications} members={members} payments={payments} loading={loading} error={financialError} operations={operations} onRetry={refreshMembers} onManageMember={(member) => { setTab("membros"); openMember(member); }} onOpenApplications={() => setTab("requerimentos")} onOpenMembers={(filter) => { setQuery(""); setMemberFilter(filter); setTab("membros"); }} /></>}
       {tab === "requerimentos" && <><header className="admin-heading"><div><span>Requerimentos</span><h2>Decisões de entrada, com contexto.</h2></div><span className="status-chip status-chip--pending">{attentionCount} {attentionCount === 1 ? "decisão" : "decisões"}</span></header><DirectEnrollmentLinkPanel onNotice={setNotice} />{loading && <div className="loading-state"><i /><span>Atualizando requerimentos…</span></div>}{!loading && applications.length === 0 && <div className="empty-state empty-state--bordered"><strong>Nenhum requerimento registrado ainda.</strong><span>Os novos envios aparecerão aqui.</span></div>}{!loading && applications.length > 0 && <CrmKanban applications={applications} onOpen={openApplication} />}{(selectedApplication || applicationLoading) && <ApplicationReviewDetail key={selectedApplication?.id || "loading-application"} application={selectedApplication} loading={applicationLoading} saving={applicationSaving} note={reviewNote} onNoteChange={setReviewNote} onClose={() => { setSelectedApplication(null); setReviewNote(""); }} onSave={(status) => { if (selectedApplication) updateApplication(selectedApplication.id, status); }} onResendInvite={resendApplicationInvite} onCopyInvite={copyInvite} />}</>}
-      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Operação em tempo real, com conciliação segura.</h2></div></header><div className="admin-toolbar"><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar nome, e-mail ou WhatsApp" /></label><label className="filter-field"><span className="sr-only">Filtrar membros</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value as typeof memberFilter)}><option value="all">Todos os estágios</option><option value="attention">Precisa de ação</option><option value="active">Ativos</option><option value="cancellation_requested">Cancelamento</option><option value="inactive">Inativos</option></select></label><span>{filteredMembers.length} de {members.length}</span></div><PaymentReminderQueue members={members} /><MemberOperationsKanban key={mobileDefaultStage} members={filteredMembers} onManage={openMember} onResendCheckout={resendMemberCheckout} remindingMemberId={checkoutRemindingMemberId} mobileDefaultStage={mobileDefaultStage} /><MemberImportPanel onImported={refreshMembers} />{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Ajuste a busca ou o filtro.</span></div>}{(selectedMember || memberLoading) && <MemberManagementDetail member={selectedMember} loading={memberLoading} saving={memberSaving} refreshing={memberRefreshing} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} onRefresh={refreshMemberBilling} onDeleted={(id) => { setMembers((current) => current.filter((member) => member.id !== id)); setSelectedMember(null); setNotice("Cadastro incompleto excluído."); }} />}</>}
+      {tab === "membros" && <><header className="admin-heading"><div><span>Membros e cobranças</span><h2>Operação em tempo real, com conciliação segura.</h2></div></header><div className="admin-toolbar"><label className="search-field"><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar nome, e-mail ou WhatsApp" /></label><label className="filter-field"><span className="sr-only">Filtrar membros</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value as typeof memberFilter)}><option value="all">Todos os estágios</option><option value="attention">Precisa de ação</option><option value="overdue">Dívida emitida vencida</option><option value="pix_renewal">Pix a renovar</option><option value="configuration">Configuração pendente</option><option value="divergence">Divergência financeira</option><option value="communication">Falha / revisão de comunicação</option><option value="active">Ativos</option><option value="cancellation_requested">Cancelamento</option><option value="inactive">Inativos</option></select></label><span>{filteredMembers.length} de {members.length}</span></div>{financialError && <p className="field-error" role="alert">{financialError}</p>}<PaymentReminderQueue members={members} /><MemberOperationsKanban key={mobileDefaultStage} members={filteredMembers} onManage={openMember} onResendCheckout={resendMemberCheckout} remindingMemberId={checkoutRemindingMemberId} mobileDefaultStage={mobileDefaultStage} /><MemberImportPanel onImported={refreshMembers} />{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Ajuste a busca ou o filtro.</span></div>}{(selectedMember || memberLoading) && <MemberManagementDetail member={selectedMember} loading={memberLoading} saving={memberSaving} refreshing={memberRefreshing} error={memberError} onClose={() => { setMemberError(""); setSelectedMember(null); }} onSave={updateMember} onRefresh={refreshMemberBilling} onDeleted={(id) => { setMembers((current) => current.filter((member) => member.id !== id)); setSelectedMember(null); setNotice("Cadastro incompleto excluído."); }} />}</>}
     </section>
   </main></div>;
 }

@@ -1,14 +1,21 @@
 import { requireAdmin } from "../../../lib/auth";
-import { asaasRequest } from "../../../lib/asaas";
+import { asaasPaymentHistory, asaasRequest, pixSearchPeriod } from "../../../lib/asaas";
 import { sendManualCheckoutReminder } from "../../../lib/apt-email";
-import { reconcileMemberBilling } from "../../../lib/billing-reconciliation";
+import { emailObservabilityConfiguration, memberEmailCommunications } from "../../../lib/email-observability";
+import { billingOperationsSummary } from "../../../lib/billing-recovery";
+import { saoPauloDate } from "../../../lib/billing-state";
+import { financialPayment, memberFinancialView, type BillingPaymentRow } from "../../../lib/billing-view";
+import { claimBillingCustomer, reconcileMemberBilling } from "../../../lib/billing-reconciliation";
 import { requireTrustedOrigin } from "../../../lib/request-security";
-import { runtimeEnv, supabaseAdmin, SupabaseRequestError } from "../../../lib/supabase-server";
+import { runtimeEnv, supabaseAdmin, supabaseAll, SupabaseRequestError } from "../../../lib/supabase-server";
+
+export const maxDuration = 60;
 
 type MemberRow = {
   id: string; auth_user_id: string | null; name: string; email: string; whatsapp: string; class_level: string | null;
   participation_status: string; twinner_url: string | null; whatsapp_community_url: string | null;
   joined_at: string | null; created_at: string;
+  billing_last_attempt_at?: string | null; billing_last_success_at?: string | null; billing_reconciliation_issue?: string | null;
 };
 type SubscriptionRow = {
   member_id: string; status: string; amount_cents: number; next_due_date: string | null;
@@ -16,35 +23,44 @@ type SubscriptionRow = {
   asaas_checkout_id: string | null; asaas_checkout_url: string | null; asaas_checkout_expires_at: string | null;
   asaas_customer_id: string | null; asaas_subscription_id: string | null;
 };
-type MemberPayment = { id: string; status: string; value_cents: number; due_date: string | null; paid_at: string | null; invoice_url: string | null; created_at: string };
-type ManagementPaymentRow = { id: string; status: string; value_cents: number; paid_at: string | null; created_at: string };
 type MemberNote = { id: string; body: string; created_by: string; created_at: string };
 type AsaasPayment = {
   id?: string; status?: string; value?: number; paymentDate?: string; clientPaymentDate?: string; dateCreated?: string;
   customer?: string; billingType?: string; externalReference?: string;
 };
 type AsaasCustomer = { id?: string; name?: string; cpfCnpj?: string; externalReference?: string };
-type AsaasCollection<T> = { data?: T[] };
-type BillingMethod = "pix" | "card";
-
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const manualStatuses = new Set(["pending_payment", "courtesy", "inactive"]);
+const memberSelect = "id,auth_user_id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at,billing_last_attempt_at,billing_last_success_at,billing_reconciliation_issue";
+const subscriptionSelect = "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end,asaas_customer_id,asaas_subscription_id,asaas_checkout_id,asaas_checkout_url,asaas_checkout_expires_at";
+const paymentSelect = "id,member_id,asaas_payment_id,status,value_cents,due_date,paid_at,invoice_url,created_at,payload";
 
-function saoPauloMonthStart(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(date);
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  if (!year || !month) throw new Error("Não foi possível determinar o mês financeiro.");
-  return `${year}-${month}-01`;
+function projectMember(member: MemberRow, subscription: SubscriptionRow | null | undefined, payments: BillingPaymentRow[]) {
+  const financial = memberFinancialView(member.participation_status, subscription, payments, saoPauloDate());
+  const firstOverdue = payments.filter((payment) => financial.overdueInvoiceIds.includes(payment.id)).map((payment) => payment.due_date!).sort()[0];
+  return {
+    id: member.id, name: member.name, email: member.email, whatsapp: member.whatsapp, classLevel: member.class_level,
+    twinnerUrl: member.twinner_url, whatsappCommunityUrl: member.whatsapp_community_url, joinedAt: member.joined_at, createdAt: member.created_at,
+    participationStatus: member.participation_status, subscriptionStatus: subscription?.status || "pending_configuration",
+    amountCents: subscription?.amount_cents || 0, billingMethod: financial.billingMethod,
+    nextDueDate: financial.nextInvoiceDueDate, currentPeriodEnd: financial.paidThrough,
+    overdueDays: firstOverdue ? Math.max(0, Math.floor((Date.parse(`${saoPauloDate()}T00:00:00Z`) - Date.parse(`${firstOverdue}T00:00:00Z`)) / 86_400_000)) : 0,
+    cancelAtPeriodEnd: subscription?.cancel_at_period_end || false, checkoutExpiresAt: subscription?.asaas_checkout_expires_at,
+    checkoutStarted: Boolean(subscription?.asaas_checkout_id && !financial.covered && financial.billingMethod !== "pix"), checkoutAvailable: financial.checkoutAvailable,
+    billingLastAttemptAt: member.billing_last_attempt_at || null, billingLastSuccessAt: member.billing_last_success_at || null,
+    billingIssue: member.billing_reconciliation_issue || null, financial,
+  };
 }
 
-function billingMethodFor(subscription?: SubscriptionRow | null): BillingMethod | null {
-  if (subscription?.asaas_subscription_id || subscription?.asaas_checkout_id) return "card";
-  return subscription?.asaas_customer_id ? "pix" : null;
+async function communicationIssues() {
+  const deliveries = await supabaseAll<{ member_id: string; status: string; send_claimed_at: string | null; provider_message_id: string | null }>("billing_email_deliveries", { query: { select: "id,member_id,status,send_claimed_at,provider_message_id" } });
+  const observations = await supabaseAll<{ provider_email_id: string; delivered_at: string | null; failed_at: string | null; bounced_at: string | null; complained_at: string | null; suppressed_at: string | null }>("email_delivery_observations", { query: { select: "provider_email_id,delivered_at,failed_at,bounced_at,complained_at,suppressed_at", order: "provider_email_id.asc" } });
+  const byId = new Map(observations.map((row) => [row.provider_email_id, row]));
+  return new Set(deliveries.filter((row) => {
+    if (row.status === "failed" || (row.send_claimed_at && row.status !== "sent" && row.status !== "suppressed")) return true;
+    const observed = row.provider_message_id ? byId.get(row.provider_message_id) : undefined;
+    return [observed?.failed_at, observed?.bounced_at, observed?.complained_at, observed?.suppressed_at].some((date) => date && (!observed?.delivered_at || date >= observed.delivered_at));
+  }).map((row) => row.member_id));
 }
 
 function allowedClubUrl(value: string, host: string) {
@@ -60,13 +76,15 @@ export async function GET(request: Request) {
   const admin = await requireAdmin(request).catch(() => null);
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
   try {
-    const memberId = new URL(request.url).searchParams.get("id");
+    const query = new URL(request.url).searchParams;
+    if (query.get("operations") === "1") return Response.json({ operations: await billingOperationsSummary() });
+    const memberId = query.get("id");
     if (memberId) {
       if (!uuidPattern.test(memberId)) return Response.json({ error: "Integrante inválido." }, { status: 400 });
       const [memberRows, subscriptionRows, payments, notes] = await Promise.all([
-        supabaseAdmin<MemberRow[]>("members", { query: { select: "id,auth_user_id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", id: `eq.${memberId}`, limit: "1" } }),
-        supabaseAdmin<SubscriptionRow[]>("subscriptions", { query: { select: "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end,asaas_customer_id,asaas_subscription_id,asaas_checkout_id,asaas_checkout_url,asaas_checkout_expires_at", member_id: `eq.${memberId}`, limit: "1" } }),
-        supabaseAdmin<MemberPayment[]>("payments", { query: { select: "id,status,value_cents,due_date,paid_at,invoice_url,created_at", member_id: `eq.${memberId}`, order: "created_at.desc", limit: "24" } }),
+        supabaseAdmin<MemberRow[]>("members", { query: { select: memberSelect, id: `eq.${memberId}`, limit: "1" } }),
+        supabaseAdmin<SubscriptionRow[]>("subscriptions", { query: { select: subscriptionSelect, member_id: `eq.${memberId}`, limit: "1" } }),
+        supabaseAll<BillingPaymentRow>("payments", { query: { select: paymentSelect, member_id: `eq.${memberId}`, order: "created_at.desc,id.desc" } }),
         supabaseAdmin<MemberNote[]>("admin_notes", { query: { select: "id,body,created_by,created_at", member_id: `eq.${memberId}`, order: "created_at.asc" } }),
       ]);
       const member = memberRows[0];
@@ -74,60 +92,25 @@ export async function GET(request: Request) {
       const subscription = subscriptionRows[0] || null;
       const isIncompleteRecord = !member.joined_at && ["pending_payment", "awaiting_payment"].includes(member.participation_status);
       const canDelete = isIncompleteRecord && !member.auth_user_id && payments.length === 0 && !subscription?.asaas_customer_id && !subscription?.asaas_subscription_id && !subscription?.asaas_checkout_id;
-      const overdueDays = subscription?.overdue_since
-        ? Math.max(0, Math.floor((Date.now() - new Date(`${subscription.overdue_since}T00:00:00`).getTime()) / 86_400_000))
-        : 0;
-      return Response.json({ member: {
-        id: member.id, name: member.name, email: member.email, whatsapp: member.whatsapp, classLevel: member.class_level,
-        twinnerUrl: member.twinner_url, whatsappCommunityUrl: member.whatsapp_community_url, joinedAt: member.joined_at, createdAt: member.created_at,
-        participationStatus: ["courtesy", "inactive"].includes(member.participation_status) ? member.participation_status : overdueDays >= 7 ? "delinquent" : member.participation_status,
-        subscriptionStatus: subscription?.status || "pending_configuration", amountCents: subscription?.amount_cents || 0, billingMethod: billingMethodFor(subscription),
-        nextDueDate: subscription?.next_due_date, currentPeriodEnd: subscription?.current_period_end, overdueDays, cancelAtPeriodEnd: subscription?.cancel_at_period_end || false,
-        checkoutExpiresAt: subscription?.asaas_checkout_expires_at,
-        checkoutStarted: Boolean(subscription?.asaas_checkout_id),
-        checkoutAvailable: Boolean(subscription?.status === "awaiting_payment" && subscription.asaas_checkout_id && subscription.asaas_checkout_url && subscription.asaas_checkout_expires_at && new Date(subscription.asaas_checkout_expires_at).getTime() > Date.now()),
-        canDelete,
+      return Response.json({ emailConfiguration: emailObservabilityConfiguration(), member: {
+        ...projectMember(member, subscription, payments), canDelete,
         deleteBlockedReason: canDelete ? null : "Este atleta já possui acesso ou histórico financeiro. Inative o cadastro para preservar a auditoria.",
-        payments, notes,
+        payments: payments.map(financialPayment), notes, communications: await memberEmailCommunications(memberId),
       } });
     }
-    const now = new Date();
-    const historyStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1)).toISOString();
-    const [members, subscriptions, payments] = await Promise.all([
-      supabaseAdmin<MemberRow[]>("members", {
-        query: { select: "id,auth_user_id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", order: "name.asc" },
-      }),
-      supabaseAdmin<SubscriptionRow[]>("subscriptions", {
-        query: { select: "member_id,status,amount_cents,next_due_date,current_period_end,overdue_since,cancel_at_period_end,asaas_customer_id,asaas_subscription_id,asaas_checkout_id,asaas_checkout_url,asaas_checkout_expires_at" },
-      }),
-      supabaseAdmin<ManagementPaymentRow[]>("payments", {
-        query: { select: "id,status,value_cents,paid_at,created_at", or: `(created_at.gte.${historyStart},paid_at.gte.${historyStart})`, order: "created_at.asc", limit: "1000" },
-      }),
+    const [members, subscriptions, payments, issues] = await Promise.all([
+      supabaseAll<MemberRow>("members", { query: { select: memberSelect, order: "name.asc,id.asc" } }),
+      supabaseAll<SubscriptionRow>("subscriptions", { query: { select: subscriptionSelect, order: "member_id.asc" } }),
+      supabaseAll<BillingPaymentRow>("payments", { query: { select: paymentSelect, order: "created_at.asc,id.asc" } }),
+      communicationIssues(),
     ]);
-    const subscriptionByMember = new Map(subscriptions.map((item) => [item.member_id, item]));
-    const result = members.map((member) => {
-      const subscription = subscriptionByMember.get(member.id);
-      const overdueDays = subscription?.overdue_since
-        ? Math.max(0, Math.floor((Date.now() - new Date(`${subscription.overdue_since}T00:00:00`).getTime()) / 86_400_000))
-        : 0;
-      return {
-        id: member.id, name: member.name, email: member.email, whatsapp: member.whatsapp,
-        classLevel: member.class_level, twinnerUrl: member.twinner_url, whatsappCommunityUrl: member.whatsapp_community_url,
-        joinedAt: member.joined_at, createdAt: member.created_at,
-        participationStatus: ["courtesy", "inactive"].includes(member.participation_status) ? member.participation_status : overdueDays >= 7 ? "delinquent" : member.participation_status,
-        subscriptionStatus: subscription?.status || "pending_configuration", amountCents: subscription?.amount_cents || 0, billingMethod: billingMethodFor(subscription),
-        nextDueDate: subscription?.next_due_date, currentPeriodEnd: subscription?.current_period_end, overdueDays, cancelAtPeriodEnd: subscription?.cancel_at_period_end || false,
-        checkoutExpiresAt: subscription?.asaas_checkout_expires_at,
-        checkoutStarted: Boolean(subscription?.asaas_checkout_id),
-        checkoutAvailable: Boolean(subscription?.status === "awaiting_payment" && subscription.asaas_checkout_id && subscription.asaas_checkout_url && subscription.asaas_checkout_expires_at && new Date(subscription.asaas_checkout_expires_at).getTime() > Date.now()),
-      };
-    });
+    const byMember = new Map(subscriptions.map((row) => [row.member_id, row]));
     return Response.json({
-      members: result,
-      payments: payments.map((payment) => ({ id: payment.id, status: payment.status, valueCents: payment.value_cents, paidAt: payment.paid_at, createdAt: payment.created_at })),
+      members: members.map((member) => ({ ...projectMember(member, byMember.get(member.id), payments.filter((payment) => payment.member_id === member.id)), communicationIssue: issues.has(member.id) })),
+      payments: payments.map(financialPayment),
     });
-  } catch {
-    return Response.json({ error: "Não foi possível carregar os integrantes." }, { status: 500 });
+  } catch (error) {
+    return Response.json({ error: error instanceof SupabaseRequestError ? error.message : "Não foi possível carregar os integrantes." }, { status: error instanceof SupabaseRequestError ? error.status : 500 });
   }
 }
 
@@ -137,7 +120,7 @@ export async function POST(request: Request) {
   const admin = await requireAdmin(request).catch(() => null);
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
   try {
-    const payload = await request.json() as { id?: string; action?: string; paymentId?: string; confirmation?: string };
+    const payload = await request.json() as { id?: string; action?: string; paymentId?: string; confirmation?: string; from?: string; to?: string; offset?: number };
     if (!payload.id || !uuidPattern.test(payload.id) || !["refresh_billing", "resend_checkout", "find_pix", "link_pix"].includes(payload.action || "")) {
       return Response.json({ error: "Atualização financeira inválida." }, { status: 400 });
     }
@@ -147,40 +130,50 @@ export async function POST(request: Request) {
         query: { select: "id,auth_user_id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", id: `eq.${payload.id}`, limit: "1" },
       }))[0];
       if (!member) return Response.json({ error: "Integrante não encontrado." }, { status: 404 });
-      const monthStart = saoPauloMonthStart();
-      const statuses = ["RECEIVED"];
-      const providerCollections = await Promise.all(statuses.map(async (status) => {
-        const query = new URLSearchParams({ billingType: "PIX", status, "paymentDate[ge]": monthStart, limit: "100" });
-        const response = await asaasRequest(`/payments?${query}`);
-        if (!response.ok) throw new SupabaseRequestError("O Asaas não respondeu à consulta dos Pix.", 502);
-        return ((await response.json() as AsaasCollection<AsaasPayment>).data || []);
-      }));
-      const providerPayments = [...new Map(providerCollections.flat().filter((payment) => payment.id).map((payment) => [payment.id!, payment] as const)).values()]
-        .filter((payment) => !payment.externalReference || payment.externalReference === member.id)
-        .slice(0, 40);
+      const period = pixSearchPeriod(payload, saoPauloDate());
+      const signal = AbortSignal.timeout(45_000);
+      const offset = payload.offset ?? 0;
+      if (!Number.isSafeInteger(offset) || offset < 0 || offset > 500) return Response.json({ error: "Página de Pix inválida." }, { status: 400 });
+      const query = new URLSearchParams({ billingType: "PIX", status: "RECEIVED", "paymentDate[ge]": period.from, "paymentDate[le]": period.to });
+      const history = await asaasPaymentHistory(`/payments?${query}`, signal);
+      const providerPayments = [...new Map(history.filter((payment) => payment.id).map((payment) => [payment.id!, payment] as const)).values()]
+        .filter((payment) => !payment.externalReference || payment.externalReference === member.id);
       const candidatePaymentIds = providerPayments.map((payment) => payment.id!);
       const [localPayments, subscriptions] = await Promise.all([
         candidatePaymentIds.length
-          ? supabaseAdmin<Array<{ asaas_payment_id: string }>>("payments", { query: { select: "asaas_payment_id", asaas_payment_id: `in.(${candidatePaymentIds.join(",")})` } })
+          ? Promise.all(Array.from({ length: Math.ceil(candidatePaymentIds.length / 100) }, (_, index) => supabaseAdmin<Array<{ asaas_payment_id: string }>>("payments", { query: { select: "asaas_payment_id", asaas_payment_id: `in.(${candidatePaymentIds.slice(index * 100, index * 100 + 100).join(",")})`, limit: "100" }, signal }))).then((pages) => pages.flat())
           : Promise.resolve([]),
-        supabaseAdmin<Array<{ member_id: string; asaas_customer_id: string | null }>>("subscriptions", { query: { select: "member_id,asaas_customer_id" } }),
+        supabaseAdmin<Array<{ member_id: string; asaas_customer_id: string | null }>>("subscriptions", { query: { select: "member_id,asaas_customer_id" }, signal }),
       ]);
       const localPaymentIds = new Set(localPayments.map((payment) => payment.asaas_payment_id));
       const customerOwner = new Map(subscriptions.filter((subscription) => subscription.asaas_customer_id).map((subscription) => [subscription.asaas_customer_id!, subscription.member_id] as const));
-      const candidates = (await Promise.all(providerPayments.filter((payment) => !localPaymentIds.has(payment.id!)).map(async (payment) => {
-        if (!payment.customer || (customerOwner.has(payment.customer) && customerOwner.get(payment.customer) !== member.id)) return null;
-        const customerResponse = await asaasRequest(`/customers/${encodeURIComponent(payment.customer)}`);
-        if (!customerResponse.ok) return null;
-        const customer = await customerResponse.json() as AsaasCustomer;
-        return {
-          id: payment.id!,
-          payerName: customer.name || "Pagador não identificado",
-          cpfLast4: (customer.cpfCnpj || "").replace(/\D/g, "").slice(-4) || null,
-          valueCents: Math.round((payment.value || 0) * 100),
-          paidAt: payment.paymentDate || payment.clientPaymentDate || payment.dateCreated || null,
-        };
-      }))).filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
-      return Response.json({ candidates });
+      const remaining = providerPayments.filter((payment) => !localPaymentIds.has(payment.id!) && payment.customer && (!customerOwner.has(payment.customer) || customerOwner.get(payment.customer) === member.id));
+      const selected = remaining.slice(offset, offset + 40);
+      const candidates: Array<{ id: string; payerName: string; cpfLast4: string | null; valueCents: number; paidAt: string | null; identityMatch: "reference" | "customer" | "unverified" }> = [];
+      const customers = new Map<string, AsaasCustomer>();
+      // Bound customer lookups too; every omitted page has an explicit continuation offset.
+      for (let index = 0; index < selected.length; index += 4) {
+        const page = await Promise.all(selected.slice(index, index + 4).map(async (payment) => {
+          let customer = customers.get(payment.customer!);
+          if (!customer) {
+            const response = await asaasRequest(`/customers/${encodeURIComponent(payment.customer!)}`, { signal });
+            if (!response.ok) throw new SupabaseRequestError("O Asaas não respondeu à identificação do Pix.", 502);
+            customer = await response.json() as AsaasCustomer;
+            customers.set(payment.customer!, customer);
+          }
+          if (customer.externalReference && customer.externalReference !== member.id) return null;
+          return {
+            id: payment.id!, payerName: customer.name || "Pagador não identificado",
+            cpfLast4: (customer.cpfCnpj || "").replace(/\D/g, "").slice(-4) || null,
+            valueCents: Math.round((payment.value || 0) * 100),
+            paidAt: payment.paymentDate || payment.clientPaymentDate || null,
+            identityMatch: (payment.externalReference === member.id || customer.externalReference === member.id ? "reference" : customerOwner.get(payment.customer!) === member.id ? "customer" : "unverified") as "reference" | "customer" | "unverified",
+          };
+        }));
+        candidates.push(...page.filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate)));
+      }
+      const nextOffset = offset + selected.length < remaining.length ? offset + selected.length : null;
+      return Response.json({ candidates, period, truncated: nextOffset !== null, nextOffset });
     }
 
     if (payload.action === "link_pix") {
@@ -214,7 +207,7 @@ export async function POST(request: Request) {
         subscriptionId = crypto.randomUUID();
         await supabaseAdmin("subscriptions", { method: "POST", body: { id: subscriptionId, member_id: member.id, status: "pending_configuration", amount_cents: Math.round(monthlyValue * 100), billing_cycle: "MONTHLY" } });
       }
-      await supabaseAdmin("subscriptions", { method: "PATCH", query: { id: `eq.${subscriptionId}` }, body: { asaas_customer_id: payment.customer, updated_at: new Date().toISOString() } });
+      await claimBillingCustomer(member.id, { id: subscriptionId, asaas_customer_id: currentSubscription?.asaas_customer_id || null }, payment.customer);
       const result = await reconcileMemberBilling(member.id, { paymentId: payload.paymentId });
       await supabaseAdmin("audit_logs", {
         method: "POST",
@@ -240,7 +233,8 @@ export async function POST(request: Request) {
       body: { actor: admin.email, action: "member.billing_reconciled", entity_type: "member", entity_id: payload.id, metadata: result },
     });
     return Response.json({ reconciled: true, ...result });
-  } catch {
+  } catch (error) {
+    if (error instanceof SupabaseRequestError && error.status === 400) return Response.json({ error: error.message }, { status: 400 });
     return Response.json({ error: "Não foi possível confirmar a situação no Asaas antes desta ação." }, { status: 502 });
   }
 }

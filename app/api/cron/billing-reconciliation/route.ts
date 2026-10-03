@@ -1,12 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
-import { ensureCheckoutPaymentReminders, retryBillingEmailDeliveries } from "../../../../lib/apt-email";
-import { reconcileMemberBilling } from "../../../../lib/billing-reconciliation";
-import { runtimeEnv, supabaseAdmin } from "../../../../lib/supabase-server";
+import { runBillingRecovery } from "../../../../lib/billing-recovery";
+import { runtimeEnv } from "../../../../lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-type SubscriptionCandidate = { member_id: string };
 
 function authorized(request: Request) {
   const secret = runtimeEnv().CRON_SECRET;
@@ -19,36 +16,9 @@ function authorized(request: Request) {
 export async function GET(request: Request) {
   if (!authorized(request)) return Response.json({ ok: false }, { status: 401 });
 
-  const candidates = await supabaseAdmin<SubscriptionCandidate[]>("subscriptions", {
-    query: {
-      select: "member_id",
-      status: "in.(pending_configuration,awaiting_payment,active,past_due,cancel_at_period_end)",
-      order: "updated_at.asc",
-      limit: "40",
-    },
-  });
-  let reconciled = 0;
-  let failed = 0;
-  for (let index = 0; index < candidates.length; index += 4) {
-    const batch = await Promise.allSettled(
-      candidates.slice(index, index + 4).map(async ({ member_id }) => {
-        const result = await reconcileMemberBilling(member_id);
-        await ensureCheckoutPaymentReminders(member_id);
-        return result;
-      }),
-    );
-    reconciled += batch.filter((result) => result.status === "fulfilled").length;
-    failed += batch.filter((result) => result.status === "rejected").length;
+  try {
+    return Response.json(await runBillingRecovery());
+  } catch {
+    return Response.json({ ok: false, error: "Não foi possível registrar a recuperação financeira." }, { status: 500 });
   }
-  const emailResults = await retryBillingEmailDeliveries(40);
-
-  return Response.json({
-    ok: failed === 0,
-    checked: candidates.length,
-    reconciled,
-    failed,
-    emailsSent: emailResults.filter((status) => status === "sent").length,
-    emailsSuppressed: emailResults.filter((status) => status === "suppressed").length,
-    emailsPending: emailResults.filter((status) => status !== "sent" && status !== "suppressed").length,
-  });
 }

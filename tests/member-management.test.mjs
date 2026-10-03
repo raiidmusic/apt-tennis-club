@@ -3,18 +3,19 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("keeps member access editing admin-only, auditable and inside safe boundaries", async () => {
-  const [membersRoute, portalRoute, client, packageJson] = await Promise.all([
+  const [membersRoute, portalRoute, client, packageJson, billingView] = await Promise.all([
     readFile(new URL("../app/api/membros/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/portal/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../lib/billing-view.ts", import.meta.url), "utf8"),
   ]);
   assert.match(membersRoute, /requireAdmin/);
   assert.match(membersRoute, /new Set\(\["pending_payment", "courtesy", "inactive"\]\)/);
   assert.match(membersRoute, /allowedClubUrl\(value, "tweener\.club"\)/);
   assert.match(membersRoute, /allowedClubUrl\(value, "chat\.whatsapp\.com"\)/);
   assert.match(membersRoute, /member\.management_updated/);
-  assert.match(membersRoute, /\["courtesy", "inactive"\]\.includes\(member\.participation_status\)/);
+  assert.match(billingView, /isProtectedMembership\(memberStatus\)/);
   assert.match(portalRoute, /member\.participation_status === "courtesy"/);
   assert.match(client, /MemberOperationsKanban/);
   assert.match(client, /memberOperationsStage/);
@@ -34,8 +35,8 @@ test("keeps member access editing admin-only, auditable and inside safe boundari
   assert.match(client, /Histórico financeiro/);
   assert.match(client, /Nova nota interna/);
   assert.match(client, /paymentReminderUrl/);
-  assert.match(membersRoute, /function billingMethodFor/);
-  assert.match(membersRoute, /billingMethod: billingMethodFor\(subscription\)/);
+  assert.match(membersRoute, /function projectMember/);
+  assert.match(membersRoute, /billingMethod: financial\.billingMethod/);
   assert.match(client, /billing-method-chip/);
   assert.match(client, /Cartão recorrente/);
   assert.match(client, /Fila de lembretes/);
@@ -45,14 +46,14 @@ test("keeps member access editing admin-only, auditable and inside safe boundari
   assert.match(client, /Ativo e inadimplente são atualizados pelo fluxo financeiro/);
   assert.match(client, /Verificando acesso\./);
   assert.match(client, /if \(authChecking\) return/);
-  assert.match(membersRoute, /supabaseAdmin<ManagementPaymentRow\[]>\("payments"/);
-  assert.match(membersRoute, /paid_at\.gte/);
-  assert.match(membersRoute, /valueCents: payment\.value_cents/);
+  assert.match(membersRoute, /supabaseAll<BillingPaymentRow>\("payments"/);
+  assert.doesNotMatch(client, /paidAt \|\| payment\.createdAt/);
+  assert.match(membersRoute, /payments: payments\.map\(financialPayment\)/);
   assert.match(client, /function ManagementDashboard/);
   assert.match(client, /Painel de decisão/);
-  assert.match(client, /Receita confirmada nos últimos seis meses/);
-  assert.match(client, /Receita em risco/);
+  assert.match(client, /Recebimento no Asaas nos últimos seis meses/);
+  assert.match(client, /Emitido vencido/);
   assert.match(client, /setPayments\(payload\.payments \|\| \[\]\)/);
-  assert.match(client, /memberOperationsStage\(member\) === "active"/);
+  assert.match(client, /financialMetricRows/);
   assert.doesNotMatch(packageJson, /recharts|chart\.js|d3/);
 });

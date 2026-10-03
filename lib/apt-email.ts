@@ -1,4 +1,6 @@
 import { runtimeEnv, supabaseAdmin } from "./supabase-server";
+import { asaasPaymentHistory, asaasRequest, type AsaasPaymentSnapshot } from "./asaas";
+import { billingDecision, isProtectedMembership, saoPauloDate } from "./billing-state";
 
 export type EmailDeliveryStatus = "sent" | "failed" | "not_configured";
 
@@ -9,6 +11,7 @@ type EmailInput = {
   replyTo?: string;
   flow: string;
   idempotencyKey: string;
+  signal?: AbortSignal;
 };
 
 type BillingEmailDelivery = {
@@ -25,6 +28,8 @@ type BillingEmailDelivery = {
   flow: string;
   status: "pending" | "failed" | "sent" | "suppressed";
   attempt_count: number;
+  provider_status: string;
+  send_claimed_at: string | null;
 };
 
 type CheckoutReminderContext = {
@@ -80,15 +85,39 @@ export function managementReplyTo() {
   return managementRecipients()[0];
 }
 
-export async function sendAptEmail(input: EmailInput): Promise<EmailDeliveryStatus> {
+function emailConfiguration(input: EmailInput) {
   const currentEnv = runtimeEnv();
   const to = recipients(input.to);
   const from = currentEnv.APT_RESEND_FROM_EMAIL;
-  if (!currentEnv.RESEND_API_KEY || !from || !to.length) return "not_configured";
+  if (!currentEnv.RESEND_API_KEY || !from || !to.length) return null;
+  return { currentEnv, to, from };
+}
+
+type EmailSendResult =
+  | { outcome: "not_configured"; status: "not_configured" }
+  | { outcome: "rejected"; status: "failed" }
+  | { outcome: "accepted"; status: "sent"; providerMessageId: string }
+  | { outcome: "ambiguous"; status: "failed"; issue: "provider_response_ambiguous" | "provider_id_missing" | "send_result_unknown" };
+
+// Only documented rejection codes prove that Resend did not accept this request.
+const rejectionCodes: Record<number, readonly string[]> = {
+  400: ["invalid_idempotency_key", "validation_error"],
+  401: ["missing_api_key", "restricted_api_key"],
+  403: ["invalid_permission", "restricted_api_key", "suspended_api_key", "validation_error"],
+  404: ["not_found"], 405: ["method_not_allowed"],
+  422: ["invalid_attachment", "invalid_parameter", "missing_required_field", "missing_required_parameter"],
+  429: ["daily_quota_exceeded", "monthly_quota_exceeded", "rate_limit_exceeded"],
+};
+
+async function sendAptEmailDetailed(input: EmailInput, configuration = emailConfiguration(input)): Promise<EmailSendResult> {
+  if (!configuration) return { outcome: "not_configured", status: "not_configured" };
+  const { currentEnv, to, from } = configuration;
+  if (input.signal?.aborted) return { outcome: "rejected", status: "failed" };
 
   try {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
+      signal: input.signal ? AbortSignal.any([input.signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
       headers: {
         Authorization: `Bearer ${currentEnv.RESEND_API_KEY}`,
         "Content-Type": "application/json",
@@ -105,17 +134,27 @@ export async function sendAptEmail(input: EmailInput): Promise<EmailDeliveryStat
         tags: [{ name: "flow", value: input.flow }, { name: "source", value: "apt" }],
       }),
     });
-    return response.ok ? "sent" : "failed";
+    const payload = await response.json() as { id?: unknown; name?: unknown };
+    if (!response.ok) return rejectionCodes[response.status]?.includes(String(payload?.name))
+      ? { outcome: "rejected", status: "failed" }
+      : { outcome: "ambiguous", status: "failed", issue: "provider_response_ambiguous" };
+    return typeof payload?.id === "string" && /^[a-z0-9_-]{1,128}$/i.test(payload.id)
+      ? { outcome: "accepted", status: "sent", providerMessageId: payload.id }
+      : { outcome: "ambiguous", status: "failed", issue: "provider_id_missing" };
   } catch {
-    return "failed";
+    return { outcome: "ambiguous", status: "failed", issue: "send_result_unknown" };
   }
 }
 
-export function sendManagementEmail(input: Omit<EmailInput, "to">) {
+export async function sendAptEmail(input: EmailInput): Promise<EmailDeliveryStatus> {
+  return (await sendAptEmailDetailed(input)).status;
+}
+
+export function sendManagementEmail(input: Omit<EmailInput, "to">): Promise<EmailDeliveryStatus> {
   return sendAptEmail({ ...input, to: managementRecipients() });
 }
 
-export function sendMemberEmail(input: Omit<EmailInput, "to"> & { to: string }) {
+export function sendMemberEmail(input: Omit<EmailInput, "to"> & { to: string }): Promise<EmailDeliveryStatus> {
   return sendAptEmail(input);
 }
 
@@ -124,8 +163,8 @@ export function sendBillingTransitionEmails(input: {
   member: { id: string; name: string; email: string };
   paymentId: string;
   providerStatus: string;
-}) {
-  return queueAndProcessBillingEmails(input);
+}, signal?: AbortSignal) {
+  return queueAndProcessBillingEmails(input, signal);
 }
 
 function retryDelay(attempt: number) {
@@ -133,12 +172,13 @@ function retryDelay(attempt: number) {
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
-async function checkoutReminderContext(memberId: string): Promise<CheckoutReminderContext | null> {
+async function checkoutReminderContext(memberId: string, signal?: AbortSignal): Promise<CheckoutReminderContext | null> {
+  const db = <T>(resource: string, options: Parameters<typeof supabaseAdmin>[1] = {}) => supabaseAdmin<T>(resource, { ...options, signal });
   const [member, subscription] = await Promise.all([
-    supabaseAdmin<CheckoutReminderContext["member"][]>("members", {
+    db<CheckoutReminderContext["member"][]>("members", {
       query: { select: "id,name,email,participation_status", id: `eq.${memberId}`, limit: "1" },
     }).then((rows) => rows[0]),
-    supabaseAdmin<CheckoutReminderContext["subscription"][]>("subscriptions", {
+    db<CheckoutReminderContext["subscription"][]>("subscriptions", {
       query: {
         select: "status,asaas_checkout_id,asaas_checkout_url,asaas_checkout_expires_at",
         member_id: `eq.${memberId}`,
@@ -159,60 +199,151 @@ function activeCheckout(context: CheckoutReminderContext | null) {
     && new Date(subscription.asaas_checkout_expires_at || 0).getTime() > Date.now();
 }
 
-async function suppressBillingEmail(delivery: BillingEmailDelivery, reason: string) {
+async function suppressBillingEmail(delivery: BillingEmailDelivery, reason: string, signal?: AbortSignal, claim?: string) {
+  const db = <T>(resource: string, options: Parameters<typeof supabaseAdmin>[1] = {}) => supabaseAdmin<T>(resource, { ...options, signal });
   const now = new Date().toISOString();
-  await supabaseAdmin("billing_email_deliveries", {
-    method: "PATCH",
-    query: { id: `eq.${delivery.id}`, status: "neq.sent" },
-    body: { status: "suppressed", last_error: reason, updated_at: now },
+  const rows = await db<Array<{ id: string }>>("billing_email_deliveries", {
+    method: "PATCH", prefer: "return=representation",
+    query: { id: `eq.${delivery.id}`, status: "in.(pending,failed)", send_claimed_at: claim ? `eq.${claim}` : "is.null", select: "id" },
+    body: { status: "suppressed", send_claimed_at: null, last_error: reason, updated_at: now },
   });
-  return "suppressed" as const;
+  return rows.some((row) => row.id === delivery.id) ? "suppressed" as const : "review_required" as const;
 }
 
-async function deliverBillingEmail(delivery: BillingEmailDelivery) {
+async function billingEmailSuppressionReason(delivery: BillingEmailDelivery, signal?: AbortSignal): Promise<string | null> {
+  const db = <T>(resource: string, options: Parameters<typeof supabaseAdmin>[1] = {}) => supabaseAdmin<T>(resource, { ...options, signal });
   if (delivery.kind === "checkout_reminder") {
-    const context = await checkoutReminderContext(delivery.member_id);
+    const context = await checkoutReminderContext(delivery.member_id, signal);
     if (!activeCheckout(context) || context?.subscription.asaas_checkout_id !== delivery.checkout_id) {
-      return suppressBillingEmail(delivery, "Checkout pago, substituído ou expirado antes do lembrete.");
+      return "Checkout pago, substituído ou expirado antes do lembrete.";
+    }
+  } else {
+    const [members, subscriptions, payments] = await Promise.all([
+      db<Array<{ participation_status: string }>>("members", { query: { select: "participation_status", id: `eq.${delivery.member_id}`, limit: "1" } }),
+      db<Array<{ status: string; asaas_subscription_id: string | null; asaas_customer_id: string | null }>>("subscriptions", { query: { select: "status,asaas_subscription_id,asaas_customer_id", member_id: `eq.${delivery.member_id}`, limit: "1" } }),
+      db<Array<{ asaas_payment_id: string; status: string; due_date: string | null; paid_at: string | null; created_at: string }>>("payments", { query: { select: "asaas_payment_id,status,due_date,paid_at,created_at", member_id: `eq.${delivery.member_id}`, order: "created_at.desc", limit: "500" } }),
+    ]);
+    const member = members[0];
+    const subscription = subscriptions[0];
+    if (!member || !subscription || isProtectedMembership(member.participation_status) || ["cancelled", "courtesy", "cancel_at_period_end"].includes(subscription.status)) {
+      return "Participação encerrada ou definida manualmente antes do envio.";
+    }
+    let currentPayments: AsaasPaymentSnapshot[] = payments.map((payment) => ({ id: payment.asaas_payment_id, status: payment.status, dueDate: payment.due_date || undefined, paymentDate: payment.paid_at || undefined, dateCreated: payment.created_at }));
+    let providerStatus: string | undefined;
+    if (delivery.kind === "attention") {
+      const path = subscription.asaas_subscription_id
+        ? `/subscriptions/${encodeURIComponent(subscription.asaas_subscription_id)}/payments`
+        : `/payments?${new URLSearchParams(subscription.asaas_customer_id ? { customer: subscription.asaas_customer_id } : { externalReference: delivery.member_id })}`;
+      if (subscription.asaas_subscription_id) {
+        const response = await asaasRequest(`/subscriptions/${encodeURIComponent(subscription.asaas_subscription_id)}`, { signal });
+        if (response.status === 404) providerStatus = "DELETED";
+        else if (response.ok) providerStatus = ((await response.json()) as { status?: string }).status;
+        else throw new Error("Não foi possível revalidar a assinatura antes do aviso.");
+        if (["CANCELLED", "CANCELED", "INACTIVE", "DELETED"].includes((providerStatus || "").toUpperCase())) return "Renovação encerrada no Asaas antes do aviso.";
+      }
+      currentPayments = await asaasPaymentHistory(path, signal);
+      if (currentPayments.some((payment) => payment.externalReference && payment.externalReference !== delivery.member_id)) throw new Error("Histórico financeiro pertence a outro cadastro.");
+    } else if (payments.length === 500) {
+      throw new Error("Histórico local incompleto antes da confirmação.");
+    }
+    const decision = billingDecision({
+      payments: currentPayments,
+      memberStatus: member.participation_status, subscriptionStatus: subscription.status,
+      recurring: Boolean(subscription.asaas_subscription_id), providerStatus, today: saoPauloDate(),
+    });
+    if (!decision.notice || decision.notice.kind !== delivery.kind || decision.notice.paymentId !== delivery.payment_id
+      || (delivery.kind === "attention" && decision.notice.providerStatus !== (delivery.provider_status || "").toUpperCase().replace(/^PAYMENT_/, ""))) {
+      return "Situação financeira liquidada, encerrada ou substituída antes do envio.";
     }
   }
-  const deliveryStatus = await sendAptEmail({
+  return null;
+}
+
+async function deliverBillingEmail(delivery: BillingEmailDelivery, signal?: AbortSignal) {
+  const db = <T>(resource: string, options: Parameters<typeof supabaseAdmin>[1] = {}) => supabaseAdmin<T>(resource, { ...options, signal });
+  const reason = await billingEmailSuppressionReason(delivery, signal);
+  if (reason) return suppressBillingEmail(delivery, reason, signal);
+  const input: EmailInput = {
     to: delivery.recipient_email,
     subject: delivery.subject,
     text: delivery.body_text,
     ...(delivery.reply_to ? { replyTo: delivery.reply_to } : {}),
     flow: delivery.flow,
     idempotencyKey: delivery.dedupe_key,
-  });
+    signal,
+  };
+  const configuration = emailConfiguration(input);
   const now = new Date().toISOString();
-  await supabaseAdmin("billing_email_deliveries", {
-    method: "PATCH",
-    query: { id: `eq.${delivery.id}`, status: "neq.sent" },
-    body: deliveryStatus === "sent"
-      ? { status: "sent", attempt_count: delivery.attempt_count + 1, sent_at: now, last_error: null, updated_at: now }
-      : {
-          status: "failed",
-          attempt_count: delivery.attempt_count + 1,
-          next_attempt_at: retryDelay(delivery.attempt_count),
-          last_error: deliveryStatus,
-          updated_at: now,
-        },
+  if (!configuration) {
+    await db("billing_email_deliveries", { method: "PATCH", query: { id: `eq.${delivery.id}`, status: "in.(pending,failed)", send_claimed_at: "is.null" }, body: { status: "failed", attempt_count: delivery.attempt_count + 1, next_attempt_at: retryDelay(delivery.attempt_count), last_error: "not_configured", updated_at: now } });
+    return "not_configured" as const;
+  }
+  const claimed = await db<Array<{ id: string }>>("billing_email_deliveries", {
+    method: "PATCH", prefer: "return=representation",
+    query: { id: `eq.${delivery.id}`, status: "in.(pending,failed)", send_claimed_at: "is.null", next_attempt_at: `lte.${now}`, select: "id" },
+    body: { send_claimed_at: now, attempt_count: delivery.attempt_count + 1, last_error: "send_result_unknown", updated_at: now },
   });
-  return deliveryStatus;
+  if (!claimed.some((row) => row.id === delivery.id)) return "review_required" as const;
+  // A receipt or a manual decision may have arrived while the durable claim was being saved.
+  let finalReason: string | null;
+  try {
+    finalReason = await billingEmailSuppressionReason(delivery, signal);
+  } catch {
+    // No POST occurred, so a checked release can safely return this attempt to the existing backoff.
+    try {
+      const released = await db<Array<{ id: string }>>("billing_email_deliveries", {
+        method: "PATCH", prefer: "return=representation",
+        query: { id: `eq.${delivery.id}`, status: "in.(pending,failed)", send_claimed_at: `eq.${now}`, select: "id" },
+        body: { status: "failed", send_claimed_at: null, next_attempt_at: retryDelay(delivery.attempt_count), last_error: "pre_send_validation_failed", updated_at: new Date().toISOString() },
+      });
+      return released.some((row) => row.id === delivery.id) ? "failed" as const : "review_required" as const;
+    } catch { return "review_required" as const; }
+  }
+  if (finalReason) return suppressBillingEmail(delivery, finalReason, signal, now).catch(() => "review_required" as const);
+  const result = await sendAptEmailDetailed(input, configuration);
+  try {
+    const rows = await db<Array<{ id: string }>>("billing_email_deliveries", {
+      method: "PATCH", prefer: "return=representation",
+      query: { id: `eq.${delivery.id}`, status: "in.(pending,failed)", send_claimed_at: `eq.${now}`, select: "id" },
+      body: result.outcome === "accepted"
+        ? { status: "sent", provider_message_id: result.providerMessageId, sent_at: new Date().toISOString(), send_claimed_at: null, last_error: null, updated_at: new Date().toISOString() }
+        : result.outcome === "ambiguous"
+          ? { last_error: result.issue, updated_at: new Date().toISOString() }
+          : { status: "failed", send_claimed_at: null, next_attempt_at: retryDelay(delivery.attempt_count), last_error: result.status, updated_at: new Date().toISOString() },
+    });
+    if (!rows.some((row) => row.id === delivery.id)) return "review_required" as const;
+  } catch {
+    // The durable claim survives failed result persistence, including an expired work signal.
+    return "review_required" as const;
+  }
+  return result.outcome === "ambiguous" ? "review_required" as const : result.status;
 }
 
-export async function retryBillingEmailDeliveries(limit = 25, dedupeKeys: string[] = []) {
-  const deliveries = await supabaseAdmin<BillingEmailDelivery[]>("billing_email_deliveries", {
+export async function retryBillingEmailDeliveries(limit = 25, dedupeKeys: string[] = [], signal?: AbortSignal) {
+  const db = <T>(resource: string, options: Parameters<typeof supabaseAdmin>[1] = {}) => supabaseAdmin<T>(resource, { ...options, signal });
+  const deliveries = await db<BillingEmailDelivery[]>("billing_email_deliveries", {
     query: {
-      select: "id,dedupe_key,member_id,payment_id,checkout_id,kind,recipient_email,reply_to,subject,body_text,flow,status,attempt_count",
+      select: "id,dedupe_key,member_id,payment_id,checkout_id,kind,recipient_email,reply_to,subject,body_text,flow,status,attempt_count,provider_status,send_claimed_at",
       status: "in.(pending,failed)",
+      send_claimed_at: "is.null",
       next_attempt_at: `lte.${new Date().toISOString()}`,
       ...(dedupeKeys.length ? { dedupe_key: `in.(${dedupeKeys.join(",")})` } : {}),
       order: "next_attempt_at.asc",
       limit: String(limit),
     },
   });
-  return Promise.all(deliveries.map(deliverBillingEmail));
+  return Promise.all(deliveries.map(async (delivery) => {
+    try {
+      return await deliverBillingEmail(delivery, signal);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      await db("billing_email_deliveries", {
+        method: "PATCH", query: { id: `eq.${delivery.id}`, status: "in.(pending,failed)", send_claimed_at: "is.null" },
+        body: { status: "failed", attempt_count: delivery.attempt_count + 1, next_attempt_at: retryDelay(delivery.attempt_count), last_error: error instanceof Error ? error.message.slice(0, 500) : "Falha de revalidação", updated_at: new Date().toISOString() },
+      });
+      return "failed" as const;
+    }
+  }));
 }
 
 function checkoutReminderBody(name: string, checkoutUrl: string, reminder: 1 | 2) {
@@ -221,8 +352,9 @@ function checkoutReminderBody(name: string, checkoutUrl: string, reminder: 1 | 2
     : `Olá, ${name}.\n\nSeu checkout da mensalidade APT expira em breve. Para concluir sua entrada, finalize o pagamento pelo link seguro do Asaas:\n${checkoutUrl}\n\nSe você já pagou, pode desconsiderar. O APT não recebe nem armazena os dados do seu cartão.`;
 }
 
-export async function ensureCheckoutPaymentReminders(memberId: string) {
-  const context = await checkoutReminderContext(memberId);
+export async function ensureCheckoutPaymentReminders(memberId: string, signal?: AbortSignal) {
+  const db = <T>(resource: string, options: Parameters<typeof supabaseAdmin>[1] = {}) => supabaseAdmin<T>(resource, { ...options, signal });
+  const context = await checkoutReminderContext(memberId, signal);
   if (!activeCheckout(context)) return { available: false, queued: 0 };
   const { member, subscription } = context!;
   const checkoutId = subscription.asaas_checkout_id!;
@@ -247,7 +379,7 @@ export async function ensureCheckoutPaymentReminders(memberId: string) {
     provider_status: "AWAITING_PAYMENT",
     next_attempt_at: new Date(checkoutCreatedAt + afterMinutes * 60_000).toISOString(),
   }));
-  await Promise.all(reminders.map((delivery) => supabaseAdmin("billing_email_deliveries", {
+  await Promise.all(reminders.map((delivery) => db("billing_email_deliveries", {
     method: "POST",
     query: { on_conflict: "dedupe_key" },
     prefer: "resolution=ignore-duplicates,return=minimal",
@@ -296,7 +428,8 @@ async function queueAndProcessBillingEmails(input: {
   member: { id: string; name: string; email: string };
   paymentId: string;
   providerStatus: string;
-}) {
+}, signal?: AbortSignal) {
+  const db = <T>(resource: string, options: Parameters<typeof supabaseAdmin>[1] = {}) => supabaseAdmin<T>(resource, { ...options, signal });
   const confirmed = input.kind === "confirmed";
   const pixMonthlyDue = input.providerStatus === "PIX_MONTHLY_DUE";
   const management = managementRecipients();
@@ -338,11 +471,11 @@ async function queueAndProcessBillingEmails(input: {
     }] : []),
   ];
 
-  await Promise.all(deliveries.map((delivery) => supabaseAdmin("billing_email_deliveries", {
+  await Promise.all(deliveries.map((delivery) => db("billing_email_deliveries", {
     method: "POST",
     query: { on_conflict: "dedupe_key" },
     prefer: "resolution=ignore-duplicates,return=minimal",
     body: delivery,
   })));
-  return retryBillingEmailDeliveries(deliveries.length, deliveries.map((delivery) => delivery.dedupe_key));
+  return retryBillingEmailDeliveries(deliveries.length, deliveries.map((delivery) => delivery.dedupe_key), signal);
 }

@@ -24,12 +24,12 @@ test("wires member and management notices to completed canonical events", async 
     readFile(new URL("../app/api/requerimentos/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cadastros/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/portal/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/webhooks/asaas/route.ts", import.meta.url), "utf8"),
+    Promise.all([readFile(new URL("../app/api/webhooks/asaas/route.ts", import.meta.url), "utf8"), readFile(new URL("../lib/asaas-events.ts", import.meta.url), "utf8")]).then((parts) => parts.join("\n")),
     readFile(new URL("../lib/billing-reconciliation.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/apt-email.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608160002_billing_email_outbox.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608170001_checkout_payment_reminders.sql", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/cron/billing-reconciliation/route.ts", import.meta.url), "utf8"),
+    Promise.all([readFile(new URL("../app/api/cron/billing-reconciliation/route.ts", import.meta.url), "utf8"), readFile(new URL("../lib/billing-recovery.ts", import.meta.url), "utf8")]).then((parts) => parts.join("\n")),
   ]);
   for (const route of [applications, enrollment, portal]) {
     assert.match(route, /sendManagementEmail/);
@@ -41,9 +41,9 @@ test("wires member and management notices to completed canonical events", async 
   assert.match(enrollment, /member\.community_registration_completed/);
   assert.match(portal, /card_change_management/);
   assert.match(portal, /cancellation_member/);
-  assert.match(webhook, /sendBillingTransitionEmails/);
-  assert.match(webhook, /paymentId && paymentIsReceived/);
-  assert.match(webhook, /paymentId && paymentHasFailed/);
+  assert.match(webhook, /reconcileMemberBilling\(memberId, \{ paymentSnapshot: payment, signal \}\)/);
+  assert.doesNotMatch(webhook, /sendBillingTransitionEmails/);
+  assert.match(email, /asaasPaymentHistory\(path, signal\)/);
   assert.match(reconciliation, /sendBillingTransitionEmails/);
   assert.match(reconciliation, /customer: recoveredCustomerId \|\| localSubscription\.asaas_customer_id/);
   assert.match(email, /payment_confirmed_member/);

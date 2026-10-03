@@ -597,10 +597,10 @@
   "reviewCycle": {
     "scope": "public/player",
     "revision": "V3",
-    "status": "published-club-redesign; current-motion-copy-refinement-in-review",
+    "status": "published-refinement; technical verification complete; full-page human acceptance pending",
     "humanAcceptance": false,
-    "releaseStatus": "Initial redesign and first responsive-motion release READY on www.apttennis.com.br; final owner corrections/copy in progress",
-    "task": "APT-CLUB-002/003/004 VERIFY; 005/006 current folds published; 007/008/009 IN_PROGRESS",
+    "releaseStatus": "READY www.apttennis.com.br; dpl_3LSiiXESwQvJfw9BLLoV5kwaBNmQ; source5c95d19252f51936f16b4c547bb41422566e5743",
+    "task": "APT-CLUB-002/003/004/005/006 VERIFY human visual review; 007/008 implemented and published; 009 final Lighthouse comparison in progress",
     "revisions": [
       {
         "revision": "V1",
@@ -644,7 +644,7 @@
     },
     "currentFoldRevision": {
       "status": "published; runtime/assets inspected; final owner review pending",
-      "productChecksPassed": 29,
+      "productChecksPassed": 30,
       "calendarChecksPassed": 1,
       "scope": [
         "Courts composition and clay Court 2",
@@ -667,7 +667,7 @@
       "releaseStatus": "READY published in initial release; source now includes additional owner-requested copy/motion refinement"
     },
     "copyRevision": {
-      "status": "implemented; independent editorial review complete; browser/build pending",
+      "status": "published; factual/editorial review and static/visual checks passed",
       "reason": "Owner rejected shallow slogans for affluent APT audience; current request supersedes prior frozen copy",
       "hero": "Um clube de tênis. Por indicação. Para jogar com critério./constância./respeito.",
       "scope": "Landing and public metadata, factual category/admission/ranking/cycles; no income eligibility or invented offer",
@@ -675,11 +675,34 @@
       "humanAcceptance": false
     },
     "motionRevision": {
-      "status": "implemented; final build/browser pending",
+      "status": "published; 31 focused checks and production browser verification passed",
       "courts": "Visible-only six-second automatic highlighting plus manual selection; reduced-motion static",
       "stack": "Native scroll, central pile, corners, no white frame, shorter stage below64rem, local pointer drift after spreading",
       "productChecksPassed": 31,
       "scope": "Public landing; no API/schema/dependency changes"
+    },
+    "technicalEvidence": {
+      "deployment": "dpl_3LSiiXESwQvJfw9BLLoV5kwaBNmQ",
+      "runtimeCommit": "5c95d19252f51936f16b4c547bb41422566e5743",
+      "runtimeSourceFingerprint": "b0d39bb0e9923cbeb0f004375a3f7c0e016f2e8700653f18ab7eb5983af6c6cf",
+      "cloudBuild": "Next16.3.1/Turbopack, TypeScript,27routes PASS",
+      "focusedChecks": 31,
+      "browser": "390/768/1280 native stack closed/open; zero white photo borders; courts auto+manual exactlyonepressed; postspread pointer vars/drift; logo, complete3panelmockup, PS/BW member; responsive image endpoint loaded",
+      "lighthouseBaseline": {
+        "mobile": [
+          98,
+          100,
+          100,
+          100
+        ],
+        "desktop": [
+          100,
+          100,
+          100,
+          100
+        ]
+      },
+      "imageOptimization": "next/image on5auditedassets+landingcontexts; eager3hero highonlycentre; lazyothers; staticfallbacksizes; PS/BW originalnative"
     }
   }
 }

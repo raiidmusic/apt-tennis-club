@@ -8,9 +8,9 @@ O APT deve comunicar um clube mais exclusivo e sóbrio. As referências da cole�
 
 As quatro imagens de marca fornecidas são referências de identidade/cor. Gabriel esclareceu: “a logo em destaque é só um aplicacao pra instagram, ignore usar sempre assim” e “gosto das outras variazoes que ja usamos”. Preservar as variantes oficiais existentes e ajustar escala ao contexto. Não usar a prancha de Instagram como regra de header, hero ou footer.
 
-O estudo conserva a inspeção das seis fontes e as recomendações iniciais. A escolha humana posterior de **16th Hole / Conceptzilla** passa a orientar a landing e a identidade pública/do jogador. A composição implementada continua uma prévia local em validação; escolher a referência ou autorizar sua reprodução não significa aceitar a tela resultante.
+O estudo conserva a inspeção das seis fontes e as recomendações iniciais. A escolha humana posterior de **16th Hole / Conceptzilla** passa a orientar a landing e a identidade pública/do jogador. A composição implementada foi publicada por autorização explícita no domínio oficial. A escolha da referência e a autorização de release não significam aceite estético da página inteira.
 
-## Direção atual — prévia local V3
+## Direção V3 e evolução publicada
 
 Gabriel escolheu explicitamente a referência 05: “gosto dessa referencia do golf 16th hole” e “pode copiar sem dó”. Fonte: [16th Hole — Website For Private Golf Club, Conceptzilla](https://dribbble.com/shots/27168502-Website-For-Private-Golf-Club). A hero limpa está em `outputs/apt-club-redesign/assets/ref-05.jpg`; as três construções adicionais estão em `ref-05-print-01.jpg` a `ref-05-print-03.jpg` no mesmo diretório.
 
@@ -18,12 +18,12 @@ Gabriel escolheu explicitamente a referência 05: “gosto dessa referencia do g
 |---|---|
 | V1 | Rejeitada por Gabriel: “nao gostei da hero e senti que ficou tudo mto quadrado e simples dms, longe das referencias”. Correção aplicável à landing e às jornadas públicas/do jogador: aproximar composição, respiro e fotografia das fontes, sem reduzir sobriedade a caixas rígidas. |
 | V2 | Iteração intermediária guiada pelo 16th Hole. A hero desta iteração é substituída pela V3. A direção de clube, os fluxos e o escopo dos jogadores permanecem; a gestão continua intacta. |
-| V3 | Referência humana 16th Hole + Hero 10 para o leque e Animated Hero para a troca de palavras. Hero aprovada explicitamente; composição e copy congeladas nesse trecho. |
-| Acabamento atual | Stack Spread no meio, Glyph Portal no fechamento, FAQ/scroll e copy dos capítulos explicativos. Novos frames fotográficos do manifesto preservam seu texto e disposição aprovados. Prévia local pronta para revisão do proprietário; aceite da página inteira e publicação não inferidos. |
+| V3 | Referência humana 16th Hole + Hero 10 para o leque e Animated Hero para a troca de palavras. Composição da hero aprovada explicitamente. A copy foi reaberta depois pelo proprietário para maior sobriedade; direção atual está no fechamento abaixo. |
+| Acabamento atual | Stack Spread no meio, Glyph Portal no fechamento, FAQ/scroll e copy dos capítulos explicativos. Novos frames fotográficos do manifesto preservam seu texto e disposição aprovados. Publicação autorizada e executada; revisão estética do conjunto permanece com o proprietário. |
 
 Esses nomes distinguem revisões visuais locais deste estudo. Eles não renomeiam nem apagam o histórico da V2 financeira/operacional do sistema, sua evidência de publicação ou o tema Amber Hearth da gestão.
 
-A hero V3 conserva logo oficial pequena e central em desktop/tablet, lettering original do APT em Georgia e uma expressão em itálico sobre faixa oliva clara. O título contém “Seu tênis, em boa companhia.” e “Um clube para” com competir./evoluir./pertencer. O conteúdo acessível permanece estático. Navegação, requerimento e calendário usam destinos reais. Em mobile, a composição se adapta para preservar alvos e leitura.
+A hero V3 conserva logo oficial pequena e central em desktop/tablet, lettering original do APT em Georgia e uma expressão em itálico sobre faixa oliva clara. A copy original continha “Seu tênis, em boa companhia.” e “Um clube para” com competir./evoluir./pertencer.; o proprietário rejeitou essas frases depois. A versão publicada usa “Um clube de tênis. Por indicação.” e “Para jogar com” critério./constância./respeito. O conteúdo acessível permanece estático. Navegação, requerimento e calendário usam destinos reais. Em mobile, a composição se adapta para preservar alvos e leitura.
 
 O leque reúne três fotografias de tênis: saibro, jogador junto à rede e raquete na quadra verde. Sua composição deriva do Hero 10; a marcação e o CSS são originais do APT. A transição vertical de palavras é adaptada do Hero5 MIT de Tommy, com spring stiffness 50, damping 18 e ciclo de 2 segundos. O damping é ajuste APT; a fonte declara apenas stiffness 50. Cleanup do timer e redução de movimento são preservados.
 
@@ -183,3 +183,13 @@ Os comandos exatos Glyph Portal/Stack Spread retornaram autenticação obrigató
 Stack Spread usa markup/CSS originais e view timeline nativa: seis fotografias locais abrem a pilha entre Courts e temporada. Sem suporte, abaixo de 768px ou com movimento reduzido, a mesma galeria permanece estática e legível. A fonte Hyperiux recebida não declara licença; não se atribui MIT nem incorpora seu JavaScript.
 
 Correção final aplicada literalmente: “eu gostei da disposicao do texto e tudo, oq mais me incomodou foram as fotos do jeito que ta.” Texto, ordem e disposição central do manifesto preservados; recortes circulares substituídos por frames verticais levemente inclinados. A hero aprovada e o mockup completo permanecem.
+
+## Fechamento técnico publicado —03/10/2026
+
+Courts alterna o destaque a cada seis segundos quando a seção e a aba estão visíveis, com seleção manual preservada. Court2 usa saibro escuro. Stack mantém exatamente “Beyond the Court.” e seu parágrafo, por correção humana: pilha central sobre o texto, abertura para cantos, foto sem borda branca, etapa móvel/tablet curta e mouse após abertura. Sem suporte à timeline ou com redução de movimento, exibe fotografia/texto estáticos.
+
+Copy reformulada com Copy Anatomy/Copywriting/Copy Editing e consulta seletiva às notas de promessa verificável, tom de voz e contexto do público: indicação/análise/convite, ranking masculino, quatro divisões, rodadas quinzenais e quatro ciclos; sem elegibilidade de renda/infraestrutura/networking inventados. A referência de público orienta voz e critérios, não adiciona oferta. Metadata acompanha a versão. Calendário confirma ciclos, não trimestre civil.
+
+31checks focais e build remotoNext/TypeScript27rotas passaram; revisão independente focal/Ponytail incluiu correção de nitidez no fallback responsivo. Browser da produção em390/768/1280 confirmou abertura, manual/autoCourt e mouse, sem overflow nas telas verificadas. Mockup3painéis integral, fotoBW e artePS preservados. Runtime final5c95d19252f51936f16b4c547bb41422566e5743, deployREADYdpl_3LSiiXESwQvJfw9BLLoV5kwaBNmQ, aliaswww.apttennis.com.br. Recibo de arquivos/SHAs e inspect em `outputs/apt-club-redesign/release`.
+
+LighthouseCLI13.5.0 executado depois do primeiro release refinado: mobile98/100/100/100 e desktop100/100/100/100. Oportunidade concreta de313KiB estimados em imagens levou ao `next/image` já instalado, com sizes conforme CSS, prioridade alta única na hero e lazyabaixo; sem alterar arquivos originais ou artePS/BW. Relatórios de comparação posterior ficam em `outputs/apt-club-redesign/lighthouse`. Pontuação de laboratório e checks técnicos não representam aprovação estética humana ou dados de campo.

@@ -3,6 +3,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { ArrowDownLeft, ArrowUpRight, CheckCheck, ChevronRight, ClipboardList, CreditCard, GripVertical, Home, LayoutDashboard, LogOut, Plus, RefreshCw, Search, Settings2, SlidersHorizontal, Table2, Trophy, UserRound, UsersRound, Wallet } from "lucide-react";
 import { ProductSidebar } from "@/components/ui/sidebar";
@@ -436,23 +437,23 @@ export function LandingPage() {
             </div>
           </div>
           <div className="apt-hero__visual" role="group" aria-label="O tênis, dentro e além da quadra">
-            <figure><img src="/apt-editorial-clay.jpeg" width="736" height="1211" alt="Um saque e sua sombra sobre o saibro" /></figure>
-            <figure><motion.div className="apt-hero__photo" style={{ y: reducedMotion ? 0 : photoY }}><img src="/apt-editorial-hero.jpeg" width="736" height="981" alt="Jogador junto à rede, entre dois pontos" fetchPriority="high" /></motion.div></figure>
-            <figure><img src="/apt-assets/tennis-green-racket.webp" width="736" height="1277" alt="Raquete vermelha e o passo de um jogador na quadra verde" /></figure>
+            <figure><Image src="/apt-editorial-clay.jpeg" width="736" height="1211" sizes="(max-width: 767px) 32vw, (max-width: 920px) 30vw, 280px" alt="Um saque e sua sombra sobre o saibro" loading="eager" /></figure>
+            <figure><motion.div className="apt-hero__photo" style={{ y: reducedMotion ? 0 : photoY }}><Image src="/apt-editorial-hero.jpeg" width="736" height="981" sizes="(max-width: 767px) 35vw, (max-width: 920px) 33vw, 310px" alt="Jogador junto à rede, entre dois pontos" loading="eager" fetchPriority="high" /></motion.div></figure>
+            <figure><Image src="/apt-assets/tennis-green-racket.webp" width="736" height="1277" sizes="(max-width: 767px) 32vw, (max-width: 920px) 30vw, 280px" alt="Raquete vermelha e o passo de um jogador na quadra verde" loading="eager" /></figure>
           </div>
           <aside className="apt-hero__season" aria-label="Temporada atual"><span>Ranking masculino · Brasília</span><a href="/calendario2026">Temporada 2026 <ArrowUpRight size={16} aria-hidden="true" /></a><span>Beyond the Court.</span></aside>
         </section>
 
         <section className="apt-manifesto" id="o-apt">
-          <figure className="apt-manifesto__photo apt-manifesto__photo--one"><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Bola e raquete, antes do próximo ponto" loading="lazy" /></figure>
+          <figure className="apt-manifesto__photo apt-manifesto__photo--one"><Image src="/apt-ritual-figma.jpg" width="900" height="1125" sizes="(max-width: 767px) 136px, (max-width: 1485px) 14vw, 208px" alt="Bola e raquete, antes do próximo ponto" loading="lazy" /></figure>
           <div className="apt-manifesto__heading"><p className="apt-kicker">O clube</p><h2>Indicação e análise.<br /><em>Antes de cada convite.</em></h2></div>
           <div className="apt-manifesto__body"><p>A indicação apresenta o candidato ao APT. A gestão analisa o perfil e a disponibilidade na divisão adequada antes de liberar o convite de cadastro.</p><p>Os membros participam de uma temporada comum, com adversários de nível compatível e calendário definido. Cada jogador combina suas partidas e registra os resultados no prazo da rodada.</p><div className="apt-manifesto__mark"><img src="/logo-apt3-navy.svg" width="1241" height="1246" alt="" /><span>Beyond the Court.</span></div></div>
-          <figure className="apt-manifesto__photo apt-manifesto__photo--two"><img src="/apt-assets/tennis-green-racket.webp" width="736" height="1277" alt="O ritmo de um jogador entre pontos" loading="lazy" /></figure>
+          <figure className="apt-manifesto__photo apt-manifesto__photo--two"><Image src="/apt-assets/tennis-green-racket.webp" width="736" height="1277" sizes="(max-width: 767px) 136px, (max-width: 1485px) 14vw, 208px" alt="O ritmo de um jogador entre pontos" loading="lazy" /></figure>
         </section>
 
         <section className="apt-product" id="ranking">
           <header className="apt-section-heading"><h2>Rodadas quinzenais.<br /><em>Horários combinados.</em></h2><p>O ranking define os confrontos. Você combina a data e o horário com cada adversário, dentro do prazo da rodada.</p></header>
-          <div className="apt-product__layout"><figure className="apt-product__photo"><img src="/apt-assets/apt-club-outdoor.webp" width="1149" height="1368" alt="Três painéis ao ar livre: fotografias de tênis nas laterais e a marca APT ao centro" loading="lazy" /></figure>
+          <div className="apt-product__layout"><figure className="apt-product__photo"><Image src="/apt-assets/apt-club-outdoor.webp" width="1149" height="1368" sizes="(max-width: 767px) calc(100vw - 64px), (max-width: 1480px) calc(50vw - 108px), 632px" alt="Três painéis ao ar livre: fotografias de tênis nas laterais e a marca APT ao centro" loading="lazy" /></figure>
             <dl className="apt-format"><div><dt>2</dt><dd><strong>Jogos por rodada</strong><p>A cada quinze dias, você recebe dois confrontos para combinar.</p></dd></div><div><dt>14</dt><dd><strong>Dias para jogar</strong><p>Combine o horário com seu adversário, entre em quadra e registre o resultado dentro do prazo.</p></dd></div><div><dt>4</dt><dd><strong>Divisões de nível</strong><p>Central Court, Court 1, Court 2 e Court 3. Os resultados definem sua posição e o próximo ciclo.</p></dd></div></dl>
           </div>
         </section>
@@ -491,7 +492,7 @@ export function LandingPage() {
                 { src: "/apt-assets/tennis-green-indian-wells.webp", width: 736, height: 863, alt: "Uma troca de bola na quadra verde" },
                 { src: "/apt-assets/apt-court-photographic.webp", width: 1122, height: 1402, alt: "Composição de marca APT pintada no piso de uma quadra" },
                 { src: "/apt-editorial-hero.jpeg", width: 736, height: 981, alt: "A pausa de um jogador junto à rede" },
-              ].map((photo, index) => <figure key={photo.src}><div className="apt-spread__photo-drift" style={{ "--apt-depth": 0.55 + index * 0.15 } as CSSProperties}><img {...photo} alt={photo.alt} loading="lazy" draggable={false} /></div></figure>)}
+              ].map((photo, index) => <figure key={photo.src}><div className="apt-spread__photo-drift" style={{ "--apt-depth": 0.55 + index * 0.15 } as CSSProperties}><Image {...photo} sizes="(max-width: 1023px) 28vw, (max-width: 1318px) 17vw, 224px" alt={photo.alt} loading="lazy" draggable={false} /></div></figure>)}
             </div>
           </div>
         </section>
@@ -504,7 +505,7 @@ export function LandingPage() {
             <div><p>Quatro ciclos ao longo do ano, com sorteios quinzenais e mudanças de divisão ao fim de cada ciclo.</p><a className="apt-text-link" href="/calendario2026">Ver calendário da temporada <span aria-hidden="true">↗</span></a></div>
           </header>
           <div className="apt-cycle__body">
-            <figure className="apt-cycle__photo"><div><img src="/apt-editorial-clay.jpeg" width="736" height="1211" alt="Jogador executa um golpe no saibro" loading="lazy" /></div><figcaption><span>2 jogos por rodada</span><span>14 dias para jogar</span></figcaption></figure>
+            <figure className="apt-cycle__photo"><div><Image src="/apt-editorial-clay.jpeg" width="736" height="1211" sizes="(max-width: 767px) calc(100vw - 64px), (max-width: 1480px) calc(45vw - 92px), 600px" alt="Jogador executa um golpe no saibro" loading="lazy" /></div><figcaption><span>2 jogos por rodada</span><span>14 dias para jogar</span></figcaption></figure>
             <ol className="apt-cycle__steps">
               <li><span className="apt-cycle__number" aria-hidden="true">01</span><div><span className="apt-cycle__rhythm">A cada quinze dias</span><h3>Sorteios quinzenais</h3><p>Dois jogos liberados a cada rodada.</p></div></li>
               <li><span className="apt-cycle__number" aria-hidden="true">02</span><div><span className="apt-cycle__rhythm">A cada partida</span><h3>Pontuação por resultado</h3><p>Vitórias, sets e games entram na classificação.</p></div></li>

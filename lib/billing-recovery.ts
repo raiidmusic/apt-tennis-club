@@ -64,7 +64,7 @@ export async function runBillingRecovery() {
     emailsPending: emailResults.filter((status) => status !== "sent" && status !== "suppressed").length,
     emailFailed,
   };
-  await supabaseAdmin("audit_logs", { method: "POST", body: { actor: "system", action: "billing.reconciliation_run", entity_type: "billing", metadata: run }, signal: AbortSignal.timeout(2_000) });
+  await supabaseAdmin("audit_logs", { method: "POST", body: { actor: "system", action: "billing.reconciliation_run", entity_type: "billing", entity_id: startedAt, metadata: run }, signal: AbortSignal.timeout(2_000) });
   return run;
 }
 

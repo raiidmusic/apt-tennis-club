@@ -42,6 +42,8 @@ function mock(t, { events = [], members = [], subscriptions = [], payments = [],
     if (init.method === 'HEAD') return new Response(null, { headers: { 'content-range': `*/${counts[table] || 0}` } });
     const body = init.body ? JSON.parse(init.body) : null;
     if (init.method && init.method !== 'GET') {
+      // Match public.audit_logs.entity_id TEXT NOT NULL, which has no default.
+      if (table === 'audit_logs' && init.method === 'POST' && body.entity_id == null) return Response.json({ code: '23502', message: 'null value in column "entity_id" violates not-null constraint' }, { status: 400 });
       writes.push({ table, q, body });
       if (table === 'webhook_events') {
         if (init.method === 'POST') { events.push({ ...body, attempt_count: 0, next_attempt_at: new Date().toISOString(), last_attempt_at: null }); return Response.json([]); }
@@ -202,7 +204,11 @@ test('existing cron runs stored event recovery even without incoming webhooks an
   const run = await response.json();
   assert.equal(run.webhooks.processed, 1); assert.equal(run.exceptions, 1);
   const audit = http.writes.find((w) => w.table === 'audit_logs');
+  assert.equal(audit.body.actor, 'system');
   assert.equal(audit.body.action, 'billing.reconciliation_run');
+  assert.equal(audit.body.entity_type, 'billing');
+  assert.equal(audit.body.entity_id, run.startedAt);
+  assert.match(audit.body.entity_id, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
   assert.equal(audit.body.metadata.webhooks.processed, 1);
   assert.ok(stored.processed_at);
 });

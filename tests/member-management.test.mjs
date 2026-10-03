@@ -51,9 +51,14 @@ test("keeps member access editing admin-only, auditable and inside safe boundari
   assert.match(membersRoute, /payments: payments\.map\(financialPayment\)/);
   assert.match(client, /function ManagementDashboard/);
   assert.match(client, /Painel de decisão/);
-  assert.match(client, /Recebimento no Asaas nos últimos seis meses/);
+  assert.match(client, /Recebimento no Asaas · últimos seis meses/);
+  assert.match(client, /Recebido e confirmado em liquidação são séries separadas pela data do provedor/);
+  assert.match(client, /O total do período soma apenas recebimentos/);
   assert.match(client, /Emitido vencido/);
   assert.match(client, /setPayments\(payload\.payments \|\| \[\]\)/);
   assert.match(client, /financialMetricRows/);
-  assert.doesNotMatch(packageJson, /recharts|chart\.js|d3/);
+  const dependencies = JSON.parse(packageJson).dependencies;
+  assert.ok(dependencies.recharts, "The selected Advanced Stats core uses Recharts");
+  assert.equal(dependencies["react-is"], dependencies.react, "Recharts shares the installed React version");
+  assert.doesNotMatch(packageJson, /chart\.js|"d3"\s*:/);
 });

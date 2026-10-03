@@ -30,10 +30,8 @@ type ProductSidebarProps = {
   className?: string;
 };
 
-const spring = { type: "spring" as const, stiffness: 520, damping: 42, mass: 0.82 };
-
-function SidebarItems({ items, close }: { items: ProductSidebarItem[]; close?: () => void }) {
-  return <nav className="product-sidebar__nav" aria-label="Seções">
+function SidebarItems({ items }: { items: ProductSidebarItem[] }) {
+  return <nav id="product-sidebar-navigation" className="product-sidebar__nav" aria-label="Seções">
     {items.map((item) => {
       const Icon = item.icon;
       const content = <>
@@ -42,8 +40,8 @@ function SidebarItems({ items, close }: { items: ProductSidebarItem[]; close?: (
         {item.badge !== undefined && <span className="product-sidebar__badge">{item.badge}</span>}
       </>;
       const className = ["product-sidebar__item", item.active && "product-sidebar__item--active"].filter(Boolean).join(" ");
-      if (item.href) return <a key={item.id} className={className} href={item.href} target={item.external ? "_blank" : undefined} rel={item.external ? "noreferrer" : undefined} aria-label={item.label} aria-current={item.active ? "page" : undefined} onClick={close}>{content}</a>;
-      return <button key={item.id} className={className} type="button" aria-label={item.label} aria-current={item.active ? "page" : undefined} onClick={() => { item.onSelect?.(); close?.(); }}>{content}</button>;
+      if (item.href) return <a key={item.id} className={className} href={item.href} target={item.external ? "_blank" : undefined} rel={item.external ? "noreferrer" : undefined} aria-label={item.label} aria-current={item.active ? "page" : undefined}>{content}</a>;
+      return <button key={item.id} className={className} type="button" aria-label={item.label} aria-current={item.active ? "page" : undefined} onClick={item.onSelect}>{content}</button>;
     })}
   </nav>;
 }
@@ -51,19 +49,19 @@ function SidebarItems({ items, close }: { items: ProductSidebarItem[]; close?: (
 export function ProductSidebar({ ariaLabel, brand, eyebrow, title, items, profile, footer, status, className }: ProductSidebarProps) {
   const [expanded, setExpanded] = useState(true);
   const reduceMotion = useReducedMotion();
-  const transition = reduceMotion ? { duration: 0 } : spring;
+  const transition = { duration: reduceMotion ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] as const };
 
   return <>
     <motion.aside
       className={["product-sidebar", !expanded && "product-sidebar--collapsed", className].filter(Boolean).join(" ")}
       aria-label={ariaLabel}
       initial={false}
-      animate={{ width: expanded ? "17.5rem" : "4.75rem" }}
+      animate={{ width: expanded ? "15rem" : "4.5rem" }}
       transition={transition}
     >
       <div className="product-sidebar__top">
         <div className="product-sidebar__brand">{brand}</div>
-        <button className="product-sidebar__collapse" type="button" onClick={() => setExpanded((current) => !current)} aria-label={expanded ? "Recolher barra lateral" : "Expandir barra lateral"}>
+        <button className="product-sidebar__collapse" type="button" onClick={() => setExpanded((current) => !current)} aria-expanded={expanded} aria-controls="product-sidebar-navigation" aria-label={expanded ? "Recolher barra lateral" : "Expandir barra lateral"}>
           {expanded ? <PanelLeftClose aria-hidden="true" size={18} /> : <PanelLeftOpen aria-hidden="true" size={18} />}
         </button>
       </div>

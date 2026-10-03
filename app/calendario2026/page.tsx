@@ -117,7 +117,7 @@ export default function CalendarPage() {
 
       <header className={styles.topbar}>
         <Link className={styles.brand} href="/" aria-label="APT Tennis Club — início">
-          <Image src="/logo-apt1.svg" width={1109} height={1162} alt="APT Tennis Club — Beyond the Court" priority />
+          <Image src="/logo-apt1-navy.svg" width={1109} height={1162} alt="APT Tennis Club — Beyond the Court" priority />
         </Link>
         <nav aria-label="Navegação do calendário">
           <a href="#temporada-2027">2027</a>
@@ -179,13 +179,13 @@ export default function CalendarPage() {
             <h2 id="finals-title">APT Finals</h2>
             <time dateTime={finalsDate}>04 dezembro 2027</time>
             <span>Os melhores de cada Court, na mesma quadra, para encerrar a temporada.</span>
-            <Link href="/#ranking">Acompanhar o ranking <span aria-hidden="true">→</span></Link>
+            <Link href="/#ranking">Entender o formato do ranking <span aria-hidden="true">→</span></Link>
           </div>
         </section>
       </main>
 
       <footer className={styles.footer}>
-        <Link href="/" aria-label="APT Tennis Club — início"><Image src="/logo-apt1.svg" width={1109} height={1162} alt="" /></Link>
+        <Link href="/" aria-label="APT Tennis Club — início"><Image src="/logo-apt1-navy.svg" width={1109} height={1162} alt="" /></Link>
         <p>Brasília · Desde 2025</p>
         <nav aria-label="Links finais"><Link href="/requerimento">Solicitar entrada</Link><Link href="/entrar">Área do membro</Link></nav>
       </footer>

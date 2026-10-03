@@ -42,12 +42,13 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#1f2e50",
+  themeColor: "#f3f4f6",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR">
+      <head><link rel="preload" href="/fonts/outfit-latin-variable.woff2" as="font" type="font/woff2" crossOrigin="anonymous" /></head>
       <body>{children}</body>
     </html>
   );

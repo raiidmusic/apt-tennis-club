@@ -2,11 +2,12 @@
   "version": 1,
   "project": {
     "name": "apt-tennis",
-    "productType": "Membership club operations dashboard and member portal",
+    "productType": "Tennis club landing, membership operations, member portal and existing enrollment/authentication journeys",
     "stack": [
       "nextjs",
       "react",
-      "native-css"
+      "native-css",
+      "recharts"
     ]
   },
   "sources": {
@@ -14,7 +15,9 @@
       "app/globals.css"
     ],
     "components": [
-      "app/apt-app.tsx"
+      "app/apt-app.tsx",
+      "components/ui/sidebar.tsx",
+      "components/ui/advanced-stats.tsx"
     ],
     "assets": [
       "public"
@@ -28,54 +31,110 @@
   "design": {
     "colorMode": "light",
     "colors": {
-      "--surface-muted": {
-        "value": "oklch(94% 0.006 255)",
+      "--background": {
+        "value": "#ffffff",
+        "source": "app/globals.css"
+      },
+      "--foreground": {
+        "value": "#111827",
+        "source": "app/globals.css"
+      },
+      "--card": {
+        "value": "#ffffff",
+        "source": "app/globals.css"
+      },
+      "--primary": {
+        "value": "#d87943",
+        "source": "app/globals.css"
+      },
+      "--primary-foreground": {
+        "value": "#111827",
+        "source": "app/globals.css"
+      },
+      "--secondary": {
+        "value": "#527575",
+        "source": "app/globals.css"
+      },
+      "--secondary-foreground": {
+        "value": "#ffffff",
         "source": "app/globals.css"
       },
       "--muted": {
-        "value": "oklch(43% 0.026 255)",
+        "value": "#f3f4f6",
         "source": "app/globals.css"
       },
-      "--navy": {
-        "value": "oklch(25% 0.055 255)",
+      "--muted-foreground": {
+        "value": "#6b7280",
         "source": "app/globals.css"
       },
-      "--navy-deep": {
-        "value": "oklch(18% 0.038 255)",
+      "--muted-text": {
+        "value": "color-mix(in srgb, var(--muted-foreground) 85%, var(--foreground))",
         "source": "app/globals.css"
       },
-      "--clay": {
-        "value": "oklch(57% 0.17 38)",
+      "--accent": {
+        "value": "#eeeeee",
         "source": "app/globals.css"
       },
-      "--mineral": {
-        "value": "oklch(97% 0.004 255)",
+      "--border": {
+        "value": "#e5e7eb",
         "source": "app/globals.css"
       },
-      "--surface": {
-        "value": "oklch(100% 0 0)",
+      "--focus": {
+        "value": "var(--secondary)",
         "source": "app/globals.css"
       },
-      "--ink": {
-        "value": "oklch(21% 0.035 255)",
-        "source": "app/globals.css"
-      },
-      "--olive": {
-        "value": "oklch(39% 0.06 128)",
+      "--destructive": {
+        "value": "#ef4444",
         "source": "app/globals.css"
       },
       "--danger": {
-        "value": "oklch(49% 0.18 27)",
+        "value": "color-mix(in srgb, var(--destructive) 65%, var(--foreground))",
+        "source": "app/globals.css"
+      },
+      "--sidebar": {
+        "value": "#f3f4f6",
+        "source": "app/globals.css"
+      },
+      "--sidebar-primary": {
+        "value": "#d87943",
+        "source": "app/globals.css"
+      },
+      "--sidebar-primary-foreground": {
+        "value": "#111827",
+        "source": "app/globals.css"
+      },
+      "--chart-1": {
+        "value": "#5f8787",
+        "source": "app/globals.css"
+      },
+      "--chart-2": {
+        "value": "#e78a53",
+        "source": "app/globals.css"
+      },
+      "--chart-3": {
+        "value": "#fbcb97",
+        "source": "app/globals.css"
+      },
+      "--chart-confirmed": {
+        "value": "var(--secondary)",
+        "source": "app/globals.css"
+      },
+      "--chart-received": {
+        "value": "color-mix(in srgb, var(--chart-2) 80%, var(--foreground))",
         "source": "app/globals.css"
       }
     },
     "typography": {
+      "--font-sans": {
+        "value": "\"Outfit\", ui-sans-serif, sans-serif, system-ui",
+        "source": "app/globals.css"
+      },
       "--font-ui": {
-        "value": "\"Avenir Next\", Avenir, \"Helvetica Neue\", Arial, sans-serif",
+        "value": "var(--font-sans)",
         "source": "app/globals.css"
       },
       "--font-display": {
-        "value": "\"Avenir Next Condensed\", \"Arial Narrow\", \"Helvetica Neue\", Arial, sans-serif",
+        "value": "var(--font-sans)",
         "source": "app/globals.css"
       }
     },
@@ -118,18 +177,26 @@
       }
     },
     "radius": {
+      "--radius": {
+        "value": "0.75rem",
+        "source": "app/globals.css"
+      },
       "--radius-sm": {
         "value": "0.5rem",
         "source": "app/globals.css"
       },
       "--radius-md": {
-        "value": "0.875rem",
+        "value": "var(--radius)",
+        "source": "app/globals.css"
+      },
+      "--product-radius": {
+        "value": "0.75rem",
         "source": "app/globals.css"
       }
     },
     "shadows": {
       "--shadow-raised": {
-        "value": "0 1.2rem 3.5rem oklch(18% 0.038 255 / 0.14)",
+        "value": "0 1px 4px rgb(0 0 0 / 0.05)",
         "source": "app/globals.css"
       }
     },
@@ -143,30 +210,61 @@
         "source": "app/globals.css"
       }
     },
-    "density": "compact management, spacious landing"
+    "density": "Operational product: 16px controls/body, 14px data, 24–28px headings; spacious landing"
   },
   "components": {
     "installed": [
+      "LandingPage",
       "RouteHeader",
+      "ProductSidebar",
       "ManagementDashboard",
-      "MemberOperationsBoard",
-      "MemberManagementPanel",
-      "status-chip",
-      "primary-button",
-      "secondary-button"
+      "RevenuePulse",
+      "InvoiceTable",
+      "MemberRecordsTable",
+      "MemberOperationsKanban",
+      "MemberManagementDetail",
+      "CrmKanban",
+      "ApplicationReviewDetail",
+      "PortalPage",
+      "LoginPage",
+      "PasswordRecoveryPage",
+      "CandidatePage",
+      "EnrollmentPage",
+      "ClippedAreaChart"
     ],
     "preferredPrimitives": [
       "semantic HTML",
       "existing APT CSS classes"
     ],
-    "patterns": []
+    "patterns": [
+      "Selected Advanced Stats composition: dominant 2fr chart, dark real-base card and decisions aside; six exact-ledger metrics below (desktop 6, intermediate 3×2, mobile 2×3)",
+      "Exact-record ledger per metric",
+      "Native member table and operational board with the same filters",
+      "Member detail: identity, financial coverage and invoice history before administrative forms",
+      "Native disclosure sections and labelled fieldsets for existing actions",
+      "Editorial landing with existing photography, compact navigation and member/calendar links visible on mobile",
+      "Real selected theme tokens; 12px surfaces and selfhosted variable Outfit",
+      "Interactive received and confirmed-series chart: exact provider-calendar months, pointer/touch/focus readout and complete currency values",
+      "Application board uses existing admin PATCH, confirmed server state, visible errors and explicit decision dialogs; paid membership lanes remain derived",
+      "Current explicit user decision: chart first, real-base/decisions aside, then six financial metrics; this supersedes the earlier metrics-before-chart order without changing financial definitions or exact ledgers",
+      "Member table: six proportional columns without frozen overlays, all financial evidence retained, own mobile scroll and visible hint",
+      "Portal: identity, financial participation, actual next actions/access links and invoice history; editable contact separate from protected fields",
+      "Member contact detail: labelled real contact data, financial history and explicit notes before configuration; independent monitoring/email signals preserved",
+      "Approved three-word hero sequence repeats at all widths without a stop control per explicit owner decision; OS reduced motion remains static",
+      "Native member/application modal dialogs contain focus and restore the opener; persisted partial note receipts remain visible and are deduplicated without claiming unrelated edits succeeded"
+    ]
   },
   "constraints": {
     "must": [
-      "Preserve mineral/navy/clay/olive and official lockup",
+      "Apply the selected Amber Hearth light theme, selfhosted Outfit and official APT SVG assets",
       "44px interactive controls, visible focus and reduced motion",
       "Separate payment, participation, forecast and debt",
-      "Reuse native CSS and existing React components"
+      "Reuse native CSS and existing React components",
+      "Product headings use the UI font at 24–28px, with 16px controls and 14px data",
+      "240px sidebar, 72px collapsed; metric cards spaced by 16px with 16px radius; selected Advanced Stats chart/aside cards use 24px radius",
+      "Received cash and confirmed settlement remain separate, using the provider calendar",
+      "Content remains visible without animation; reduced motion and 44px controls apply to every surface",
+      "Use dark foreground on light amber actions and stronger muted/focus roles where the original palette misses accessible contrast"
     ],
     "avoid": [
       "New UI dependencies without need",
@@ -174,7 +272,24 @@
       "Sending repository context to external catalog"
     ]
   },
-  "decisions": [],
+  "decisions": [
+    {
+      "decision": "User authorized the total product UI/UX redesign, including management, portal, authentication and existing forms. Club identity and verified financial/API behavior remain the product boundaries.",
+      "source": "Current user authorization relayed by root, 2026-10-02"
+    },
+    {
+      "decision": "Implement hierarchy and interactions with the existing React/CSS/SVG/Lucide/Motion stack. Use catalog composition as reference, with original APT markup.",
+      "source": "Implementation under authorized scope"
+    },
+    {
+      "decision": "User explicitly selected Amber Hearth by serafimcloud, and expanded refinement to landing and every existing screen. Apply its light tokens while correcting foreground contrast.",
+      "source": "Current owner instruction relayed by root, 2026-10-02; APT_BRAIN.md"
+    },
+    {
+      "decision": "User-supplied contact CRM ZIP, User Table, Settle and sidebar are inspiration only; improve member portal/table without reproducing examples literally.",
+      "source": "Current owner instruction relayed by root, 2026-10-03; APT_BRAIN.md"
+    }
+  ],
   "evidence": [
     {
       "fact": "design.colorMode:light",
@@ -207,15 +322,155 @@
     {
       "fact": "actual runtime nextjs and native product CSS; legacy package dependencies not UI truth",
       "source": "app/apt-app.tsx and app/globals.css"
+    },
+    {
+      "fact": "Catalog search and public source/preview retrieval completed before product code edits; no local context exported",
+      "source": "21st catalog IDs 28770, 23604, 29223, 31454, 4901, 2428, 25058"
+    },
+    {
+      "fact": "No new dependency or registry installation; financial services and database unchanged",
+      "source": "app/apt-app.tsx, app/globals.css, components/ui/sidebar.tsx"
+    },
+    {
+      "fact": "Original primary/white contrast is 3.12:1; foreground111827 on primaryd87943 is 5.69:1. Muted text derived85%6b7280/15%111827 yields5.36:1 onf3f4f6; teal focus4.59:1 onsidebar.",
+      "source": "Offline sRGB WCAG calculation against actual app/globals.css tokens"
+    },
+    {
+      "fact": "Official Outfit Latin variable WOFF2 is selfhosted (32,292 bytes), with SIL OFL1.1 notice retained.",
+      "source": "public/fonts/outfit-latin-variable.woff2 and public/fonts/Outfit-OFL.txt"
+    },
+    {
+      "fact": "Received series uses a darker amber derivation (3.68:1 on white); confirmed settlement uses dashed teal, with distinct labels and exact values. No fake deltas, goals or merged cash/confirmation total.",
+      "source": "Offline sRGB WCAG calculation against actual app/globals.css roles"
     }
   ],
-  "generatedAt": "2026-10-02T21:37:22.089Z",
+  "generatedAt": "2026-10-03T04:30:00Z",
   "references": [
     {
       "url": "https://21st.dev/@cnippet-dev/components/v-table-12",
       "componentId": 22187,
       "name": "Invoice History Table",
       "use": "Inspiration for status badges, per-row actions, explicit outstanding totals; adapt existing HTML/CSS, no registry installation"
+    },
+    {
+      "componentId": 28770,
+      "name": "App Dashboard Layout",
+      "url": "https://21st.dev/@shadcnstore/components/app-1",
+      "use": "License not declared in GET; hierarchy only, original APT implementation"
+    },
+    {
+      "componentId": 23604,
+      "name": "Records Table",
+      "url": "https://21st.dev/@theshanelevine/components/records-table",
+      "use": "License not declared in GET; semantic table hierarchy only, original APT implementation"
+    },
+    {
+      "componentId": 29223,
+      "name": "Revenue Bars",
+      "url": "https://21st.dev/@olewandowski1/components/charts-1",
+      "use": "MIT public source read; native SVG implementation with real provider-calendar receipts"
+    },
+    {
+      "componentId": 31454,
+      "name": "Sidebar",
+      "url": "https://21st.dev/@wensity/components/sidebar",
+      "use": "MIT preview inspected; core not obtained, existing APT sidebar implementation"
+    },
+    {
+      "componentId": 4901,
+      "name": "Kanban",
+      "url": "https://21st.dev/@arihantcodes_1f7b8c4d/components/kanban-board",
+      "use": "MIT public reference inspected; native columns, financial stages remain derived"
+    },
+    {
+      "componentId": 2428,
+      "name": "Login",
+      "url": "https://21st.dev/@ephraimduncan/components/login-2",
+      "use": "MIT documented blocks.so/login-04 source read; native labelled fields, existing auth actions"
+    },
+    {
+      "componentId": 25058,
+      "name": "Account Settings Fieldset",
+      "url": "https://21st.dev/@cnippet-dev/components/v-fieldset-7",
+      "use": "MIT demo inspected; semantic grouping of existing fields only"
+    },
+    {
+      "themeId": "e6b559a3-663b-470f-b3f5-46b533d86247",
+      "name": "Amber Hearth",
+      "url": "https://21st.dev/@serafimcloud/themes/amber-hearth",
+      "use": "Actual public theme tokens retrieved before coding; explicit user selection. Native semantic mapping, with accessible foreground/muted/focus exceptions."
+    },
+    {
+      "componentId": 19075,
+      "name": "Editorial Hero",
+      "url": "https://21st.dev/@felipemenezes098/components/hero-05",
+      "use": "MIT public preview inspected before landing changes; editorial text/photo hierarchy only, original APT markup and claims."
+    },
+    {
+      "componentId": 2046,
+      "name": "Navbar 1",
+      "url": "https://21st.dev/@preetsuthar17/components/navbar-1",
+      "use": "MIT public preview inspected; compact native navigation with all existing destinations and keyboard targets."
+    },
+    {
+      "componentId": 13985,
+      "name": "Efferd Dashboard 2",
+      "url": "https://21st.dev/@efferd/components/efferd-dashboard-2",
+      "use": "MIT source recovered from the public author registry before chart/sidebar refinements; hierarchy only, without demo deltas or data."
+    },
+    {
+      "name": "Efferd App Shell 2",
+      "url": "https://efferd.com/blocks/app-shell#app-shell-2",
+      "use": "Public author header/sidebar source read; native APT navigation, actual routes/actions and selected Amber tokens."
+    },
+    {
+      "name": "Hover Trace Bar Chart",
+      "url": "https://21st.dev/@LegionWebDev/components/hover-trace-bar-chart",
+      "use": "MIT public source consulted for pointer/focus tracking; current implementation uses the exact public Advanced Stats core below."
+    },
+    {
+      "name": "Chart Example Legend",
+      "url": "https://21st.dev/@uiable/components/chart-example-legend",
+      "use": "MIT public source consulted for distinct-series legend and exact-value readout; current implementation uses the Advanced Stats core."
+    },
+    {
+      "name": "Advanced Stats / ClippedAreaChart",
+      "url": "https://21st.dev/@uilayout.contact/components/advanced-stats",
+      "source": "https://github.com/ui-layouts/uilayouts/blob/main/packages/blocks/src/stats-section/advanced-stats/charts.tsx",
+      "use": "Exact user-supplied light reference and public MIT core read before integration. Recharts monotone area, ghost line and clipped cursor adapted to actual provider-calendar cash and confirmation; full UI LAYOUT notice preserved. Native APT layout and exact financial ledgers, without sample data, deltas or goals."
+    },
+    {
+      "componentId": 31848,
+      "name": "User Table",
+      "url": "https://21st.dev/@alain00/components/user-table",
+      "source": "https://blobatar.dev/r/user-table.json",
+      "use": "MIT public source read before member refinements; compact initial/name/email identity, semantic rows and native horizontal scroll. Original APT CSS/markup, no Blobatar/demo fields."
+    },
+    {
+      "componentId": 941,
+      "name": "Settle",
+      "url": "https://21st.dev/@uvain/templates/settle-payment-operations-dashboard",
+      "use": "Public preview only; sold source not obtained. Contact and actionable financial hierarchy as inspiration, using real APT data."
+    },
+    {
+      "componentId": 315,
+      "name": "Sidebar / Manu Arora",
+      "url": "https://21st.dev/@manuarora700/components/sidebar",
+      "source": "https://ui.aceternity.com/components/sidebar",
+      "use": "Public source inspected; keep existing accessible explicit collapse, motion, real navigation and mobile buttons. No demo profile/routes or new dependencies."
+    },
+    {
+      "componentId": 19358,
+      "name": "Footer Section 5",
+      "url": "https://21st.dev/@solaceui/components/footer-section-5",
+      "source": "https://www.solaceui.com/r/footer-section-5.json",
+      "license": "no-license",
+      "use": "Explicit user reference; public author core148lines read. Latest human correction removes outline wordmark and large orange CTA. Original APT HTML/CSS: single restrained navy closing CTA with small official logo/high-contrast text, followed by light grouped real navigation. No copied shader/logo/code or new dependencies."
+    },
+    {
+      "name": "Parallax Scrolling",
+      "url": "https://21st.dev/@osmosupply/components/parallax-scrolling",
+      "use": "Explicit user selection and pasted layers inspected. Original native-scroll adaptation with existing Framer useScroll/useTransform/useReducedMotion; no GSAP/Lenis or reference imagery copied. All planes static for reduced motion. Human-provided photograph adapted with lateral outpaint; local WebP1672×941 native/134740bytes, no upscaling or original demo assets."
     }
   ]
 }

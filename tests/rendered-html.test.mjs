@@ -22,9 +22,9 @@ test("keeps the APT landing public and free of server secrets", async () => {
 
 test("keeps the official landing lockup inside the navigation height", async () => {
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(styles, /\.apt-site-nav__brand \{[^}]*block-size: 2\.4rem/);
-  assert.match(styles, /\.apt-site-nav__brand \.brand-lockup \{[^}]*block-size: 100%/);
-  assert.match(styles, /\.apt-site-nav__brand \.brand-lockup img \{[^}]*width: auto; height: 100%/);
+  assert.match(styles, /\.apt-site-nav__brand \{[^}]*min-height: 2\.75rem/);
+  assert.match(styles, /\.apt-site-nav__brand \.brand-lockup img \{[^}]*width: 2\.75rem; height: 2\.75rem/);
+  assert.match(styles, /\.apt-site-nav__brand \.brand-lockup img \{[^}]*width: 3\.25rem; height: 3\.25rem/);
 });
 
 test("publishes the 2026–2027 quarter calendar with one annual Finals", async () => {
@@ -223,26 +223,23 @@ test("keeps protected navigation responsive and accessible", async () => {
   assert.doesNotMatch(client, /className="(?:member-rail|admin-sidebar|mobile-tabbar|admin-mobile-nav)/);
 });
 
-test("keeps the mockup-style desktop operations board inside its workspace", async () => {
+test("keeps the operations board inside its workspace", async () => {
   const [client, styles] = await Promise.all([
     readFile(new URL("../app/apt-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.match(styles, /\.member-operations-card \{[^}]*box-sizing: border-box;[^}]*min-width: 0;[^}]*max-width: 100%/);
-  assert.match(styles, /\.member-operations-card__meta \{[^}]*flex-wrap: wrap/);
-  assert.match(styles, /\.member-operations-card__meta > small \{[^}]*white-space: nowrap/);
-  assert.doesNotMatch(styles, /\.member-operations-card__meta > small \{[^}]*overflow-wrap: anywhere/);
+  assert.match(styles, /\.member-operations-card__meta \{[^}]*display: grid/);
+  assert.match(styles, /\.member-operations-card__meta > small \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere/);
   assert.match(client, /const memberOperationsDesktopStages = memberOperationsStages\.filter\(\(stage\) => stage\.id !== "inactive"\)/);
   assert.match(client, /data-columns=\{desktopStages\.length\}/);
   assert.match(client, /<MemberOperationsKanban key=\{mobileDefaultStage\}/);
   assert.doesNotMatch(client, /useEffect\(\(\) => setMobileStage\(mobileDefaultStage\)/);
-  assert.match(styles, /\.member-operations__summary \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(styles, /\.member-operations__summary > div:nth-child\(2n\) \{ border-right: 0; \}/);
-  assert.match(styles, /\.admin-content \{ container-type: inline-size; \}/);
-  assert.match(styles, /\.member-operations__desktop-board:not\(\[data-columns="1"\]\) \{ grid-template-columns: repeat\(5, minmax\(17rem, 1fr\)\); overflow-x: auto;/);
-  assert.match(styles, /\.member-operations__desktop-board:not\(\[data-columns="1"\]\) \.member-operations__lane \{ scroll-snap-align: start; \}/);
-  assert.match(styles, /@container \(min-width: 68rem\) \{[\s\S]*repeat\(5, minmax\(0, 1fr\)\)/);
-  assert.match(styles, /\.member-operations__desktop-board\[data-columns="1"\] \{ grid-template-columns: minmax\(0, 28rem\); \}/);
+  assert.match(styles, /\.member-operations__summary \{[^}]*display: flex;[^}]*flex-wrap: wrap/);
+  assert.match(styles, /\.member-content, \.admin-content \{[^}]*container-type: inline-size/);
+  assert.match(styles, /\.member-operations__desktop-board \{[^}]*grid-auto-flow: column;[^}]*grid-auto-columns: 17\.5rem;[^}]*overflow-x: auto/);
+  assert.match(styles, /\.member-operations__lane \{ scroll-snap-align: start; \}/);
+  assert.match(styles, /\.member-operations__desktop-board\[data-columns="1"\] \{ grid-auto-columns: minmax\(0, 28rem\); \}/);
   assert.match(styles, /\.crm-kanban \{[^}]*grid-auto-flow: column;[^}]*overflow-x: auto/);
 });
 

@@ -244,6 +244,7 @@ export async function PATCH(request: Request) {
   if (blocked) return blocked;
   const admin = await requireAdmin(request).catch(() => null);
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
+  let savedNote: MemberNote | undefined;
   try {
     const payload = await request.json() as { id?: string; participationStatus?: string; twinnerUrl?: string; whatsappCommunityUrl?: string; note?: string };
     if (!payload.id || !uuidPattern.test(payload.id)) return Response.json({ error: "Integrante inválido." }, { status: 400 });
@@ -274,14 +275,14 @@ export async function PATCH(request: Request) {
       : await supabaseAdmin<MemberRow[]>("members", { query: { select: "id,name,email,whatsapp,class_level,participation_status,twinner_url,whatsapp_community_url,joined_at,created_at", id: `eq.${payload.id}`, limit: "1" } });
     const member = rows[0];
     if (!member) return Response.json({ error: "Integrante não encontrado." }, { status: 404 });
-    const savedNote = note ? (await supabaseAdmin<MemberNote[]>("admin_notes", { method: "POST", prefer: "return=representation", body: { member_id: member.id, body: note, created_by: admin.email } }))[0] : undefined;
+    savedNote = note ? (await supabaseAdmin<MemberNote[]>("admin_notes", { method: "POST", prefer: "return=representation", body: { member_id: member.id, body: note, created_by: admin.email } }))[0] : undefined;
     await supabaseAdmin("audit_logs", {
       method: "POST",
       body: { actor: admin.email, action: "member.management_updated", entity_type: "member", entity_id: member.id, metadata: { changed: Object.keys(updates), note_recorded: Boolean(savedNote) } },
     });
     return Response.json({ member: { id: member.id, participationStatus: member.participation_status, twinnerUrl: member.twinner_url, whatsappCommunityUrl: member.whatsapp_community_url }, note: savedNote });
   } catch {
-    return Response.json({ error: "Não foi possível atualizar o integrante." }, { status: 500 });
+    return Response.json({ error: "Não foi possível atualizar o integrante.", ...(savedNote ? { note: savedNote, noteRecorded: true } : {}) }, { status: 500 });
   }
 }
 

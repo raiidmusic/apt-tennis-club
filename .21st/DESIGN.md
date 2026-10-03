@@ -1,12 +1,52 @@
 <!-- Generated locally from .21st/design.json. No repository context exported. -->
 # APT Design Context
 
-Updated at 2026-10-03T02:46:05.540445+00:00.
+Updated locally on 2026-10-03. This workspace context is not a publication receipt. Human acceptance includes the hero, the manifesto's central text/layout and the newly added effects. The three further folds and current photographic assets still require browser verification. The owner supplied the final Photoshop ball artwork and separately authorized publication; the initial redesign and first motion iteration are READY on the official domain; the current owner-requested motion/copy refinement is under verification.
+
+## Current public/player direction — V3 local preview
+
+The human selected **16th Hole / Conceptzilla**, [Website For Private Golf Club](https://dribbble.com/shots/27168502-Website-For-Private-Golf-Club): “gosto dessa referencia do golf 16th hole” and “pode copiar sem dó”. This supersedes the earlier mixed public composition. It preserves the management dashboard, Amber Hearth theme and operational V2 history.
+
+The first local club preview was rejected: “nao gostei da hero e senti que ficou tudo mto quadrado e simples dms, longe das referencias”. This correction applies to public/player composition. Local V2 is an intermediate iteration whose hero is superseded by V3; these revision names do not rename the system's financial/operational V2.
+
+Current implementation choices: small official logo centered at desktop/tablet, original APT Georgia lettering, italic expression over a pale olive band, and a three-photo fan with clay, player and green-racket photography. Public/player UI retains Outfit and existing journeys. Mobile adapts the composition for readable text and accessible targets. Scoped `.apt-club` and calendar `.page` tokens preserve management styles.
+
+- Public/player paper `#f8f7f2`, navy `#1f2e50`, olive `#3b4831`, clay `#b96f49`, darker clay `#8b482d`, muted text `#5d645e`.
+- Landing hero `#ecebe2` and highlight `#dee2d3`; these are APT implementation roles, not claimed official source tokens.
+- Public/player controls use 8px corners, selected larger surfaces 16px; avoid carrying the rejected rigid treatment forward as a rule.
+- Current copy replaces the former slogans; whole words critério./constância./respeito. cycle every two seconds using spring stiffness50/damping18. The static accessible headline, timer cleanup and OS reduced motion remain. Damping18 is an APT adaptation; Tommy's source only specifies stiffness50.
+
+Both exact requested `npx` commands returned `AuthRequired`, installing no files or dependencies. Public author repositories were then consulted; their equality to the authenticated registry version is unverified. [Source review](../outputs/apt-club-redesign/21st/SOURCE-REVIEW.md) records this boundary.
+
+- [Hero10 / Felipe Menezes](https://github.com/felipemenezes098/ui-flx/blob/8bc30df9a0cbd0967f6256001fe559f4c1b1cf87/registry/blocks/hero/hero-10/hero-10.tsx): AGPL-3.0 source, used as visual fan composition reference. APT markup/CSS is original; no ui-flx/CTA/react-wrap-balancer code or dependency incorporated. The authenticated 21st item's license/version remains unverified.
+- [Animated Hero](https://21st.dev/community/components/tommyjepsen/animated-hero) / [Tommy Hero5](https://github.com/tommyjepsen/twblocks/blob/ff88cb951dab0dc01198b6570ec5f5cf21250d45/blocks/hero/hero5.tsx): MIT source adapted in existing `HeroRotatingStatement`. Copyright2024 Tommy Jepsen and full permission notice are preserved in `THIRD_PARTY_NOTICES.md`.
+
+V3 hero is explicitly approved; preserve its composition/copy. The manifesto's central text/layout is also approved; only its circular photographs were replaced with inclined vertical frames. Stack Spread opens six local photographs between Courts and season, using native CSS view timelines and a static mobile/reduced-motion fallback. Glyph Portal is an editorial Georgia/navy passage to the closing invitation, with a native bypass link. QClay27731698 informed thin court geometry and shifts of scale/color.
+
+## Current fold refinement and photographic feedback
+
+Human feedback: “os novos efeitos que a gente colocou ficou muito bom”. Bring Courts, season and member access to the same quality without replacing the approved hero/manifesto/effect mechanisms. Six official 21st metadata searches, with no private context export or code retrieval, are recorded in `outputs/apt-club-redesign/21st/FOLD-REFERENCES.md`. Four public still previews were also visually inspected: Media Accordion, Gallery Modal Accordion, Interactive Timeline and Editorial Collage Hero. These inform original APT composition; no registry core, dependency or unverified licensed code is incorporated.
+
+- Courts: four persistent descriptions and native buttons that highlight a division; a decorative court drawing changes tone/name. This is editorial comparison, not selecting a player's actual division. Court2's rejected pale pink is replaced by darker clay `#8b482d`, with paper foreground contrast6.39:1.
+- Season: real four-step ordered list, photographic insert and a thin native scroll progress rail. All rules and `/calendario2026` remain; no extra sticky chapter or scrolling library.
+- Member entry: short serif heading, plain factual explanation distinguishing Tweener from APT, filled native `/entrar` CTA, and a photographic composition. The human-selected black-and-white player photograph is copied without changing pixels. The owner-supplied final Photoshop ball artwork is incorporated as `public/apt-assets/apt-balls-photoshop.webp`.
+- Header mark: the navy asset's slogan was an embedded white PNG. A localized SVG color filter applies navy to its original alpha; paths/geometry and inverse variants remain intact. This shared light-surface asset repair also applies wherever that variant is used.
+- Mockups: first basket rejected for oversized logos and first floor rejected for render-like appearance. The human also requires real-looking felt/seams. Generated ball stamp studies remain superseded and are not incorporated. The owner finalized the ball artwork manually in Photoshop and supplied `/Users/gabrielguedes/Documents/bola apt.png`; its script mark and tagline are preserved without artwork retouch. The source is 938×1679, copied byte for byte to `outputs/apt-club-redesign/mockups/apt-balls-photoshop-owner.png`, with source/copy SHA256 `d8b5b0a95934e199ff6ce12d3f827b3b1f93d903453b13920389369f1f6c8c69`. The site uses `public/apt-assets/apt-balls-photoshop.webp`, quality96, without resizing, cropping or recoloring.
+
+APT-CLUB-005 and APT-CLUB-006 remain IN_PROGRESS pending current browser verification. The final owner artwork has been received and incorporated; browser review remains the completion gate. Older validation below describes the preceding iteration and does not certify the current folds or asset framing.
+
+The two further exact registry commands also returned AuthRequired, without installation. The user subsequently supplied the complete Stack Spread and Glyph Portal sources. Glyph MIT was adapted with its original notice, Portuguese labels, unmeasured poster and focus preservation, without demo/remote font/dependencies. Stack behavior uses original APT markup/CSS, without Hyperiux JavaScript; the supplied source does not declare a license.
+
+Full-page acceptance and current browser verification remain pending. The owner authorized publication and remote deployment is in progress; this file does not confirm a completed release or live verification. Historical evidence for the preceding iteration: typecheck, webpack27routes, product28checks and calendar1check pass; browser1280/768/390 verified frames, full mockup, gallery/scroll, portal p0–p1, Enter to content/CTA, and native FAQ focus. Player fixtures and management comparison are recorded in `APT_BRAIN.md`. Independent correctness/security and ponytail-review passed for that iteration. Reduced-motion/failure fallback also have SSR and simulated-effects checks; Safari/OS preference changes and live provider integration are not claimed.
+
+## Preserved V2 operational context and historical references
+
+The following records retain the earlier operational hierarchy and source provenance. Management remains current. Earlier public/member presentation choices apply only where compatible with the scoped V3 direction above; a historical source decision is not acceptance of the current preview.
 
 ## Product
 
 Tennis club landing, membership operations, member portal and existing enrollment/authentication journeys.
-Operational product: 16px controls/body, 14px data, 24–28px headings; spacious landing.
+Management: 16px controls/body, 14px data and 24–28px UI headings. Public/player: editorial Georgia headings, Outfit controls/data, restrained composition; scoped separately.
 
 ## Composition
 
@@ -16,17 +56,17 @@ Operational product: 16px controls/body, 14px data, 24–28px headings; spacious
 - Member detail: identity, financial coverage and invoice history before administrative forms
 - Native disclosure sections and labelled fieldsets for existing actions
 - Editorial landing with existing photography, compact navigation and member/calendar links visible on mobile
-- Real selected theme tokens; 12px surfaces and selfhosted variable Outfit
+- Management retains selected Amber Hearth tokens and existing surfaces; public/player uses the scoped club system above
 
 - Current explicit user decision: chart first, real-base/decisions aside, then six financial metrics; this supersedes the earlier metrics-before-chart order without changing financial definitions or exact ledgers
 
 ## Constraints
 
-- Apply the selected Amber Hearth light theme, selfhosted Outfit and official APT SVG assets
+- Preserve Amber Hearth in management, selfhosted Outfit for UI and official APT SVG assets; apply Georgia/scoped club tokens in public/player
 - 44px interactive controls, visible focus and reduced motion
 - Separate payment, participation, forecast and debt
 - Reuse native CSS and existing React components
-- Product headings use the UI font at 24–28px, with 16px controls and 14px data
+- Management headings retain the UI font at 24–28px, with 16px controls and 14px data; public/player display follows the V3 editorial system
 - 240px sidebar, 72px collapsed; metric cards spaced by 16px with 16px radius; selected Advanced Stats chart/aside cards use 24px radius
 - Received cash and confirmed settlement remain separate, using the provider calendar
 - Content remains visible without animation; reduced motion and 44px controls apply to every surface
@@ -35,10 +75,10 @@ Operational product: 16px controls/body, 14px data, 24–28px headings; spacious
 ## Avoid
 
 - New UI dependencies without need
-- Decorative shimmer, gradient text or multi-word hero rotation
+- Decorative shimmer, gradient text or unapproved rotation/vocabulary; the three explicitly selected whole words remain allowed
 - Sending repository context to external catalog
 
-## Source tokens
+## Global management source tokens — preserved baseline
 
 - `--background`: `#ffffff` (app/globals.css).
 - `--foreground`: `#111827` (app/globals.css).
@@ -83,7 +123,7 @@ Operational product: 16px controls/body, 14px data, 24–28px headings; spacious
 - `--ease`: `cubic-bezier(0.22, 1, 0.36, 1)` (app/globals.css).
 - `--ease-snap`: `cubic-bezier(0.16, 1, 0.3, 1)` (app/globals.css).
 
-## Decisions
+## Historical V2 decisions — current public/player scope supersedes presentation
 
 - User authorized the total product UI/UX redesign, including management, portal, authentication and existing forms. Club identity and verified financial/API behavior remain the product boundaries. Source: Current user authorization relayed by root, 2026-10-02.
 - Implement hierarchy and interactions with the existing React/CSS/SVG/Lucide/Motion stack. Use catalog composition as reference, with original APT markup. Source: Implementation under authorized scope.
@@ -107,7 +147,7 @@ Operational product: 16px controls/body, 14px data, 24–28px headings; spacious
 
 The theme keeps its original light amber/teal colors. Dark foreground on amber, stronger muted text on gray and teal focus correct normal-text and focus contrast. Original serif/mono theme families are optional declarations; only Outfit is loaded and used for UI. Official SVG artwork is preserved.
 
-Catalog generation remains disabled; no hosted context export, registry installation or fabricated action.
+No repository context was exported. The current component installation attempts returned AuthRequired; this is not a successful registry installation. Public author source use follows the V3 provenance above.
 
 ## Selected landing amendments
 
@@ -136,7 +176,7 @@ The current member portal/table priority adapts the user-provided CRM ZIP and sc
 - Table: six proportional financial columns, compact identity/email, no frozen column overlay, native local horizontal scrolling and a clear mobile hint.
 - Portal: identity, actual payment method/coverage/receipts, contextual next action, authorized club links and exact invoice history. Protected membership and proven card recurrence keep their existing behavior.
 - Contact detail: labelled real attributes, financial summary/history, explicit saved notes and existing monitoring/communications before less frequent configuration controls.
-- Forms: names/autocomplete/spellcheck semantics, inline status/errors and first-invalid focus. Hero presentation retains only the three approved words and ends after a single sequence.
+- Forms: names/autocomplete/spellcheck semantics, inline status/errors and first-invalid focus. Historical finite hero sequence is superseded by the later explicit continuous three-word cycle; V3 retains that cycle with the current Tommy adaptation.
 - [User Table · Alain · 31848](https://21st.dev/@alain00/components/user-table): complete official public MIT source read; original APT markup/CSS inspired by its identity and row hierarchy.
 - [Settle · 941](https://21st.dev/@uvain/templates/settle-payment-operations-dashboard): public preview only, sold source unavailable; hierarchy inspiration without sample data.
 - [Sidebar · Manu Arora · 315](https://21st.dev/@manuarora700/components/sidebar): official public core inspected; APT keeps explicit accessible collapse and existing mobile navigation.
@@ -144,3 +184,14 @@ The current member portal/table priority adapts the user-provided CRM ZIP and sc
 Member/contact verification fixes: issued invoice date comes only from the pending-invoice projection; paid/manual-protected athletes have no pending-payment reminder shortcut, while direct conversation remains available. Native modal dialogs own focus containment and close before trigger restoration. Partial note receipts remain explicit/deduplicated, preventing draft replay after a later audit failure.
 
 Final async/contact fixes: closing either native detail invalidates pending reads and clears loading; completed mutations update lists without resurrecting a closed/replaced sheet. Public enrollment without a token shows actual invitation/application/login paths and no data form. Mobile invoice history has a visible local-scroll hint.
+
+
+## Current owner corrections and copy — 03/10/2026
+
+Owner reopens public copy for an affluent audience: sober category/admission/competition facts replace shallow slogans. Hero: “Um clube de tênis. Por indicação.” with existing whole-word motion “Para jogar com critério./constância./respeito.” Accessible H1 is static and equivalent. Manifesto explains indication, profile/availability review and individual invitation; ranking/cycle/member/entry headings are factual. Division changes say cycle, matching the actual calendar. Public metadata follows this direction. No income eligibility, networking, premises or invented privileges. Previous hero/manifesto copy acceptance is historical; layout/effects remain approved specifically.
+
+Stack text is an EXPLICIT EXCEPTION: “Beyond the Court.” and “Gente com quem jogar. Uma temporada para compartilhar.” stay exact. Only framing/motion changes: shorter mobile/tablet stage, proportionally larger photos, centre pile covering copy before native scroll opens photos toward corners. Photos have no white frame and pointer drift after spreading on supported fine mouse pointers; touch/reduced-motion/unsupported static fallback. Native CSS timeline retained, without new library.
+
+Courts automatically highlight another division every six seconds while the section/tab is visible, retaining manual selection. Choosing a different division restarts the cadence; choosing the already active one leaves its timer unchanged. Reduced motion disables automatic changes.
+
+Current focused checks: 31 product/calendar checks pass, including autoplay visibility/cleanup, pointer regression with a shorter stage than viewport, static SSR and accessible hero. Independent review corrected calendar wording and pointer progress denominator. Final cloud build/browser/commit/deploy and subsequent Lighthouse remain pending until recorded receipts.

@@ -21,10 +21,12 @@ const billing = await import('../lib/billing-view.ts');
 const state = await import('../lib/billing-state.ts');
 const imports = await import('../lib/member-import.ts');
 const require = createRequire(import.meta.url);
+const glyphModule = { exports: {} };
+vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../components/ui/glyph-portal.tsx', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: glyphModule.exports, require, React });
 const source = ts.transpileModule(`${readFileSync(new URL('../app/apt-app.tsx', import.meta.url), 'utf8')}\nexport { MemberRecordsTable, ManagementDashboard, MemberManagementDetail, MemberImportPanel, ApplicationReviewDetail, HeroRotatingStatement };`, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 } }).outputText;
 
 // Render and invoke the shipped components and handlers. Network is always local fixture data.
-function product({ fetch, search = '', initial = {}, document, reducedMotion = false } = {}) {
+function product({ fetch, search = '', initial = {}, document, reducedMotion = false, intersectionObserver, finePointer = true, scrollTimeline = true } = {}) {
   let cursor = 0, effectCursor = 0, refCursor = 0, nextTimer = 0;
   const values = [], effects = [], cleanups = [], effectDependencies = [], references = [], assigned = [];
   const timers = new Map();
@@ -33,7 +35,9 @@ function product({ fetch, search = '', initial = {}, document, reducedMotion = f
     useMemo: (calculate) => calculate(), useRef: (current) => { const index = refCursor++; return references[index] ||= { current }; },
     useEffect(effect, dependencies = []) { const index = effectCursor++; const previous = effectDependencies[index]; if (!previous || dependencies.some((value, i) => value !== previous[i])) effects.push(() => { cleanups[index]?.(); const cleanup = effect(); cleanups[index] = typeof cleanup === 'function' ? cleanup : undefined; }); effectDependencies[index] = dependencies; },
   };
-  const context = vm.createContext({ exports: {}, React: hooks, document, URL, URLSearchParams, Intl, FormData, Date, queueMicrotask, fetch: fetch || (() => { throw new Error('Unexpected request'); }), window: { location: { search, origin: 'https://apt.invalid', assign: (path) => assigned.push(path) }, setTimeout: (callback) => { const id = ++nextTimer; timers.set(id, callback); return id; }, clearTimeout: (id) => timers.delete(id) }, require: (name) => name === 'react' ? hooks : name === 'lucide-react' ? require(name) : name === 'framer-motion' ? { motion: { div: 'div', aside: 'aside' }, useReducedMotion: () => reducedMotion, useScroll: () => ({ scrollYProgress: 0 }), useTransform: (_progress, _input, output) => output[1] } : name === 'next/dynamic' ? { default: () => () => null } : name === '@/components/ui/sidebar' ? { ProductSidebar: () => null } : name === '@/components/ui/advanced-stats' ? { ClippedAreaChart: () => null } : name.endsWith('/billing-view') ? billing : name.endsWith('/billing-state') ? state : name.endsWith('/member-import') ? imports : (() => { throw new Error(`Unexpected import ${name}`); })() });
+  const context = vm.createContext({ exports: {}, React: hooks, document, IntersectionObserver: intersectionObserver, CSS: { supports: () => scrollTimeline }, URL, URLSearchParams, Intl, FormData, Date, queueMicrotask, fetch: fetch || (() => { throw new Error('Unexpected request'); }), window: { innerHeight: 500, location: { search, hash: '', origin: 'https://apt.invalid', assign: (path) => assigned.push(path) }, matchMedia: () => ({ matches: finePointer }), setTimeout: (callback) => { const id = ++nextTimer; timers.set(id, callback); return id; }, clearTimeout: (id) => timers.delete(id) }, require: (name) => name === 'react' ? hooks : name === 'lucide-react' ? require(name) : name === 'framer-motion' ? { motion: { div: 'div', aside: 'aside', span: 'span' }, useReducedMotion: () => reducedMotion, useScroll: () => ({ scrollYProgress: 0 }), useTransform: (_progress, _input, output) => output[1] } : name === 'next/dynamic' ? { default: () => () => null } : name === '@/components/ui/sidebar' ? { ProductSidebar: () => null } : name === '@/components/ui/advanced-stats' ? { ClippedAreaChart: () => null } : name.endsWith('/billing-view') ? billing : name.endsWith('/billing-state') ? state : name.endsWith('/member-import') ? imports : (() => { throw new Error(`Unexpected import ${name}`); })() });
+  const resolve = context.require;
+  context.require = (name) => name === '@/components/ui/glyph-portal' ? glyphModule.exports : resolve(name);
   vm.runInContext(source, context);
   return { values, assigned, references, timers, exports: context.exports,
     render(name, props) { cursor = 0; effectCursor = 0; refCursor = 0; return context.exports[name](props); },
@@ -45,34 +49,125 @@ function product({ fetch, search = '', initial = {}, document, reducedMotion = f
 function nodes(tree, predicate) { const found = []; const visit = (node) => { if (!React.isValidElement(node)) return; if (predicate(node)) found.push(node); React.Children.forEach(node.props.children, visit); }; visit(tree); return found; }
 const portal = () => ({ member: { name: 'Atleta Exemplo', email: 'atleta@example.test', whatsapp: '11999999999', cpfMasked: '***.***.***-00', participationStatus: 'awaiting_payment', accessActive: false }, subscription: null, financial: { billingMethod: 'pix', recurring: false, covered: false, paidThrough: null, lastReceivedAt: null }, payments: [] });
 
-test('hero continuously repeats only the approved words and cancels its timer for reduced motion', async () => {
+test('hero continuously repeats its three words and cancels its timer for reduced motion', async () => {
   const ui = product();
-  for (const word of ['competir.', 'evoluir.', 'pertencer.', 'competir.', 'evoluir.', 'pertencer.']) {
+  for (const word of ['critério.', 'constância.', 'respeito.', 'critério.', 'constância.', 'respeito.']) {
     assert.equal(nodes(ui.render('HeroRotatingStatement', {}), node => node.props.className === 'apt-hero__rotator-line')[0].props.children, word);
     await ui.mount(); assert.equal(ui.timers.size, 1); ui.advanceTimer();
   }
   ui.render('HeroRotatingStatement', {}); await ui.mount();
   ui.render('HeroRotatingStatement', { reducedMotion: true }); await ui.mount();
   assert.equal(ui.timers.size, 0); ui.advanceTimer();
-  assert.equal(nodes(ui.render('HeroRotatingStatement', { reducedMotion: true }), node => node.props.className === 'apt-hero__rotator-line')[0].props.children, 'competir.');
+  assert.equal(nodes(ui.render('HeroRotatingStatement', { reducedMotion: true }), node => node.props.className === 'apt-hero__rotator-line')[0].props.children, 'critério.');
   ui.render('HeroRotatingStatement', { reducedMotion: false }); await ui.mount(); ui.advanceTimer();
-  assert.equal(nodes(ui.render('HeroRotatingStatement', {}), node => node.props.className === 'apt-hero__rotator-line')[0].props.children, 'evoluir.');
+  assert.equal(nodes(ui.render('HeroRotatingStatement', {}), node => node.props.className === 'apt-hero__rotator-line')[0].props.children, 'constância.');
   await ui.mount(); ui.unmount(); assert.equal(ui.timers.size, 0);
 });
 
 test('hero has no user stop control and keeps the accessible headline static with OS reduced motion', async () => {
   for (const reducedMotion of [false, true]) {
     const ui = product({ reducedMotion }), tree = ui.render('LandingPage');
-    assert.equal(nodes(tree, node => node.type === 'button').length, 0);
+    const hero = nodes(tree, node => node.type === 'section' && node.props.className === 'apt-hero')[0];
+    assert.equal(nodes(hero, node => node.type === 'button').length, 0);
     const headline = nodes(tree, node => node.type === 'h1')[0];
-    assert.match(renderToStaticMarkup(headline), /Um ranking para quem leva o tênis a sério/);
+    assert.match(renderToStaticMarkup(headline), /Um clube de tênis por indicação. Para jogar com critério, constância e respeito/);
     const statement = nodes(tree, node => node.type?.name === 'HeroRotatingStatement')[0];
     assert.equal(statement.props.reducedMotion, reducedMotion);
     const child = product();
-    assert.equal(nodes(child.render('HeroRotatingStatement', statement.props), node => node.props.className === 'apt-hero__rotator-line')[0].props.children, 'competir.');
+    assert.equal(nodes(child.render('HeroRotatingStatement', statement.props), node => node.props.className === 'apt-hero__rotator-line')[0].props.children, 'critério.');
     await child.mount(); assert.equal(child.timers.size, reducedMotion ? 0 : 1);
     child.unmount();
   }
+});
+
+test('highlighting a Court changes only the editorial emphasis and keeps every division readable', () => {
+  const ui = product();
+  let tree = ui.render('LandingPage');
+  const courtButtons = () => nodes(tree, node => node.type === 'button' && node.props['aria-label']?.startsWith('Destacar '));
+  assert.equal(courtButtons().length, 4);
+  assert.equal(courtButtons().filter(node => node.props['aria-pressed']).length, 1);
+  courtButtons().find(node => node.props['aria-label'] === 'Destacar Court 2').props.onClick();
+  tree = ui.render('LandingPage');
+  assert.equal(courtButtons().find(node => node.props['aria-pressed']).props['aria-label'], 'Destacar Court 2');
+  const portrait = nodes(tree, node => node.props.className?.startsWith('apt-courts__portrait '))[0];
+  assert.match(portrait.props.className, /apt-court--two/);
+  const list = nodes(tree, node => node.props.className === 'apt-courts__list')[0];
+  const html = renderToStaticMarkup(list);
+  for (const name of ['Central Court', 'Court 1', 'Court 2', 'Court 3']) assert.match(html, new RegExp(name));
+  assert.match(html, /A divisão de maior nível do APT/);
+  assert.match(html, /A base da escada competitiva/);
+  for (const node of nodes(list, node => ['article', 'h3', 'p'].includes(node.type))) {
+    assert.equal(Boolean(node.props.hidden || node.props.inert || node.props['aria-hidden']), false);
+  }
+  assert.deepEqual(ui.assigned, []);
+});
+
+test('Courts cycle only while visible, restart after manual selection and stop for hidden tabs or reduced motion', async () => {
+  const observers = [], listeners = new Map();
+  class Observer {
+    constructor(callback) { this.callback = callback; observers.push(this); }
+    observe() {}
+    disconnect() { this.disconnected = true; }
+  }
+  const document = { hidden: false, addEventListener: (name, callback) => listeners.set(name, callback), removeEventListener: (name) => listeners.delete(name) };
+  const ui = product({ document, intersectionObserver: Observer });
+  let tree = ui.render('LandingPage');
+  nodes(tree, node => node.props.className === 'apt-courts')[0].props.ref.current = {};
+  await ui.mount();
+  assert.equal(ui.timers.size, 0);
+  const show = () => observers.at(-1).callback([{ isIntersecting: true, intersectionRatio: 0.5 }]);
+  const selected = () => nodes(tree, node => node.type === 'button' && node.props['aria-pressed'])[0].props['aria-label'];
+  show(); assert.equal(ui.timers.size, 1);
+  for (const name of ['Court 1', 'Court 2', 'Court 3', 'Central Court']) {
+    ui.advanceTimer(); tree = ui.render('LandingPage'); await ui.mount();
+    assert.equal(selected(), `Destacar ${name}`);
+    show(); assert.equal(ui.timers.size, 1);
+  }
+  nodes(tree, node => node.props['aria-label'] === 'Destacar Court 2')[0].props.onClick();
+  tree = ui.render('LandingPage'); await ui.mount();
+  assert.equal(selected(), 'Destacar Court 2');
+  assert.equal(ui.timers.size, 0); show(); assert.equal(ui.timers.size, 1);
+  document.hidden = true; listeners.get('visibilitychange')(); assert.equal(ui.timers.size, 0);
+  document.hidden = false; listeners.get('visibilitychange')(); assert.equal(ui.timers.size, 1);
+  observers.at(-1).callback([{ isIntersecting: false, intersectionRatio: 0 }]); assert.equal(ui.timers.size, 0);
+  show(); ui.unmount(); assert.equal(ui.timers.size, 0); assert.equal(listeners.size, 0);
+  assert.ok(observers.every(observer => observer.disconnected));
+  const calm = product({ document, reducedMotion: true, intersectionObserver: Observer });
+  tree = calm.render('LandingPage'); nodes(tree, node => node.props.className === 'apt-courts')[0].props.ref.current = {};
+  await calm.mount(); assert.equal(calm.timers.size, 0); assert.equal(listeners.size, 0); calm.unmount();
+});
+
+test('photo pointer drift starts after spreading, resets on leave and stays static for touch, reduced motion or unsupported timelines', () => {
+  const values = new Map();
+  let progress = 0.5;
+  const stage = { offsetHeight: 300, style: { setProperty: (name, value) => values.set(name, value) }, getBoundingClientRect: () => ({ left: 20, top: 0, width: 600, height: 500 }), parentElement: { offsetHeight: 850, getBoundingClientRect: () => ({ top: -350 * progress }) } };
+  const getStage = options => nodes(product(options).render('LandingPage'), node => node.props.className === 'apt-spread__stage')[0];
+  const frame = getStage();
+  const pointer = { pointerType: 'mouse', currentTarget: stage, clientX: 620, clientY: 500 };
+  frame.props.onPointerMove(pointer);
+  assert.ok([...values.values()].every(value => value === '0px'));
+  progress = 0.95;
+  frame.props.onPointerMove(pointer);
+  assert.ok(parseFloat(values.get('--apt-pointer-x')) > 0 && parseFloat(values.get('--apt-pointer-x')) <= 26);
+  assert.ok(parseFloat(values.get('--apt-pointer-y')) > 0 && parseFloat(values.get('--apt-pointer-y')) <= 22);
+  frame.props.onPointerLeave({ currentTarget: stage });
+  assert.ok([...values.values()].every(value => value === '0px'));
+  for (const options of [{ reducedMotion: true }, { finePointer: false }, { scrollTimeline: false }]) {
+    values.clear(); getStage(options).props.onPointerMove(pointer); assert.equal(values.size, 0);
+  }
+  values.clear(); frame.props.onPointerMove({ ...pointer, pointerType: 'touch' }); assert.equal(values.size, 0);
+  progress = 1.2; frame.props.onPointerMove(pointer); assert.ok(parseFloat(values.get('--apt-pointer-x')) > 0);
+  frame.props.onPointerLeave({ currentTarget: stage }); assert.ok([...values.values()].every(value => value === '0px'));
+});
+
+test('the closing portal server-renders the real invitation and a direct entry link before any canvas or motion', () => {
+  const html = renderToStaticMarkup(product().render('LandingPage'));
+  assert.match(html, /data-gp-fallback[^>]*>JOGAR/);
+  assert.match(html, /Ver como participar/);
+  assert.match(html, /id="entrada"/);
+  assert.match(html, /Entrada por indicação/);
+  assert.match(html, /href="\/requerimento"[^>]*>Solicitar entrada/);
+  assert.doesNotMatch(html, /https:\/\/cdn\.21st\.dev|Loading type|SUBLIME/);
 });
 
 test('login accepts local destinations and rejects backslash, protocol-relative and control-character redirects', async () => {
@@ -243,13 +338,13 @@ test('landing renders the actual member, calendar and enrollment destinations wi
     assert.ok(links.some((node) => node.props.href === destination), `Navigation keeps ${destination}`);
   }
   const hero = nodes(tree, (node) => node.props.className === 'apt-hero')[0];
-  const photo = nodes(hero, (node) => node.type === 'img')[0];
-  assert.equal(photo.props.src, '/apt-assets/hero-parallax-v2.webp'); assert.equal(Number(photo.props.width), 1672); assert.equal(Number(photo.props.height), 941); assert.equal(photo.props.fetchPriority, 'high');
+  const photo = nodes(hero, (node) => node.type === 'img' && node.props.fetchPriority === 'high')[0];
+  assert.ok(photo); assert.equal(Number(photo.props.width), 736); assert.equal(Number(photo.props.height), 981);
   assert.ok(nodes(hero, (node) => node.type === 'a' && node.props.href === '/requerimento').length);
   const faq = nodes(tree, (node) => node.type === 'details');
   assert.equal(faq.length, 5); assert.equal(faq[0].props.open, true);
   const html = renderToStaticMarkup(tree);
-  assert.match(html, /Um ranking para quem leva o tênis a sério/);
+  assert.match(html, /Um clube de tênis por indicação. Para jogar com critério, constância e respeito/);
   assert.match(html, /O ranking fica no Tweener/);
 });
 
@@ -267,21 +362,22 @@ test('landing footer groups real club and member destinations without placeholde
   const closing = nodes(ui.render('LandingPage'), (node) => node.props.id === 'entrada')[0];
   const actions = nodes(closing, (node) => node.type === 'a');
   assert.equal(actions.length, 1); assert.equal(actions[0].props.href, '/requerimento');
-  assert.match(renderToStaticMarkup(closing), /Se houver vaga para o seu nível/);
+  assert.match(renderToStaticMarkup(closing), /disponibilidade na divisão adequada/);
+  assert.match(renderToStaticMarkup(closing), /Se aprovado/);
 });
 
-test('hero preserves readable content and native destinations with all motion planes static when reduced motion is requested', () => {
+test('hero preserves readable content and native destinations with only the photo moving and OS reduced motion respected', () => {
   for (const reducedMotion of [false, true]) {
     const ui = product({ reducedMotion });
     const hero = nodes(ui.render('LandingPage'), (node) => node.props.className === 'apt-hero')[0];
-    const planes = nodes(hero, (node) => ['apt-hero__visual', 'apt-hero__content', 'apt-hero__season'].includes(node.props.className));
-    assert.equal(planes.length, 3);
+    const planes = nodes(hero, (node) => node.props.className === 'apt-hero__photo');
+    assert.equal(planes.length, 1);
     if (reducedMotion) assert.ok(planes.every((node) => node.props.style.y === 0));
-    else assert.equal(new Set(planes.map((node) => node.props.style.y)).size, 3);
+    else assert.equal(planes[0].props.style.y, '3.5%');
     assert.ok(nodes(hero, (node) => node.type === 'a' && node.props.href === '/requerimento').length);
     assert.ok(nodes(hero, (node) => node.type === 'a' && node.props.href === '/calendario2026').length);
-    assert.equal(nodes(hero, (node) => node.type === 'img')[0].props.fetchPriority, 'high');
-    assert.match(renderToStaticMarkup(hero), /Jogos equilibrados, calendário definido/);
+    assert.equal(nodes(hero, (node) => node.type === 'img' && node.props.fetchPriority === 'high').length, 1);
+    assert.match(renderToStaticMarkup(hero), /A entrada depende de indicação e análise do perfil/);
   }
 });
 

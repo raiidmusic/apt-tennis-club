@@ -1,11 +1,12 @@
 "use client";
 /* eslint-disable @next/next/no-html-link-for-pages */
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import dynamic from "next/dynamic";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { ArrowDownLeft, ArrowUpRight, CheckCheck, ChevronRight, ClipboardList, CreditCard, GripVertical, Home, LayoutDashboard, LogOut, Plus, RefreshCw, Search, Settings2, SlidersHorizontal, Table2, Trophy, UserRound, UsersRound, Wallet } from "lucide-react";
 import { ProductSidebar } from "@/components/ui/sidebar";
+import GlyphPortal from "@/components/ui/glyph-portal";
 import { AthleteImportInput, parseAthleteCsv } from "../lib/member-import";
 import { billingCalendarDate, billingMonthKeys, financialMetricRows, type FinancialPayment, type FinancialMetric, type MemberFinancialView } from "../lib/billing-view";
 import { isProtectedMembership, saoPauloDate } from "../lib/billing-state";
@@ -218,9 +219,9 @@ export function Brand({ inverse = false, large = false }: { inverse?: boolean; l
 }
 
 const heroStatements = [
-  "competir.",
-  "evoluir.",
-  "pertencer.",
+  "critério.",
+  "constância.",
+  "respeito.",
 ];
 
 function HeroRotatingStatement({ reducedMotion = false }: { reducedMotion?: boolean }) {
@@ -232,13 +233,14 @@ function HeroRotatingStatement({ reducedMotion = false }: { reducedMotion?: bool
     return () => window.clearTimeout(timer);
   }, [statement, reducedMotion]);
 
-  return (
-    <span className="apt-hero__rotator">
-      <span className="apt-hero__rotator-line" key={heroStatements[statement]}>
-        {heroStatements[statement]}
-      </span>
-    </span>
-  );
+  // Word transitions adapted from Tommy Jepsen's MIT Hero5; see THIRD_PARTY_NOTICES.md.
+  const activeStatement = reducedMotion ? 0 : statement;
+  return <span className="apt-hero__rotator"><span className="apt-hero__rotator-measure" aria-hidden="true">constância.</span>{heroStatements.map((word, index) => (
+    <motion.span key={word} className={index === activeStatement ? "apt-hero__rotator-line" : "apt-hero__rotator-away"}
+      initial={{ opacity: index === activeStatement ? 1 : 0, y: index === activeStatement ? 0 : "120%" }}
+      animate={{ y: index === activeStatement ? 0 : index < activeStatement ? "-120%" : "120%", opacity: index === activeStatement ? 1 : 0 }}
+      transition={reducedMotion ? { duration: 0 } : { type: "spring", stiffness: 50, damping: 18 }}>{word}</motion.span>
+  ))}</span>;
 }
 
 function RouteHeader({ label }: { label: string }) {
@@ -294,7 +296,7 @@ export function LoginPage() {
     } catch (magicLinkError) { setError(magicLinkError instanceof Error ? magicLinkError.message : "Não foi possível enviar o link de acesso."); }
     finally { setSendingMagicLink(false); }
   }
-  return <div className="apt-app"><RouteHeader label="Acesso seguro" /><main className="login-page" id="main-content"><section><div className="auth-intro"><span>Bem-vindo ao APT</span><h1>Acesse sua conta</h1><p>Use o e-mail e a senha definidos no cadastro aprovado.</p></div><form onSubmit={submit}><label className="field-label field-label--compact"><span>E-mail</span><input required name="email" type="email" autoComplete="email" spellCheck={false} /></label><label className="field-label field-label--compact"><span>Senha</span><input required name="password" type="password" minLength={8} autoComplete="current-password" /></label>{error && <p className="field-error" role="alert">{error}</p>}{magicLinkNotice && <p className="recovery-notice" role="status">{magicLinkNotice}</p>}<button className="primary-button primary-button--wide" type="submit" disabled={submitting}>{submitting ? "Entrando…" : "Entrar"}<span aria-hidden="true">→</span></button>{nextPath === "/gestao" && <button className="text-button" type="button" onClick={(event) => requestMagicLink(event.currentTarget.form!)} disabled={sendingMagicLink}>{sendingMagicLink ? "Enviando link…" : "Receber link de acesso da gestão"}</button>}<a className="text-button" href="/recuperar-senha">Esqueci minha senha</a></form></section><aside><img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Movimento de um jogador em uma quadra de tênis" /><div /><section className="auth-brand"><Brand inverse large /><p>Beyond the Court</p><span>Sua participação começa aqui.</span></section></aside></main></div>;
+  return <div className={nextPath === "/gestao" ? "apt-app" : "apt-app apt-club"}><RouteHeader label="Acesso seguro" /><main className="login-page" id="main-content"><section><div className="auth-intro"><span>Bem-vindo ao APT</span><h1>Acesse sua conta</h1><p>Use o e-mail e a senha definidos no cadastro aprovado.</p></div><form onSubmit={submit}><label className="field-label field-label--compact"><span>E-mail</span><input required name="email" type="email" autoComplete="email" spellCheck={false} /></label><label className="field-label field-label--compact"><span>Senha</span><input required name="password" type="password" minLength={8} autoComplete="current-password" /></label>{error && <p className="field-error" role="alert">{error}</p>}{magicLinkNotice && <p className="recovery-notice" role="status">{magicLinkNotice}</p>}<button className="primary-button primary-button--wide" type="submit" disabled={submitting}>{submitting ? "Entrando…" : "Entrar"}<span aria-hidden="true">→</span></button>{nextPath === "/gestao" && <button className="text-button" type="button" onClick={(event) => requestMagicLink(event.currentTarget.form!)} disabled={sendingMagicLink}>{sendingMagicLink ? "Enviando link…" : "Receber link de acesso da gestão"}</button>}<a className="text-button" href="/recuperar-senha">Esqueci minha senha</a></form></section><aside><img src={nextPath === "/gestao" ? "/apt-motion-figma.jpg" : "/apt-ritual-figma.jpg"} width="900" height="1125" alt="Um jogador com a raquete em quadra" /><div /><section className="auth-brand"><Brand inverse large /><p>Beyond the Court</p><span>Sua participação começa aqui.</span></section></aside></main></div>;
 }
 
 export function MagicLinkAccessPage() {
@@ -337,17 +339,65 @@ export function PasswordRecoveryPage({ reset = false }: { reset?: boolean }) {
     } catch (recoveryError) { setError(recoveryError instanceof Error ? recoveryError.message : "Não foi possível concluir a recuperação."); }
     finally { setSubmitting(false); }
   }
-  if (reset && !accessToken) return <div className="apt-app"><RouteHeader label="Nova senha" /><main className="access-state" id="main-content"><span>Link inválido</span><h1>Solicite um novo link.</h1><p>Por segurança, cada link de recuperação só pode ser usado uma vez.</p><a className="primary-button" href="/recuperar-senha">Recuperar senha</a></main></div>;
-  return <div className="apt-app"><RouteHeader label={reset ? "Nova senha" : "Recuperar senha"} /><main className="login-page" id="main-content"><section><div className="auth-intro"><span>Acesso seguro</span><h1>{reset ? "Crie sua nova senha." : "Recupere seu acesso."}</h1><p>{reset ? "Use pelo menos 8 caracteres." : "Enviaremos um link seguro para o seu e-mail. O APT nunca envia senhas por mensagem."}</p></div>{notice ? <div className="recovery-notice" role="status"><p>{notice}</p>{reset && <a className="primary-button" href="/entrar">Entrar</a>}</div> : <form onSubmit={submit}>{reset ? <label className="field-label field-label--compact"><span>Nova senha</span><input required name="password" type="password" minLength={8} maxLength={128} title="Use entre 8 e 128 caracteres." autoComplete="new-password" /></label> : <label className="field-label field-label--compact"><span>E-mail</span><input required name="email" type="email" autoComplete="email" spellCheck={false} /></label>}{error && <p className="field-error" role="alert">{error}</p>}<button className="primary-button primary-button--wide" type="submit" disabled={submitting}>{submitting ? "Enviando…" : reset ? "Criar nova senha" : "Enviar link seguro"}<span aria-hidden="true">→</span></button><a className="text-button" href="/entrar">Voltar para entrar</a></form>}</section><aside><img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Movimento de um jogador em uma quadra de tênis" /><div /><section className="auth-brand"><Brand inverse large /><p>Beyond the Court</p><span>Sua participação começa aqui.</span></section></aside></main></div>;
+  if (reset && !accessToken) return <div className="apt-app apt-club"><RouteHeader label="Nova senha" /><main className="access-state" id="main-content"><span>Link inválido</span><h1>Solicite um novo link.</h1><p>Por segurança, cada link de recuperação só pode ser usado uma vez.</p><a className="primary-button" href="/recuperar-senha">Recuperar senha</a></main></div>;
+  return <div className="apt-app apt-club"><RouteHeader label={reset ? "Nova senha" : "Recuperar senha"} /><main className="login-page" id="main-content"><section><div className="auth-intro"><span>Acesso seguro</span><h1>{reset ? "Crie sua nova senha." : "Recupere seu acesso."}</h1><p>{reset ? "Use pelo menos 8 caracteres." : "Enviaremos um link seguro para o seu e-mail. O APT nunca envia senhas por mensagem."}</p></div>{notice ? <div className="recovery-notice" role="status"><p>{notice}</p>{reset && <a className="primary-button" href="/entrar">Entrar</a>}</div> : <form onSubmit={submit}>{reset ? <label className="field-label field-label--compact"><span>Nova senha</span><input required name="password" type="password" minLength={8} maxLength={128} title="Use entre 8 e 128 caracteres." autoComplete="new-password" /></label> : <label className="field-label field-label--compact"><span>E-mail</span><input required name="email" type="email" autoComplete="email" spellCheck={false} /></label>}{error && <p className="field-error" role="alert">{error}</p>}<button className="primary-button primary-button--wide" type="submit" disabled={submitting}>{submitting ? "Enviando…" : reset ? "Criar nova senha" : "Enviar link seguro"}<span aria-hidden="true">→</span></button><a className="text-button" href="/entrar">Voltar para entrar</a></form>}</section><aside><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Bola e raquete nas mãos de um jogador junto à rede" /><div /><section className="auth-brand"><Brand inverse large /><p>Beyond the Court</p><span>Sua participação começa aqui.</span></section></aside></main></div>;
 }
 
 export function LandingPage() {
   const heroRef = useRef<HTMLElement>(null);
+  const courtsRef = useRef<HTMLElement>(null);
   const reducedMotion = useReducedMotion();
+  const [highlightedCourt, setHighlightedCourt] = useState(0);
+  const courts = [
+    { name: "Central Court", tone: "central", position: "Topo do ranking", description: "A divisão de maior nível do APT." },
+    { name: "Court 1", tone: "one", position: "Primeiro patamar", description: "Competição forte, um patamar abaixo do Central." },
+    { name: "Court 2", tone: "two", position: "Competição crescente", description: "O nível intermediário da escada competitiva." },
+    { name: "Court 3", tone: "three", position: "Base do ranking", description: "A base da escada competitiva do APT." },
+  ];
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
   const photoY = useTransform(scrollYProgress, [0, 1], ["0%", "3.5%"]);
-  const copyY = useTransform(scrollYProgress, [0, 1], ["0%", "1.5%"]);
-  const seasonY = useTransform(scrollYProgress, [0, 1], [0, 16]);
+  function resetSpreadPointer(stage: HTMLElement) {
+    stage.style.setProperty("--apt-pointer-x", "0px");
+    stage.style.setProperty("--apt-pointer-y", "0px");
+  }
+  function moveSpreadPointer(event: ReactPointerEvent<HTMLDivElement>) {
+    if (reducedMotion || event.pointerType !== "mouse" || !window.matchMedia("(hover: hover) and (pointer: fine)").matches || !CSS.supports("animation-timeline: view()")) return;
+    const stage = event.currentTarget;
+    const section = stage.parentElement!;
+    const travel = section.offsetHeight - window.innerHeight;
+    const progress = -section.getBoundingClientRect().top / Math.max(1, travel);
+    if (progress < 0.9) { resetSpreadPointer(stage); return; }
+    const rect = stage.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width * 2 - 1) * Math.min(26, rect.width * 0.026);
+    const y = ((event.clientY - rect.top) / rect.height * 2 - 1) * Math.min(22, rect.height * 0.022);
+    stage.style.setProperty("--apt-pointer-x", `${x.toFixed(2)}px`);
+    stage.style.setProperty("--apt-pointer-y", `${y.toFixed(2)}px`);
+  }
+  const courtCount = courts.length;
+  useEffect(() => {
+    const section = courtsRef.current;
+    if (reducedMotion || !section || typeof IntersectionObserver === "undefined") return;
+    let visible = false;
+    let timer: number | undefined;
+    const schedule = () => {
+      window.clearTimeout(timer);
+      timer = undefined;
+      if (visible && !document.hidden) {
+        timer = window.setTimeout(() => setHighlightedCourt(current => (current + 1) % courtCount), 6000);
+      }
+    };
+    const observer = new IntersectionObserver(entries => {
+      visible = entries.some(entry => entry.isIntersecting && entry.intersectionRatio >= 0.15);
+      schedule();
+    }, { threshold: 0.15 });
+    observer.observe(section);
+    document.addEventListener("visibilitychange", schedule);
+    return () => {
+      window.clearTimeout(timer);
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", schedule);
+    };
+  }, [highlightedCourt, reducedMotion, courtCount]);
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.slice(1));
     const type = hash.get("type");
@@ -356,7 +406,7 @@ export function LandingPage() {
     }
   }, []);
   return (
-    <div className="apt-app apt-landing">
+    <div className="apt-app apt-club apt-landing">
       <a className="skip-link" href="#main-content">Pular para o conteúdo</a>
       <header className="apt-site-nav">
         <a className="apt-site-nav__brand" href="/" aria-label="APT Tennis Club"><Brand /></a>
@@ -375,119 +425,130 @@ export function LandingPage() {
 
       <main id="main-content">
         <section className="apt-hero" ref={heroRef}>
-          <motion.div className="apt-hero__visual" style={{ y: reducedMotion ? 0 : photoY }}>
-            <img src="/apt-assets/hero-parallax-v2.webp" width="1672" height="941" alt="Jogador de roupa vermelha sacando em uma quadra azul, visto de cima" fetchPriority="high" />
-          </motion.div>
-          <div className="apt-hero__shade" aria-hidden="true" />
-          <motion.div className="apt-hero__content" style={{ y: reducedMotion ? 0 : copyY }}>
-            <p className="apt-kicker">APT Tennis Club · Brasília</p>
-            <h1>
-              <span className="sr-only">Um ranking para quem leva o tênis a sério.</span>
-              <span className="apt-hero__headline" aria-hidden="true">
-                <span>Um ranking para quem quer</span>
-                <HeroRotatingStatement reducedMotion={Boolean(reducedMotion)} />
-              </span>
-            </h1>
-            <p className="apt-hero__intro">Jogos equilibrados, calendário definido e adversários do seu nível. Entrada por indicação.</p>
-            <a className="apt-pill apt-pill--clay" href="/requerimento">Quero jogar no APT <span aria-hidden="true">↗</span></a>
-            <ul className="apt-hero__tags" aria-label="Características do APT">
-              <li>Ranking masculino</li><li>Brasília</li><li>Por indicação</li>
-            </ul>
-          </motion.div>
-          <motion.aside className="apt-hero__season" aria-label="Temporada atual" style={{ y: reducedMotion ? 0 : seasonY }}>
-            <div><span>Temporada 2026</span><strong>APT Ranking</strong><small>Quatro Courts · ciclos trimestrais</small></div>
-            <a href="/calendario2026" aria-label="Ver calendário da temporada"><ArrowUpRight size={20} aria-hidden="true" /></a>
-          </motion.aside>
+          <div className="apt-hero__content">
+            <div><p className="apt-kicker">APT Tennis Club · Brasília · Desde 2025</p>
+              <h1><span className="sr-only">Um clube de tênis por indicação. Para jogar com critério, constância e respeito.</span>
+                <span className="apt-hero__headline" aria-hidden="true"><span>Um clube de tênis. <em>Por indicação.</em></span><span className="apt-hero__statement">Para jogar com <HeroRotatingStatement reducedMotion={Boolean(reducedMotion)} /></span></span>
+              </h1>
+            </div>
+            <div><p className="apt-hero__intro">Em Brasília, o APT reúne seus membros em um ranking masculino com quatro divisões e rodadas quinzenais. A entrada depende de indicação e análise do perfil.</p>
+              <a className="apt-pill apt-pill--clay" href="/requerimento">Solicitar entrada <span aria-hidden="true">↗</span></a>
+            </div>
+          </div>
+          <div className="apt-hero__visual" role="group" aria-label="O tênis, dentro e além da quadra">
+            <figure><img src="/apt-editorial-clay.jpeg" width="736" height="1211" alt="Um saque e sua sombra sobre o saibro" /></figure>
+            <figure><motion.div className="apt-hero__photo" style={{ y: reducedMotion ? 0 : photoY }}><img src="/apt-editorial-hero.jpeg" width="736" height="981" alt="Jogador junto à rede, entre dois pontos" fetchPriority="high" /></motion.div></figure>
+            <figure><img src="/apt-assets/tennis-green-racket.webp" width="736" height="1277" alt="Raquete vermelha e o passo de um jogador na quadra verde" /></figure>
+          </div>
+          <aside className="apt-hero__season" aria-label="Temporada atual"><span>Ranking masculino · Brasília</span><a href="/calendario2026">Temporada 2026 <ArrowUpRight size={16} aria-hidden="true" /></a><span>Beyond the Court.</span></aside>
         </section>
 
         <section className="apt-manifesto" id="o-apt">
-          <p>No APT, o tênis é mais do que marcar uma partida. É uma temporada com <strong>ritmo</strong>, adversários do mesmo nível e <strong>consequência esportiva</strong>.</p>
-          <p>O ranking foi criado em Brasília para quem quer jogar com regularidade, competir de verdade e evoluir dentro da quadra.</p>
-          <div className="apt-manifesto__mark"><span /><img src="/logo-apt3-navy.svg" width="1241" height="1246" alt="" /><span /></div>
-        </section>
-
-        <section className="apt-photo-rail" aria-label="Atmosfera do APT Tennis Club">
-          <figure><img src="/apt-editorial-ocean.jpeg" width="480" height="640" alt="Jogador em uma quadra à beira-mar" loading="lazy" /></figure>
-          <figure><img src="/apt-editorial-ritual.jpeg" width="736" height="1030" alt="Jogador segura raquete e bola antes do saque" loading="lazy" /></figure>
-          <figure><img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Pés de um jogador em movimento numa quadra azul" loading="lazy" /></figure>
-          <figure><img src="/apt-editorial-clay.jpeg" width="736" height="1211" alt="Jogador atacando uma bola no saibro" loading="lazy" /></figure>
-          <figure><img src="/apt-editorial-hero.jpeg" width="736" height="981" alt="Jogador entre pontos diante da arquibancada" loading="lazy" /></figure>
+          <figure className="apt-manifesto__photo apt-manifesto__photo--one"><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Bola e raquete, antes do próximo ponto" loading="lazy" /></figure>
+          <div className="apt-manifesto__heading"><p className="apt-kicker">O clube</p><h2>Indicação e análise.<br /><em>Antes de cada convite.</em></h2></div>
+          <div className="apt-manifesto__body"><p>A indicação apresenta o candidato ao APT. A gestão analisa o perfil e a disponibilidade na divisão adequada antes de liberar o convite de cadastro.</p><p>Os membros participam de uma temporada comum, com adversários de nível compatível e calendário definido. Cada jogador combina suas partidas e registra os resultados no prazo da rodada.</p><div className="apt-manifesto__mark"><img src="/logo-apt3-navy.svg" width="1241" height="1246" alt="" /><span>Beyond the Court.</span></div></div>
+          <figure className="apt-manifesto__photo apt-manifesto__photo--two"><img src="/apt-assets/tennis-green-racket.webp" width="736" height="1277" alt="O ritmo de um jogador entre pontos" loading="lazy" /></figure>
         </section>
 
         <section className="apt-product" id="ranking">
+          <header className="apt-section-heading"><h2>Rodadas quinzenais.<br /><em>Horários combinados.</em></h2><p>O ranking define os confrontos. Você combina a data e o horário com cada adversário, dentro do prazo da rodada.</p></header>
+          <div className="apt-product__layout"><figure className="apt-product__photo"><img src="/apt-assets/apt-club-outdoor.webp" width="1149" height="1368" alt="Três painéis ao ar livre: fotografias de tênis nas laterais e a marca APT ao centro" loading="lazy" /></figure>
+            <dl className="apt-format"><div><dt>2</dt><dd><strong>Jogos por rodada</strong><p>A cada quinze dias, você recebe dois confrontos para combinar.</p></dd></div><div><dt>14</dt><dd><strong>Dias para jogar</strong><p>Combine o horário com seu adversário, entre em quadra e registre o resultado dentro do prazo.</p></dd></div><div><dt>4</dt><dd><strong>Divisões de nível</strong><p>Central Court, Court 1, Court 2 e Court 3. Os resultados definem sua posição e o próximo ciclo.</p></dd></div></dl>
+          </div>
+        </section>
+
+        <section className="apt-courts" ref={courtsRef}>
           <header className="apt-section-heading">
-            <h2>O ranking em números.</h2>
-            <p>Uma estrutura simples para manter o jogo acontecendo e o nível sempre equilibrado.</p>
+            <h2>Quatro divisões.<br /><em>Classificação por resultado.</em></h2>
+            <p>Você começa na divisão compatível com seu nível. Ao fim de cada ciclo, os resultados definem quem sobe e quem desce.</p>
           </header>
-          <div className="apt-product__grid">
-            <article className="apt-product-card apt-product-card--image">
-              <img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Jogador se deslocando numa quadra azul" loading="lazy" />
-              <div><span>O formato</span><h3>Confrontos equilibrados em todos os ciclos.</h3></div>
-            </article>
-            <article className="apt-product-card apt-product-card--blue"><strong>2</strong><h3>confrontos</h3><p>liberados para cada jogador a cada quinze dias.</p></article>
-            <article className="apt-product-card apt-product-card--clay"><strong>14</strong><h3>dias</h3><p>para realizar cada partida e registrar o resultado.</p></article>
-            <article className="apt-product-card apt-product-card--detail">
-              <img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Jogador com raquete e bola junto à rede" loading="lazy" />
-              <p>Vitórias, sets e games formam a classificação de cada ciclo.</p>
-            </article>
-          </div>
-        </section>
-
-        <section className="apt-courts">
-          <header className="apt-section-heading apt-section-heading--center">
-            <h2>Quatro Courts. Uma escada competitiva.</h2>
-            <p>Cada jogador começa na divisão compatível com o seu nível. O ranking decide o próximo passo.</p>
-          </header>
-          <div className="apt-courts__grid">
-            <article className="apt-court apt-court--central"><span>Topo do ranking</span><h3>Central Court</h3><p>A divisão de maior nível do APT.</p><small>O mais alto patamar competitivo</small></article>
-            <article className="apt-court apt-court--one"><span>Primeiro patamar</span><h3>Court 1</h3><p>Competição forte, logo abaixo do Central.</p><small>Suba pelo resultado</small></article>
-            <article className="apt-court apt-court--two"><span>Competição crescente</span><h3>Court 2</h3><p>Desenvolvimento com jogos mais exigentes.</p><small>Regularidade muda o ranking</small></article>
-            <article className="apt-court apt-court--three"><span>Ponto de entrada</span><h3>Court 3</h3><p>Onde começa a ascensão dentro do APT.</p><small>Todo ciclo abre uma nova chance</small></article>
-          </div>
-        </section>
-
-        <section className="apt-cycle" id="temporada">
-          <figure><img src="/apt-editorial-clay.jpeg" width="736" height="1211" alt="Jogador executa um golpe no saibro" loading="lazy" /></figure>
-          <div className="apt-cycle__copy">
-            <h2>Uma temporada que se movimenta.</h2>
-            <p>O ano é dividido em quatro ciclos. Cada ciclo reorganiza as divisões e mantém o ranking competitivo.</p>
-            <ol>
-              <li><span>01</span><div><strong>Sorteios quinzenais</strong><p>Dois jogos liberados a cada rodada.</p></div></li>
-              <li><span>02</span><div><strong>Pontuação por resultado</strong><p>Vitórias, sets e games valem posição.</p></div></li>
-              <li><span>03</span><div><strong>Promoção e rebaixamento</strong><p>Ao fim do trimestre, o ranking define quem sobe e quem desce.</p></div></li>
-              <li><span>04</span><div><strong>APT Finals</strong><p>Os melhores de cada Court se encontram no torneio presencial.</p></div></li>
-            </ol>
-            <a className="apt-text-link" href="/calendario2026">Ver calendário da temporada <span aria-hidden="true">↗</span></a>
-          </div>
-        </section>
-
-        <section className="apt-member-block">
-          <div className="apt-member-block__visual"><img src="/apt-editorial-hero.jpeg" width="736" height="981" alt="Jogador em quadra diante da arquibancada" loading="lazy" /></div>
-          <div className="apt-member-block__quote">
-            <span>Para quem já faz parte</span>
-            <blockquote>O ranking acontece no Tweener. Sua assinatura e sua participação ficam no APT.</blockquote>
-            <a className="apt-text-link" href="/entrar">Entrar na área do membro <span aria-hidden="true">→</span></a>
-          </div>
-        </section>
-
-        <section className="apt-faq" id="duvidas">
-          <header><h2>Tudo o que você precisa saber sobre o APT.</h2><p>Sem enrolação. O essencial antes de solicitar sua entrada.</p></header>
-          <div className="apt-faq__layout">
-            <figure><img src="/apt-editorial-blue.jpeg" width="474" height="593" alt="Jogador se movimentando em uma quadra azul" loading="lazy" /></figure>
-            <div className="apt-faq__items">
-              <details open><summary>O que é o APT?</summary><p>Um ranking masculino por convite, criado em Brasília, com jogos quinzenais, quatro divisões e ciclos trimestrais.</p></details>
-              <details><summary>Como faço para entrar?</summary><p>O acesso começa por indicação. Você envia um requerimento e a gestão analisa o perfil e a disponibilidade na divisão adequada.</p></details>
-              <details><summary>Como são definidos os Courts?</summary><p>A divisão considera o nível de jogo e a disponibilidade de vagas. Depois, os resultados definem promoção e rebaixamento.</p></details>
-              <details><summary>Quantos jogos acontecem por rodada?</summary><p>Dois confrontos são liberados a cada 15 dias, com prazo de 14 dias para a realização.</p></details>
-              <details><summary>Onde acompanho o ranking e os pagamentos?</summary><p>O ranking fica no Tweener. Assinatura, pagamentos e situação da participação ficam na área do membro do APT.</p></details>
+          <p className="apt-courts__hint" id="apt-courts-hint">Selecione uma divisão para vê-la em destaque.</p>
+          <div className="apt-courts__layout">
+            <div className="apt-courts__list" role="group" aria-label="Divisões do ranking" aria-describedby="apt-courts-hint">
+              {courts.map((court, index) => <article className={`apt-court apt-court--${court.tone}`} data-highlighted={highlightedCourt === index} key={court.name}>
+                <span className="apt-court__number" aria-hidden="true">0{index + 1}</span>
+                <div><span className="apt-court__position">{court.position}</span><h3><button type="button" aria-pressed={highlightedCourt === index} aria-label={`Destacar ${court.name}`} onClick={() => setHighlightedCourt(index)}>{court.name}<span aria-hidden="true">↗</span></button></h3><p>{court.description}</p></div>
+              </article>)}
+            </div>
+            <div className={`apt-courts__portrait apt-court--${courts[highlightedCourt].tone}`} aria-hidden="true">
+              <div className="apt-courts__portrait-top"><span>APT Tennis Club</span><span>Escada competitiva</span></div>
+              <svg key={highlightedCourt} className="apt-courts__drawing" viewBox="0 0 400 640" fill="none"><rect x="48" y="44" width="304" height="552" /><path d="M86 44v552M314 44v552M86 175h228M86 465h228M200 175v290M20 320h360" /><path className="apt-courts__service" d="M86 175h114v145H86zM200 320h114v145H200z" /><circle cx="200" cy="320" r="5" /></svg>
+              <div className="apt-courts__portrait-bottom"><span>0{highlightedCourt + 1}</span><p>{courts[highlightedCourt].name}</p></div>
             </div>
           </div>
         </section>
 
+        {/* Stack Spread adapted from the Hyperiux source supplied by the user; native CSS scroll, local APT photography. */}
+        <section className="apt-spread" aria-label="Beyond the Court — fotografias de tênis">
+          <div className="apt-spread__stage" onPointerMove={moveSpreadPointer} onPointerLeave={event => resetSpreadPointer(event.currentTarget)}>
+            <svg className="apt-spread__court" viewBox="0 0 1200 900" fill="none" aria-hidden="true"><rect x="150" y="120" width="900" height="660" /><path d="M260 120v660M940 120v660M260 285h680M260 615h680M600 285v330M150 450h900" /></svg>
+            <div className="apt-spread__copy"><p className="apt-kicker">APT Tennis Club</p><h2>Beyond<br /><em>the Court.</em></h2><p>Gente com quem jogar.<br />Uma temporada para compartilhar.</p></div>
+            <div className="apt-spread__photos">
+              {[
+                { src: "/apt-assets/tennis-green-racket.webp", width: 736, height: 1277, alt: "O passo de um jogador com sua raquete vermelha" },
+                { src: "/apt-ritual-figma.jpg", width: 900, height: 1125, alt: "Bola e raquete nas mãos, junto à rede" },
+                { src: "/apt-editorial-clay.jpeg", width: 736, height: 1211, alt: "Um saque sobre o saibro" },
+                { src: "/apt-assets/tennis-green-indian-wells.webp", width: 736, height: 863, alt: "Uma troca de bola na quadra verde" },
+                { src: "/apt-assets/apt-court-photographic.webp", width: 1122, height: 1402, alt: "Composição de marca APT pintada no piso de uma quadra" },
+                { src: "/apt-editorial-hero.jpeg", width: 736, height: 981, alt: "A pausa de um jogador junto à rede" },
+              ].map((photo, index) => <figure key={photo.src}><div className="apt-spread__photo-drift" style={{ "--apt-depth": 0.55 + index * 0.15 } as CSSProperties}><img {...photo} alt={photo.alt} loading="lazy" draggable={false} /></div></figure>)}
+            </div>
+          </div>
+        </section>
+
+        <section className="apt-cycle" id="temporada">
+          <header className="apt-cycle__heading">
+            <div>
+            <p className="apt-kicker">A temporada</p><h2>Quatro ciclos.<br /><em>Uma temporada anual.</em></h2>
+            </div>
+            <div><p>Quatro ciclos ao longo do ano, com sorteios quinzenais e mudanças de divisão ao fim de cada ciclo.</p><a className="apt-text-link" href="/calendario2026">Ver calendário da temporada <span aria-hidden="true">↗</span></a></div>
+          </header>
+          <div className="apt-cycle__body">
+            <figure className="apt-cycle__photo"><div><img src="/apt-editorial-clay.jpeg" width="736" height="1211" alt="Jogador executa um golpe no saibro" loading="lazy" /></div><figcaption><span>2 jogos por rodada</span><span>14 dias para jogar</span></figcaption></figure>
+            <ol className="apt-cycle__steps">
+              <li><span className="apt-cycle__number" aria-hidden="true">01</span><div><span className="apt-cycle__rhythm">A cada quinze dias</span><h3>Sorteios quinzenais</h3><p>Dois jogos liberados a cada rodada.</p></div></li>
+              <li><span className="apt-cycle__number" aria-hidden="true">02</span><div><span className="apt-cycle__rhythm">A cada partida</span><h3>Pontuação por resultado</h3><p>Vitórias, sets e games entram na classificação.</p></div></li>
+              <li><span className="apt-cycle__number" aria-hidden="true">03</span><div><span className="apt-cycle__rhythm">Ao fim do ciclo</span><h3>Promoção e rebaixamento</h3><p>No fim de cada ciclo, a classificação define quem sobe e quem desce.</p></div></li>
+              <li><span className="apt-cycle__number" aria-hidden="true">04</span><div><span className="apt-cycle__rhythm">O encontro em quadra</span><h3>APT Finals</h3><p>Os melhores de cada Court se encontram no torneio presencial.</p></div></li>
+            </ol>
+          </div>
+        </section>
+
+        <section className="apt-member-block">
+          <div className="apt-member-block__copy">
+            <p className="apt-kicker">Para quem já faz parte</p>
+            <h2>Área do membro.<br /><em>Participação e assinatura.</em></h2>
+            <p>Você acompanha o ranking no Tweener. Aqui, cuida da sua assinatura e da participação no APT.</p>
+            <a className="apt-pill apt-pill--clay" href="/entrar">Entrar na área do membro <span aria-hidden="true">↗</span></a>
+          </div>
+          <div className="apt-member-block__visual">
+            <svg className="apt-member-block__court" viewBox="0 0 500 600" fill="none" aria-hidden="true"><rect x="30" y="25" width="440" height="550" /><path d="M84 25v550M416 25v550M84 150h332M84 450h332M250 150v300M30 300h440" /></svg>
+            <figure className="apt-member-block__main-photo"><img src="/apt-assets/tennis-black-white.jpeg" width="736" height="981" alt="Fotografia em preto e branco de um jogador executando um golpe em quadra" loading="lazy" /></figure>
+            <figure className="apt-member-block__detail-photo"><img src="/apt-assets/apt-balls-photoshop.webp" width="938" height="1679" alt="Bolas de tênis com a marca APT em preto na bola central" loading="lazy" /></figure>
+            <span className="apt-member-block__caption">Beyond the Court.</span>
+          </div>
+        </section>
+
+        <section className="apt-faq" id="duvidas">
+          <header><h2>Antes de entrar.</h2><p>Como entrar, combinar os jogos e acompanhar sua participação.</p></header>
+          <div className="apt-faq__layout">
+            <figure><img src="/apt-editorial-blue.jpeg" width="474" height="593" alt="Jogador se movimentando em uma quadra azul" loading="lazy" /></figure>
+            <div className="apt-faq__items">
+              <details open><summary>O que é o APT?</summary><p>Um clube de tênis em Brasília, com entrada por indicação e ranking masculino. Os jogos acontecem em rodadas quinzenais, com quatro divisões de nível e quatro ciclos ao longo do ano.</p></details>
+              <details><summary>Como faço para entrar?</summary><p>A entrada começa por indicação. Você conta um pouco sobre seu tênis no requerimento; a gestão analisa o perfil e a disponibilidade na divisão adequada. Com a aprovação, você recebe o convite para cadastro.</p></details>
+              <details><summary>Como são definidos os Courts?</summary><p>Seu nível de jogo e a disponibilidade de vagas definem a divisão inicial. Depois, os resultados do ranking determinam promoção e rebaixamento.</p></details>
+              <details><summary>Quantos jogos acontecem por rodada?</summary><p>Você recebe dois confrontos a cada quinze dias e tem 14 dias para combinar e realizar as partidas.</p></details>
+              <details><summary>Onde acompanho o ranking e os pagamentos?</summary><p>O ranking fica no Tweener. Na área do membro do APT, você acompanha assinatura, pagamentos e situação da participação. O checkout de cartão é realizado no Asaas.</p></details>
+            </div>
+          </div>
+        </section>
+
+        <GlyphPortal className="apt-glyph" word="JOGAR" focusChar="O" interactive={false} scrollLength={1} fontFamily="Georgia, serif" fontWeight={700} enterLabel="Ver como participar" style={{ "--gp-paper": "#ecebe2", "--gp-ink": "var(--navy)", "--gp-field": "var(--navy)", "--gp-foreground": "var(--white)" }} background={<svg className="apt-glyph__court" viewBox="0 0 1200 900" fill="none" aria-hidden="true"><rect x="150" y="120" width="900" height="660" /><path d="M260 120v660M940 120v660M260 285h680M260 615h680M600 285v330M150 450h900" /></svg>} front={<div className="apt-glyph__front"><span>APT Tennis Club</span><span>Entrada por indicação e análise.</span></div>}>
         <section className="apt-entry" id="entrada">
-          <div className="apt-entry__copy"><div className="apt-entry__brand"><Brand inverse /><span>APT Tennis Club · Brasília</span></div><h2>Quer jogar no APT?</h2><p>Faça o requerimento. Se houver vaga para o seu nível e o perfil for aprovado, você recebe o link de cadastro.</p></div>
+          <div className="apt-entry__copy"><div className="apt-entry__brand"><Brand inverse /><span>APT Tennis Club · Brasília</span></div><h2>Entrada por indicação.<br />Admissão por análise.</h2><p>Informe quem o indicou e sua experiência no tênis. A gestão avalia o requerimento e a disponibilidade na divisão adequada. Se aprovado, você recebe um convite individual para cadastro.</p><ol className="apt-entry__steps" aria-label="Etapas de entrada"><li><span>01</span>Requerimento</li><li><span>02</span>Análise do perfil</li><li><span>03</span>Convite e cadastro</li></ol></div>
           <a className="apt-pill apt-pill--light" href="/requerimento">Solicitar entrada <span aria-hidden="true">↗</span></a>
         </section>
+        </GlyphPortal>
       </main>
       <footer className="apt-footer">
         <div className="apt-footer__body">
@@ -501,7 +562,7 @@ export function LandingPage() {
             <div><h3>Participe</h3><ul><li><a href="/requerimento">Solicitar entrada</a></li><li><a href="/entrar">Área do membro</a></li><li><a href="#duvidas">Dúvidas frequentes</a></li></ul></div>
           </nav>
         </div>
-        <div className="apt-footer__base"><span>Desde 2025</span><span>Competir. Evoluir. Pertencer.</span></div>
+        <div className="apt-footer__base"><span>Desde 2025</span><span>Admissão por indicação e análise.</span></div>
       </footer>
     </div>
   );
@@ -543,10 +604,10 @@ export function CandidatePage() {
   function previous() { setError(""); setStep((current) => Math.max(0, current - 1)); }
   function toggleMulti(option: string) { const current = Array.isArray(answers[question.id]) ? answers[question.id] as string[] : []; if (!current.includes(option) && current.length >= 3) { setError("Você pode escolher até três pontos."); return; } setAnswer(current.includes(option) ? current.filter((item) => item !== option) : [...current, option]); }
 
-  if (complete) return <main className="form-shell form-shell--complete" id="main-content"><aside className="form-visual"><img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Jogador em movimento na quadra" /><div className="form-visual__shade" /><a href="/" aria-label="Voltar ao site"><Brand inverse large /></a></aside><section className="form-success"><span className="success-symbol">✓</span><p>Requerimento enviado</p><h1>Agora, a análise é nossa.</h1><p>Suas informações foram registradas. Se o perfil for aprovado, você receberá outro link — exclusivo para cadastro e assinatura.</p><a className="secondary-button" href="/">Voltar ao site</a></section></main>;
+  if (complete) return <main className="apt-club form-shell form-shell--complete" id="main-content"><aside className="form-visual"><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Jogador com a raquete e a bola junto à rede" /><div className="form-visual__shade" /><a href="/" aria-label="Voltar ao site"><Brand inverse large /></a></aside><section className="form-success"><span className="success-symbol">✓</span><p>Requerimento enviado</p><h1>Agora, a análise é nossa.</h1><p>Suas informações foram registradas. Se o perfil for aprovado, você receberá outro link — exclusivo para cadastro e assinatura.</p><a className="secondary-button" href="/">Voltar ao site</a></section></main>;
 
-  return <main className="form-shell" id="main-content">
-    <aside className="form-visual"><img src="/apt-motion-figma.jpg" width="900" height="1125" alt="Jogador em movimento na quadra" /><div className="form-visual__shade" /><a href="/" aria-label="Voltar ao site"><Brand inverse large /></a><p>Não é só sobre jogar.<br />É sobre com quem você joga.</p></aside>
+  return <main className="apt-club form-shell" id="main-content">
+    <aside className="form-visual"><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Jogador com a raquete e a bola junto à rede" /><div className="form-visual__shade" /><a href="/" aria-label="Voltar ao site"><Brand inverse large /></a><p>Não é só sobre jogar.<br />É sobre com quem você joga.</p></aside>
     <section className="question-stage">
       <header className="form-topbar"><button type="button" onClick={previous} disabled={step === 0} aria-label="Voltar para a pergunta anterior">←</button><div className="progress-track" role="progressbar" aria-label="Progresso do requerimento" aria-valuemin={1} aria-valuemax={visibleQuestions.length} aria-valuenow={step + 1} aria-valuetext={`Pergunta ${step + 1} de ${visibleQuestions.length}`}><span style={{ transform: `scaleX(${progress / 100})` }} /></div><span>{String(step + 1).padStart(2, "0")} / {String(visibleQuestions.length).padStart(2, "0")}</span></header>
       <div className="question-content" key={question.id}>
@@ -619,14 +680,14 @@ export function EnrollmentPage() {
     catch (submissionError) { setError(submissionError instanceof Error ? submissionError.message : "Não foi possível concluir o cadastro."); }
     finally { setSubmitting(false); }
   }
-  if (checkoutStatus === "sucesso") return <div className="apt-app"><RouteHeader label="Assinatura APT" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Checkout concluído</p><h1>Recebemos sua assinatura.</h1><p>O Asaas está confirmando o pagamento. Assim que a confirmação chegar, sua área de membro será liberada.</p><a className="primary-button" href="/entrar?next=/membros">Entrar na área do membro <span aria-hidden="true">→</span></a></main></div>;
-  if (checkoutStatus === "cancelado" || checkoutStatus === "expirado") return <div className="apt-app"><RouteHeader label="Assinatura APT" /><main className="content-page success-page" id="main-content"><p>Checkout não concluído</p><h1>{checkoutStatus === "expirado" ? "O link de pagamento expirou." : "O pagamento foi cancelado."}</h1><p>Peça à gestão um novo link individual para continuar sua assinatura com segurança.</p><a className="secondary-button" href="/">Voltar ao site</a></main></div>;
+  if (checkoutStatus === "sucesso") return <div className="apt-app apt-club"><RouteHeader label="Assinatura APT" /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Checkout concluído</p><h1>Recebemos sua assinatura.</h1><p>O Asaas está confirmando o pagamento. Assim que a confirmação chegar, sua área de membro será liberada.</p><a className="primary-button" href="/entrar?next=/membros">Entrar na área do membro <span aria-hidden="true">→</span></a></main></div>;
+  if (checkoutStatus === "cancelado" || checkoutStatus === "expirado") return <div className="apt-app apt-club"><RouteHeader label="Assinatura APT" /><main className="content-page success-page" id="main-content"><p>Checkout não concluído</p><h1>{checkoutStatus === "expirado" ? "O link de pagamento expirou." : "O pagamento foi cancelado."}</h1><p>Peça à gestão um novo link individual para continuar sua assinatura com segurança.</p><a className="secondary-button" href="/">Voltar ao site</a></main></div>;
   const enrollmentLabel = communityEnrollment ? "Cadastro pelo grupo APT" : directRegistration ? "Cadastro direto APT" : "Cadastro do aprovado";
   const enrollmentHeadline = recadastro ? "Atualize seus dados. Ative sua recorrência." : communityEnrollment || directRegistration ? "Complete seu cadastro. Ative sua participação." : "Você foi aprovado. Agora, vamos ativar sua participação.";
-  if (submitted && pixPayment) return <div className="apt-app"><RouteHeader label={enrollmentLabel} /><main className="content-page success-page pix-success" id="main-content"><span className="success-symbol">✓</span><p>Cadastro recebido</p><h1>Seu Pix está pronto.</h1><p>O Asaas atualizará sua situação automaticamente depois da confirmação. Você pode usar a cobrança identificada ou a chave fixa do APT.</p><div className="pix-payment-box"><span>Chave Pix do APT</span><strong>{pixPayment.key}</strong><button className="secondary-button" type="button" onClick={() => navigator.clipboard.writeText(pixPayment.key)}>Copiar chave Pix</button>{pixPayment.copyPaste && <><span>Pix copia e cola identificado</span><textarea readOnly rows={3} value={pixPayment.copyPaste} aria-label="Pix copia e cola" /><button className="secondary-button" type="button" onClick={() => navigator.clipboard.writeText(pixPayment.copyPaste || "")}>Copiar código identificado</button></>}{pixPayment.invoiceUrl && <a className="primary-button" href={pixPayment.invoiceUrl} target="_blank" rel="noreferrer">Abrir cobrança no Asaas <span aria-hidden="true">↗</span></a>}</div><small>Se outra pessoa fizer o Pix por você, prefira o código identificado ou envie o comprovante à gestão.</small></main></div>;
-  if (submitted) return <div className="apt-app"><RouteHeader label={enrollmentLabel} /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Cadastro recebido</p><h1>{paymentLink ? "Sua assinatura está pronta para ativação." : "Seus dados foram vinculados ao requerimento."}</h1><p>{paymentLink ? "Conclua o pagamento no ambiente seguro do Asaas. O APT não recebe nem armazena os dados completos do seu cartão." : "A cobrança será liberada quando valor e vencimento forem confirmados pela gestão."}</p>{paymentLink ? <a className="primary-button" href={paymentLink}>Abrir checkout seguro <span aria-hidden="true">↗</span></a> : <a className="secondary-button" href="/">Voltar ao site</a>}</main></div>;
-  if (!profileLoading && !hasInvite) return <div className="apt-app"><RouteHeader label="Cadastro por convite" /><main className="access-state" id="main-content"><span>Entrada no APT</span><h1>Cadastro por convite.</h1><p>Este cadastro precisa de um acesso válido. Abra o convite individual ou o link enviado pela gestão para completar seu cadastro. Se você ainda não participa do clube, comece pelo requerimento.</p><div className="profile-actions"><a className="primary-button" href="/requerimento">Fazer requerimento</a><a className="secondary-button" href="/entrar?next=/membros">Já sou membro</a></div></main></div>;
-  return <div className="apt-app"><RouteHeader label={enrollmentLabel} /><main className="enrollment-page" id="main-content">
+  if (submitted && pixPayment) return <div className="apt-app apt-club"><RouteHeader label={enrollmentLabel} /><main className="content-page success-page pix-success" id="main-content"><span className="success-symbol">✓</span><p>Cadastro recebido</p><h1>Seu Pix está pronto.</h1><p>O Asaas atualizará sua situação automaticamente depois da confirmação. Você pode usar a cobrança identificada ou a chave fixa do APT.</p><div className="pix-payment-box"><span>Chave Pix do APT</span><strong>{pixPayment.key}</strong><button className="secondary-button" type="button" onClick={() => navigator.clipboard.writeText(pixPayment.key)}>Copiar chave Pix</button>{pixPayment.copyPaste && <><span>Pix copia e cola identificado</span><textarea readOnly rows={3} value={pixPayment.copyPaste} aria-label="Pix copia e cola" /><button className="secondary-button" type="button" onClick={() => navigator.clipboard.writeText(pixPayment.copyPaste || "")}>Copiar código identificado</button></>}{pixPayment.invoiceUrl && <a className="primary-button" href={pixPayment.invoiceUrl} target="_blank" rel="noreferrer">Abrir cobrança no Asaas <span aria-hidden="true">↗</span></a>}</div><small>Se outra pessoa fizer o Pix por você, prefira o código identificado ou envie o comprovante à gestão.</small></main></div>;
+  if (submitted) return <div className="apt-app apt-club"><RouteHeader label={enrollmentLabel} /><main className="content-page success-page" id="main-content"><span className="success-symbol">✓</span><p>Cadastro recebido</p><h1>{paymentLink ? "Sua assinatura está pronta para ativação." : "Seus dados foram vinculados ao requerimento."}</h1><p>{paymentLink ? "Conclua o pagamento no ambiente seguro do Asaas. O APT não recebe nem armazena os dados completos do seu cartão." : "A cobrança será liberada quando valor e vencimento forem confirmados pela gestão."}</p>{paymentLink ? <a className="primary-button" href={paymentLink}>Abrir checkout seguro <span aria-hidden="true">↗</span></a> : <a className="secondary-button" href="/">Voltar ao site</a>}</main></div>;
+  if (!profileLoading && !hasInvite) return <div className="apt-app apt-club"><RouteHeader label="Cadastro por convite" /><main className="access-state" id="main-content"><span>Entrada no APT</span><h1>Cadastro por convite.</h1><p>Este cadastro precisa de um acesso válido. Abra o convite individual ou o link enviado pela gestão para completar seu cadastro. Se você ainda não participa do clube, comece pelo requerimento.</p><div className="profile-actions"><a className="primary-button" href="/requerimento">Fazer requerimento</a><a className="secondary-button" href="/entrar?next=/membros">Já sou membro</a></div></main></div>;
+  return <div className="apt-app apt-club"><RouteHeader label={enrollmentLabel} /><main className="enrollment-page" id="main-content">
     <aside className="enrollment-intro"><img src="/apt-ritual-figma.jpg" width="900" height="1125" alt="Jogador segura uma bola e uma raquete junto à rede" /><div className="enrollment-intro__shade" /><div><span>{communityEnrollment ? "Grupo APT" : "Link privado"}</span><h1>{enrollmentHeadline}</h1><p>O APT guarda somente a proteção criptográfica do CPF e os quatro últimos dígitos. O cartão fica no Asaas.</p></div></aside>
     <section className="enrollment-content">
       <header><span>{recadastro ? "Recadastro e pagamento" : "Cadastro e pagamento"}</span><h2>Confirme os dados da sua participação.</h2><p>Escolha Pix ou cartão recorrente. Os pagamentos são processados pelo Asaas.</p></header>
@@ -740,9 +801,9 @@ export function PortalPage() {
       setCancelling(false);
     }
   }
-  if (loading) return <div className="apt-app"><RouteHeader label="Área do membro" /><main className="access-state" id="main-content"><div className="loading-state" role="status"><i aria-hidden="true" /><span>Carregando sua participação…</span></div></main></div>;
-  if (authRequired) return <div className="apt-app"><RouteHeader label="Área do membro" /><main className="access-state"><span>Área reservada</span><h1>Entre para ver sua assinatura.</h1><p>Pagamentos, links do clube e dados pessoais ficam protegidos.</p><a className="primary-button" href="/entrar?next=/membros">Entrar na área do membro</a></main></div>;
-  if (!data) return <div className="apt-app"><RouteHeader label="Área do membro" /><main className="access-state" id="main-content"><span>Área do membro</span><h1>Não foi possível carregar sua participação.</h1><p role="alert">{loadError || "Confira sua conexão e tente novamente."}</p><button className="primary-button" type="button" onClick={() => { setLoading(true); setLoadError(""); setNotice(""); setAuthRequired(false); setLoadAttempt((attempt) => attempt + 1); }}>Tentar novamente</button></main></div>;
+  if (loading) return <div className="apt-app apt-club"><RouteHeader label="Área do membro" /><main className="access-state" id="main-content"><div className="loading-state" role="status"><i aria-hidden="true" /><span>Carregando sua participação…</span></div></main></div>;
+  if (authRequired) return <div className="apt-app apt-club"><RouteHeader label="Área do membro" /><main className="access-state"><span>Área reservada</span><h1>Entre para ver sua assinatura.</h1><p>Pagamentos, links do clube e dados pessoais ficam protegidos.</p><a className="primary-button" href="/entrar?next=/membros">Entrar na área do membro</a></main></div>;
+  if (!data) return <div className="apt-app apt-club"><RouteHeader label="Área do membro" /><main className="access-state" id="main-content"><span>Área do membro</span><h1>Não foi possível carregar sua participação.</h1><p role="alert">{loadError || "Confira sua conexão e tente novamente."}</p><button className="primary-button" type="button" onClick={() => { setLoading(true); setLoadError(""); setNotice(""); setAuthRequired(false); setLoadAttempt((attempt) => attempt + 1); }}>Tentar novamente</button></main></div>;
   const { member, subscription, payments, financial } = data;
   const initials = member.name.split(" ").map((part) => part[0]).slice(0, 2).join("");
   const courtesy = member.participationStatus === "courtesy";
@@ -754,7 +815,7 @@ export function PortalPage() {
   const rankingLink = member.twinnerUrl;
   const communityLink = member.whatsappCommunityUrl;
   const openLockedRanking = () => showNotice(isProtectedMembership(member.participationStatus) ? "Fale com a gestão do APT para conferir sua participação e o acesso ao clube." : "O acesso ao Tweener é liberado assim que o Asaas confirma a mensalidade.");
-  return <div className="apt-app apt-product-app"><a className="skip-link" href="#main-content">Pular para o conteúdo</a><main className="member-page" id="main-content">
+  return <div className="apt-app apt-club apt-product-app"><a className="skip-link" href="#main-content">Pular para o conteúdo</a><main className="member-page" id="main-content">
     <ProductSidebar
       ariaLabel="Área do membro"
       brand={<Brand />}

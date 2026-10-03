@@ -12,7 +12,8 @@
   },
   "sources": {
     "tokens": [
-      "app/globals.css"
+      "app/globals.css",
+      "app/calendario2026/calendar.module.css"
     ],
     "components": [
       "app/apt-app.tsx",
@@ -25,7 +26,10 @@
     "instructions": [
       "DESIGN.md",
       "PRODUCT.md",
-      "AGENTS.md"
+      "AGENTS.md",
+      "APT_BRAIN.md",
+      "APT_CLUB_REDESIGN_STUDY.md",
+      "THIRD_PARTY_NOTICES.md"
     ]
   },
   "design": {
@@ -210,7 +214,45 @@
         "source": "app/globals.css"
       }
     },
-    "density": "Operational product: 16px controls/body, 14px data, 24–28px headings; spacious landing"
+    "density": "Management: 16px controls/body, 14px data and 24–28px UI headings. Public/player: editorial Georgia headings, Outfit controls/data, restrained composition; scoped separately.",
+    "surfaceScopes": {
+      "management": {
+        "status": "preserved",
+        "rootSelector": "management context without .apt-club",
+        "theme": "Amber Hearth light",
+        "tokens": "Existing design.colors/typography/radius describe the global management baseline; do not overwrite them for the public redesign.",
+        "source": "app/globals.css :root; current user: a parte do dashboard a gente mantém como tá"
+      },
+      "publicPlayer": {
+        "status": "local-preview-validation-in-progress",
+        "selectors": [
+          ".apt-club",
+          ".apt-landing",
+          "calendar.module.css .page"
+        ],
+        "colors": {
+          "background": "#f8f7f2",
+          "foreground": "#1f2e50",
+          "olive": "#3b4831",
+          "clay": "#b96f49",
+          "clayDark": "#8b482d",
+          "mutedText": "#5d645e",
+          "landingHero": "#ecebe2",
+          "landingHighlight": "#dee2d3"
+        },
+        "typography": {
+          "editorial": "Georgia, \"Times New Roman\", serif",
+          "ui": "Outfit, ui-sans-serif, sans-serif, system-ui"
+        },
+        "radius": {
+          "controls": "0.5rem",
+          "surfaces": "1rem",
+          "heroPhotos": "0.8rem"
+        },
+        "source": "app/globals.css scoped .apt-club/.apt-landing; calendar module maintains its local aliases and contrast roles",
+        "reference": "16th Hole / Conceptzilla / 27168502"
+      }
+    }
   },
   "components": {
     "installed": [
@@ -242,8 +284,8 @@
       "Native member table and operational board with the same filters",
       "Member detail: identity, financial coverage and invoice history before administrative forms",
       "Native disclosure sections and labelled fieldsets for existing actions",
-      "Editorial landing with existing photography, compact navigation and member/calendar links visible on mobile",
-      "Real selected theme tokens; 12px surfaces and selfhosted variable Outfit",
+      "Public/player V3: human-selected 16th Hole direction, small contextual official logo, centered Georgia lettering/italic highlight, three-photo fan and real member/calendar destinations",
+      "Management retains selected Amber Hearth tokens and its existing surface sizes; public/player uses scoped warm paper/navy/olive/clay and Georgia/Outfit",
       "Interactive received and confirmed-series chart: exact provider-calendar months, pointer/touch/focus readout and complete currency values",
       "Application board uses existing admin PATCH, confirmed server state, visible errors and explicit decision dialogs; paid membership lanes remain derived",
       "Current explicit user decision: chart first, real-base/decisions aside, then six financial metrics; this supersedes the earlier metrics-before-chart order without changing financial definitions or exact ledgers",
@@ -256,26 +298,30 @@
   },
   "constraints": {
     "must": [
-      "Apply the selected Amber Hearth light theme, selfhosted Outfit and official APT SVG assets",
+      "Preserve the selected Amber Hearth management theme and official APT SVG assets; public/player uses scoped 16th Hole direction with Georgia display and selfhosted Outfit UI",
       "44px interactive controls, visible focus and reduced motion",
       "Separate payment, participation, forecast and debt",
       "Reuse native CSS and existing React components",
-      "Product headings use the UI font at 24–28px, with 16px controls and 14px data",
+      "Management headings retain the UI font at 24–28px, 16px controls and 14px data; public/player editorial headings follow scoped club composition",
       "240px sidebar, 72px collapsed; metric cards spaced by 16px with 16px radius; selected Advanced Stats chart/aside cards use 24px radius",
       "Received cash and confirmed settlement remain separate, using the provider calendar",
       "Content remains visible without animation; reduced motion and 44px controls apply to every surface",
-      "Use dark foreground on light amber actions and stronger muted/focus roles where the original palette misses accessible contrast"
+      "Use dark foreground on light amber actions and stronger muted/focus roles where the original palette misses accessible contrast",
+      "Current redesign scope is public/player only; no management, API, schema, services or dependency redesign.",
+      "Registry AuthRequired is explicit: use inspected public author sources with recorded licenses, not an invented successful installation.",
+      "Full-page human acceptance and current browser validation remain pending; the owner separately authorized publication."
     ],
     "avoid": [
       "New UI dependencies without need",
-      "Decorative shimmer, gradient text or multi-word hero rotation",
+      "Decorative shimmer, gradient text or unapproved vocabulary/rotation; only the explicitly authorized competir./evoluir./pertencer. cycle is selected",
       "Sending repository context to external catalog"
     ]
   },
   "decisions": [
     {
       "decision": "User authorized the total product UI/UX redesign, including management, portal, authentication and existing forms. Club identity and verified financial/API behavior remain the product boundaries.",
-      "source": "Current user authorization relayed by root, 2026-10-02"
+      "source": "Current user authorization relayed by root, 2026-10-02",
+      "status": "historical-v2-preserved-for-management; public/player direction superseded by current 16th Hole selection"
     },
     {
       "decision": "Implement hierarchy and interactions with the existing React/CSS/SVG/Lucide/Motion stack. Use catalog composition as reference, with original APT markup.",
@@ -283,11 +329,39 @@
     },
     {
       "decision": "User explicitly selected Amber Hearth by serafimcloud, and expanded refinement to landing and every existing screen. Apply its light tokens while correcting foreground contrast.",
-      "source": "Current owner instruction relayed by root, 2026-10-02; APT_BRAIN.md"
+      "source": "Current owner instruction relayed by root, 2026-10-02; APT_BRAIN.md",
+      "status": "historical-v2-preserved-for-management; public/player direction superseded by current 16th Hole selection"
     },
     {
       "decision": "User-supplied contact CRM ZIP, User Table, Settle and sidebar are inspiration only; improve member portal/table without reproducing examples literally.",
-      "source": "Current owner instruction relayed by root, 2026-10-03; APT_BRAIN.md"
+      "source": "Current owner instruction relayed by root, 2026-10-03; APT_BRAIN.md",
+      "status": "historical-v2-preserved-for-management; public/player direction superseded by current 16th Hole selection"
+    },
+    {
+      "decision": "Public/player redesign preserves the management dashboard and contextual official logo variants.",
+      "source": "Current owner instruction, 2026-10-03; APT_BRAIN.md",
+      "status": "human-selected-scope"
+    },
+    {
+      "decision": "16th Hole / Conceptzilla is the selected public reference, with permission to reproduce its composition closely.",
+      "quotes": [
+        "gosto dessa referencia do golf 16th hole",
+        "pode copiar sem dó"
+      ],
+      "source": "Current human user, relayed by root, 2026-10-03",
+      "status": "human-selected-reference; resulting preview not accepted"
+    },
+    {
+      "decision": "First club preview rejected: hero and rigid/simple overall construction were too far from supplied references.",
+      "quote": "nao gostei da hero e senti que ficou tudo mto quadrado e simples dms, longe das referencias",
+      "source": "Current human user, relayed by root, 2026-10-03",
+      "scope": "public/player",
+      "status": "correction-applied-to-v3; pending-human-review"
+    },
+    {
+      "decision": "Use the two requested 21st references: Hero 10 fan composition in original APT CSS, and Tommy Animated Hero word transition adapted from MIT author source.",
+      "source": "Current user component requests and implementation direction relayed by root, 2026-10-03",
+      "status": "authorized-implementation; local-validation-in-progress"
     }
   ],
   "evidence": [
@@ -342,9 +416,25 @@
     {
       "fact": "Received series uses a darker amber derivation (3.68:1 on white); confirmed settlement uses dashed teal, with distinct labels and exact values. No fake deltas, goals or merged cash/confirmation total.",
       "source": "Offline sRGB WCAG calculation against actual app/globals.css roles"
+    },
+    {
+      "fact": "Current .apt-club tokens and Georgia display override are scoped to public/player; management keeps the global Amber Hearth baseline.",
+      "source": "app/globals.css .apt-club and calendar.module.css .page"
+    },
+    {
+      "fact": "HeroRotatingStatement uses the existing 2-second timer with cleanup, approved three-word vocabulary, spring stiffness50/damping18 and reduced-motion static output. Damping18 is an APT adaptation.",
+      "source": "app/apt-app.tsx HeroRotatingStatement"
+    },
+    {
+      "fact": "Hero10 author source is AGPL-3.0 and used for visual composition only; Tommy Hero5 source is MIT and its full notice is preserved. Authenticated registry equality remains unverified.",
+      "source": "outputs/apt-club-redesign/21st/SOURCE-REVIEW.md; THIRD_PARTY_NOTICES.md"
+    },
+    {
+      "fact": "Typecheck/build27routes, product28checks and calendar1check pass. Browser1280/768/390 and independent reviews complete; hero and manifesto text/layout accepted, full-page/new effects await owner review. Local only.",
+      "source": "Root verification report, 2026-10-03"
     }
   ],
-  "generatedAt": "2026-10-03T04:30:00Z",
+  "generatedAt": "2026-10-03T17:07:32Z",
   "references": [
     {
       "url": "https://21st.dev/@cnippet-dev/components/v-table-12",
@@ -398,13 +488,15 @@
       "themeId": "e6b559a3-663b-470f-b3f5-46b533d86247",
       "name": "Amber Hearth",
       "url": "https://21st.dev/@serafimcloud/themes/amber-hearth",
-      "use": "Actual public theme tokens retrieved before coding; explicit user selection. Native semantic mapping, with accessible foreground/muted/focus exceptions."
+      "use": "Actual public theme tokens retrieved before coding; explicit user selection. Native semantic mapping, with accessible foreground/muted/focus exceptions.",
+      "scope": "Historical V2; retained for provenance. Public/player composition is superseded by current V3 where applicable; management preserved."
     },
     {
       "componentId": 19075,
       "name": "Editorial Hero",
       "url": "https://21st.dev/@felipemenezes098/components/hero-05",
-      "use": "MIT public preview inspected before landing changes; editorial text/photo hierarchy only, original APT markup and claims."
+      "use": "MIT public preview inspected before landing changes; editorial text/photo hierarchy only, original APT markup and claims.",
+      "scope": "Historical V2; retained for provenance. Public/player composition is superseded by current V3 where applicable; management preserved."
     },
     {
       "componentId": 2046,
@@ -465,12 +557,129 @@
       "url": "https://21st.dev/@solaceui/components/footer-section-5",
       "source": "https://www.solaceui.com/r/footer-section-5.json",
       "license": "no-license",
-      "use": "Explicit user reference; public author core148lines read. Latest human correction removes outline wordmark and large orange CTA. Original APT HTML/CSS: single restrained navy closing CTA with small official logo/high-contrast text, followed by light grouped real navigation. No copied shader/logo/code or new dependencies."
+      "use": "Explicit user reference; public author core148lines read. Latest human correction removes outline wordmark and large orange CTA. Original APT HTML/CSS: single restrained navy closing CTA with small official logo/high-contrast text, followed by light grouped real navigation. No copied shader/logo/code or new dependencies.",
+      "scope": "Historical V2; retained for provenance. Public/player composition is superseded by current V3 where applicable; management preserved."
     },
     {
       "name": "Parallax Scrolling",
       "url": "https://21st.dev/@osmosupply/components/parallax-scrolling",
-      "use": "Explicit user selection and pasted layers inspected. Original native-scroll adaptation with existing Framer useScroll/useTransform/useReducedMotion; no GSAP/Lenis or reference imagery copied. All planes static for reduced motion. Human-provided photograph adapted with lateral outpaint; local WebP1672×941 native/134740bytes, no upscaling or original demo assets."
+      "use": "Explicit user selection and pasted layers inspected. Original native-scroll adaptation with existing Framer useScroll/useTransform/useReducedMotion; no GSAP/Lenis or reference imagery copied. All planes static for reduced motion. Human-provided photograph adapted with lateral outpaint; local WebP1672×941 native/134740bytes, no upscaling or original demo assets.",
+      "scope": "Historical V2; retained for provenance. Public/player composition is superseded by current V3 where applicable; management preserved."
+    },
+    {
+      "name": "16th Hole / Website For Private Golf Club",
+      "author": "Conceptzilla",
+      "url": "https://dribbble.com/shots/27168502-Website-For-Private-Golf-Club",
+      "scope": "current human-selected public/player direction",
+      "use": "Hero/nav/type/photo rhythm and belonging; APT text, official brand variants and real journeys. No golf offer or claim transferred.",
+      "coverage": "Hero, three gallery prints and mockup; local ref-05 assets"
+    },
+    {
+      "name": "Hero 10",
+      "author": "Felipe Menezes",
+      "url": "https://github.com/felipemenezes098/ui-flx/blob/8bc30df9a0cbd0967f6256001fe559f4c1b1cf87/registry/blocks/hero/hero-10/hero-10.tsx",
+      "sourceCommit": "8bc30df9a0cbd0967f6256001fe559f4c1b1cf87",
+      "license": "AGPL-3.0 in public author repository; authenticated 21st item license/version unverified",
+      "use": "Visual three-photo fan composition only; original APT markup/CSS, no AGPL source/CTA/dependencies incorporated.",
+      "installation": "Requested exact npx returned AuthRequired; no registry files or dependencies installed."
+    },
+    {
+      "name": "Animated Hero / Hero5",
+      "author": "Tommy Jepsen",
+      "url": "https://21st.dev/community/components/tommyjepsen/animated-hero",
+      "source": "https://github.com/tommyjepsen/twblocks/blob/ff88cb951dab0dc01198b6570ec5f5cf21250d45/blocks/hero/hero5.tsx",
+      "sourceCommit": "ff88cb951dab0dc01198b6570ec5f5cf21250d45",
+      "license": "MIT; copyright2024 Tommy Jepsen; full notice in THIRD_PARTY_NOTICES.md",
+      "use": "Whole-word vertical spring adapted in existing HeroRotatingStatement; stiffness50/damping18, two seconds, existing vocabulary/cleanup/reduced motion. Damping18 is an APT choice.",
+      "installation": "Requested exact npx returned AuthRequired; public author source recovered, registry equality unverified."
     }
-  ]
+  ],
+  "reviewCycle": {
+    "scope": "public/player",
+    "revision": "V3",
+    "status": "published-club-redesign; current-motion-copy-refinement-in-review",
+    "humanAcceptance": false,
+    "releaseStatus": "Initial redesign and first responsive-motion release READY on www.apttennis.com.br; final owner corrections/copy in progress",
+    "task": "APT-CLUB-002/003/004 VERIFY; 005/006 current folds published; 007/008/009 IN_PROGRESS",
+    "revisions": [
+      {
+        "revision": "V1",
+        "status": "human-rejected",
+        "quote": "nao gostei da hero e senti que ficou tudo mto quadrado e simples dms, longe das referencias"
+      },
+      {
+        "revision": "V2",
+        "status": "intermediate-local-hero-superseded-by-V3; management-system-V2-history-preserved"
+      },
+      {
+        "revision": "V3",
+        "status": "hero-human-approved; local-polish-verified; full-page-acceptance-pending"
+      }
+    ],
+    "installationAttempts": {
+      "requestedCommands": "Four exact user-supplied npx commands executed",
+      "result": "AuthRequired; user later supplied complete Glyph and Stack sources",
+      "installedFiles": false,
+      "installedDependencies": false,
+      "registryVersionVerified": false,
+      "localSourceAdaptations": [
+        "GlyphPortal MIT core with notice/fallback/focus/Portuguese",
+        "Stack visual behavior implemented with original APT markup/native CSS"
+      ]
+    },
+    "humanAcceptedScopes": [
+      "V3 hero composition",
+      "Manifesto central layout",
+      "New Stack/Glyph/FAQ effects, per owner feedback on 2026-10-03"
+    ],
+    "historicalTechnicalEvidenceV3": {
+      "reportedBy": "root",
+      "typecheck": "pass",
+      "webpackBuildRoutes": 27,
+      "productChecksPassed": 28,
+      "calendarChecksPassed": 1,
+      "browser": "1280/768/390: frames/mockup, stack closed/open/mobile, Glyph p0-p1 and native Enter to content/CTA, FAQ focus/toggle",
+      "independentReview": "Five management functions and :root unchanged; shared light logo variant repair later corrects slogan color",
+      "motionFallback": "SSR/CSS/simulated effects; OS preference not changed"
+    },
+    "currentFoldRevision": {
+      "status": "published; runtime/assets inspected; final owner review pending",
+      "productChecksPassed": 29,
+      "calendarChecksPassed": 1,
+      "scope": [
+        "Courts composition and clay Court 2",
+        "Season timeline",
+        "Member composition with owner-selected BW photograph and owner-supplied final Photoshop ball artwork",
+        "Light header logo slogan",
+        "Photographic floor mockup in six-photo stack"
+      ],
+      "ballMockup": "Owner-supplied final Photoshop artwork received and incorporated as public/apt-assets/apt-balls-photoshop.webp; generated stamp studies remain superseded and are not incorporated",
+      "ballArtwork": {
+        "status": "owner_supplied_final_artwork",
+        "source": "/Users/gabrielguedes/Documents/bola apt.png",
+        "preservedOriginal": "outputs/apt-club-redesign/mockups/apt-balls-photoshop-owner.png",
+        "sourceDimensions": "938x1679",
+        "sourceSha256": "d8b5b0a95934e199ff6ce12d3f827b3b1f93d903453b13920389369f1f6c8c69",
+        "preservedByteForByte": true,
+        "webAsset": "public/apt-assets/apt-balls-photoshop.webp",
+        "encoding": "WebP quality 96; no resize, crop, recolor or artwork retouch"
+      },
+      "releaseStatus": "READY published in initial release; source now includes additional owner-requested copy/motion refinement"
+    },
+    "copyRevision": {
+      "status": "implemented; independent editorial review complete; browser/build pending",
+      "reason": "Owner rejected shallow slogans for affluent APT audience; current request supersedes prior frozen copy",
+      "hero": "Um clube de tênis. Por indicação. Para jogar com critério./constância./respeito.",
+      "scope": "Landing and public metadata, factual category/admission/ranking/cycles; no income eligibility or invented offer",
+      "preservedStackText": "Beyond the Court. / Gente com quem jogar. Uma temporada para compartilhar.",
+      "humanAcceptance": false
+    },
+    "motionRevision": {
+      "status": "implemented; final build/browser pending",
+      "courts": "Visible-only six-second automatic highlighting plus manual selection; reduced-motion static",
+      "stack": "Native scroll, central pile, corners, no white frame, shorter stage below64rem, local pointer drift after spreading",
+      "productChecksPassed": 31,
+      "scope": "Public landing; no API/schema/dependency changes"
+    }
+  }
 }

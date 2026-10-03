@@ -600,7 +600,7 @@
     "status": "published-refinement; technical verification complete; full-page human acceptance pending",
     "humanAcceptance": false,
     "releaseStatus": "READY www.apttennis.com.br; dpl_3LSiiXESwQvJfw9BLLoV5kwaBNmQ; source5c95d19252f51936f16b4c547bb41422566e5743",
-    "task": "APT-CLUB-002/003/004/005/006 VERIFY human visual review; 007/008 implemented and published; 009 final Lighthouse comparison in progress",
+    "task": "APT-CLUB-002/003/004/005/006 VERIFY human visual review; 007/008/009 DONE technical implementation/publication",
     "revisions": [
       {
         "revision": "V1",
@@ -702,7 +702,33 @@
           100
         ]
       },
-      "imageOptimization": "next/image on5auditedassets+landingcontexts; eager3hero highonlycentre; lazyothers; staticfallbacksizes; PS/BW originalnative"
+      "imageOptimization": "next/image on5auditedassets+landingcontexts; eager3hero highonlycentre; lazyothers; staticfallbacksizes; PS/BW originalnative",
+      "lighthouseFinal": {
+        "mobile": [
+          97,
+          100,
+          100,
+          100
+        ],
+        "desktop": [
+          100,
+          100,
+          100,
+          100
+        ],
+        "mobileImageTransferBytesBefore": 555865,
+        "mobileImageTransferBytesAfter": 140503,
+        "desktopImageTransferBytesBefore": 555641,
+        "desktopImageTransferBytesAfter": 171256,
+        "imageTransferDefinition": "network-requests resourceType Image",
+        "imageSizeAudit": "score1, no oversized images on both profiles",
+        "desktopLcpMsBefore": 706.7,
+        "desktopLcpMsAfter": 566,
+        "mobileLcpMsBefore": 2332.1,
+        "mobileLcpMsAfter": 2480.8,
+        "limitation": "one lab run per device/release; do not claim causal mobile speed gain or field data",
+        "reportDirectory": "outputs/apt-club-redesign/lighthouse/Optimized-20261003-203617"
+      }
     }
   }
 }

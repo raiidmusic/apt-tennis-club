@@ -30,6 +30,7 @@ type LocalSubscription = {
   amount_cents: number;
   next_due_date: string | null;
   current_period_end: string | null;
+  overdue_since: string | null;
 };
 type LocalMember = {
   id: string;
@@ -52,6 +53,15 @@ function normalizedName(value = "") {
 
 function normalizedEmail(value = "") {
   return value.trim().toLowerCase();
+}
+
+function samePaidAt(stored: string | null, incoming: string | null) {
+  if (stored === incoming) return true;
+  if (!stored || !incoming || !/^\d{4}-\d{2}-\d{2}$/.test(incoming)) return false;
+  // Asaas sends a date, and PostgREST returns a timestamp. Preserve nonzero fractional seconds.
+  const midnight = Date.parse(incoming);
+  return !/\.\d*[1-9]/.test(stored) && Date.parse(stored) === midnight &&
+    new Date(midnight).toISOString().slice(0, 10) === incoming;
 }
 
 // Payment IDs have a database unique constraint; never merge an ownership field.
@@ -84,7 +94,7 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
       query: { select: "id,name,email,cpf_last4,participation_status,joined_at", id: `eq.${memberId}`, limit: "1" },
     }).then((rows) => rows[0]),
     db<LocalSubscription[]>("subscriptions", {
-      query: { select: "id,asaas_customer_id,asaas_subscription_id,asaas_checkout_id,status,amount_cents,next_due_date,current_period_end", member_id: `eq.${memberId}`, limit: "1" },
+      query: { select: "id,asaas_customer_id,asaas_subscription_id,asaas_checkout_id,status,amount_cents,next_due_date,current_period_end,overdue_since", member_id: `eq.${memberId}`, limit: "1" },
     }).then((rows) => rows[0]),
     db<LocalPaymentReference[]>("payments", {
       query: { select: "asaas_payment_id,status,value_cents,due_date,paid_at,invoice_url", member_id: `eq.${memberId}`, order: "created_at.desc", limit: "500" },
@@ -173,11 +183,11 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
     else throw new SupabaseRequestError("O Asaas não respondeu à assinatura da cobrança.", 502);
   }
 
-  if (providerSubscription) await assertBillingOwnership(memberId, { externalReference: providerSubscription.externalReference, customer: providerSubscription.customer, subscription: providerSubscription.id }, hints.signal);
-  if (localSubscription.asaas_customer_id && providerSubscription?.customer && localSubscription.asaas_customer_id !== providerSubscription.customer) throw new SupabaseRequestError("A assinatura aponta para outro cliente financeiro.", 409);
   const snapshots = [...new Map(payments.filter((payment): payment is AsaasPaymentSnapshot & { id: string } => Boolean(payment.id)).map((payment) => [payment.id, payment])).values()];
   // Validate every payment before any write, so a conflicting collection is not partially imported.
-  await assertBillingOwnership(memberId, snapshots, hints.signal);
+  const subscriptionLink = providerSubscription ? [{ externalReference: providerSubscription.externalReference, customer: providerSubscription.customer, subscription: providerSubscription.id }] : [];
+  await assertBillingOwnership(memberId, [...subscriptionLink, ...snapshots], hints.signal);
+  if (localSubscription.asaas_customer_id && providerSubscription?.customer && localSubscription.asaas_customer_id !== providerSubscription.customer) throw new SupabaseRequestError("A assinatura aponta para outro cliente financeiro.", 409);
   for (const payment of snapshots) {
     const customerId = providerSubscription?.customer || recoveredCustomerId || localSubscription.asaas_customer_id;
     if (customerId && payment.customer && customerId !== payment.customer) throw new SupabaseRequestError("A cobrança aponta para outro cliente financeiro.", 409);
@@ -194,7 +204,7 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
       invoice_url: payment.invoiceUrl || null, payload: payment, updated_at: new Date().toISOString(),
     };
     const previous = previousPayments.get(payment.id);
-    if (previous && previous.status === body.status && previous.value_cents === body.value_cents && previous.due_date === body.due_date && previous.paid_at === body.paid_at && previous.invoice_url === body.invoice_url) return;
+    if (previous && previous.status === body.status && previous.value_cents === body.value_cents && previous.due_date === body.due_date && samePaidAt(previous.paid_at, body.paid_at) && previous.invoice_url === body.invoice_url) return;
     await db("payments", { method: "POST", query: { on_conflict: "asaas_payment_id" }, prefer: "resolution=ignore-duplicates,return=minimal", body: { ...body, member_id: memberId, subscription_id: localSubscription.id, asaas_payment_id: payment.id } });
     await assertBillingOwnership(memberId, { id: payment.id }, hints.signal);
     await db("payments", { method: "PATCH", query: { asaas_payment_id: `eq.${payment.id}`, member_id: `eq.${memberId}` }, body });
@@ -202,19 +212,23 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
   const recurring = Boolean(providerSubscription?.id || localSubscription.asaas_subscription_id || latest?.subscription);
   const decision = billingDecision({ payments: snapshots, memberStatus: member.participation_status, subscriptionStatus: localSubscription.status, recurring, providerStatus: providerSubscription?.status || (providerSubscriptionMissing ? "DELETED" : undefined), today: saoPauloDate() });
   const now = new Date().toISOString();
+  const projection = {
+    asaas_subscription_id: providerSubscription?.id || localSubscription.asaas_subscription_id,
+    asaas_customer_id: customerId,
+    status: decision.subscriptionStatus,
+    amount_cents: providerSubscription?.value ? Math.round(providerSubscription.value * 100) : latest?.value ? Math.round(latest.value * 100) : localSubscription.amount_cents,
+    next_due_date: providerSubscription?.nextDueDate || decision.paidThrough || localSubscription.next_due_date,
+    current_period_end: decision.paidThrough,
+    overdue_since: decision.overdueSince,
+  };
+  const subscriptionChanged = (Object.keys(projection) as Array<keyof typeof projection>).some((key) => projection[key] !== localSubscription[key]);
   await Promise.all([
-    db("subscriptions", {
-      method: "PATCH", query: { id: `eq.${localSubscription.id}`, status: `eq.${localSubscription.status}`, asaas_customer_id: customerId ? `eq.${customerId}` : "is.null" },
-      body: {
-        asaas_subscription_id: providerSubscription?.id || localSubscription.asaas_subscription_id,
-        asaas_customer_id: customerId,
-        status: decision.subscriptionStatus,
-        amount_cents: providerSubscription?.value ? Math.round(providerSubscription.value * 100) : latest?.value ? Math.round(latest.value * 100) : localSubscription.amount_cents,
-        next_due_date: providerSubscription?.nextDueDate || decision.paidThrough || localSubscription.next_due_date,
-        current_period_end: decision.paidThrough,
-        overdue_since: decision.overdueSince, updated_at: now,
-      },
-    }),
+    subscriptionChanged
+      ? db("subscriptions", {
+        method: "PATCH", query: { id: `eq.${localSubscription.id}`, status: `eq.${localSubscription.status}`, asaas_customer_id: customerId ? `eq.${customerId}` : "is.null" },
+        body: { ...projection, updated_at: now },
+      })
+      : Promise.resolve(),
     decision.memberStatus !== member.participation_status
       ? db("members", { method: "PATCH", query: { id: `eq.${memberId}`, participation_status: `eq.${member.participation_status}` }, body: { participation_status: decision.memberStatus, joined_at: decision.covered ? member.joined_at || now : member.joined_at, updated_at: now } })
       : Promise.resolve(),

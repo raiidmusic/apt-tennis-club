@@ -5,10 +5,13 @@ import { supabaseAdmin } from "./supabase-server";
 
 type Candidate = { id: string; billing_last_attempt_at: string | null };
 type Subscription = { member_id: string; status: string; asaas_customer_id: string | null; asaas_subscription_id: string | null; asaas_checkout_id: string | null };
+const recoverableMemberStatuses = "in.(pending_payment,awaiting_payment,active,delinquent)";
 
 export async function recoverMemberBilling(signal: AbortSignal, limit = 40) {
+  // An attempt remains ineligible until the 60-second route budget has elapsed.
+  const claimCutoff = new Date(Date.now() - 60_000).toISOString();
   const candidates = await supabaseAdmin<Candidate[]>("members", {
-    query: { select: "id,billing_last_attempt_at", participation_status: "in.(pending_payment,awaiting_payment,active,delinquent)", order: "billing_last_attempt_at.asc.nullsfirst,id.asc", limit: String(limit) }, signal,
+    query: { select: "id,billing_last_attempt_at", participation_status: recoverableMemberStatuses, or: `(billing_last_attempt_at.is.null,billing_last_attempt_at.lt.${claimCutoff})`, order: "billing_last_attempt_at.asc.nullsfirst,id.asc", limit: String(limit) }, signal,
   });
   const subscriptions = candidates.length ? await supabaseAdmin<Subscription[]>("subscriptions", {
     query: { select: "member_id,status,asaas_customer_id,asaas_subscription_id,asaas_checkout_id", member_id: `in.(${candidates.map((member) => member.id).join(",")})`, limit: String(limit) }, signal,
@@ -19,23 +22,30 @@ export async function recoverMemberBilling(signal: AbortSignal, limit = 40) {
     await Promise.all(candidates.slice(index, index + 4).map(async (member) => {
       const subscription = subscriptionByMember.get(member.id);
       const attempt = new Date().toISOString();
+      const claimedMember = { id: `eq.${member.id}`, billing_last_attempt_at: `eq.${attempt}` };
+      let claimed = false;
       let issue: string | null = !subscription ? "missing_subscription"
         : !subscription.asaas_customer_id && !subscription.asaas_subscription_id && !subscription.asaas_checkout_id ? "missing_provider" : null;
       try {
-        // Stamp every attempt before provider work, including failures and missing configuration, to rotate fairly.
-        await supabaseAdmin("members", { method: "PATCH", query: { id: `eq.${member.id}` }, body: { billing_last_attempt_at: attempt, billing_reconciliation_issue: issue }, signal });
+        const claim = await supabaseAdmin<Array<{ id: string }>>("members", {
+          method: "PATCH", prefer: "return=representation",
+          query: { id: claimedMember.id, participation_status: recoverableMemberStatuses, billing_last_attempt_at: member.billing_last_attempt_at ? `eq.${member.billing_last_attempt_at}` : "is.null", select: "id" },
+          body: { billing_last_attempt_at: attempt, billing_reconciliation_issue: issue }, signal,
+        });
+        if (!claim.length) return;
+        claimed = true;
         checked++;
         if (issue) { exceptions++; return; }
         const result = await reconcileMemberBilling(member.id, { signal });
         await ensureCheckoutPaymentReminders(member.id, signal);
         issue = result.found ? null : "provider_unresolved";
-        await supabaseAdmin("members", { method: "PATCH", query: { id: `eq.${member.id}` }, body: { ...(result.found ? { billing_last_success_at: new Date().toISOString() } : {}), billing_reconciliation_issue: issue }, signal });
+        await supabaseAdmin("members", { method: "PATCH", query: claimedMember, body: { ...(result.found ? { billing_last_success_at: new Date().toISOString() } : {}), billing_reconciliation_issue: issue }, signal });
         if (result.found) reconciled++;
         if (issue) exceptions++;
       } catch {
         failed++;
-        // A fresh bounded signal records only failure evidence after the financial work has been aborted.
-        await supabaseAdmin("members", { method: "PATCH", query: { id: `eq.${member.id}` }, body: { billing_last_attempt_at: attempt, billing_reconciliation_issue: "reconciliation_failed" }, signal: AbortSignal.timeout(2_000) }).catch(() => undefined);
+        // A fresh bounded signal records failure only for a confirmed claim.
+        if (claimed) await supabaseAdmin("members", { method: "PATCH", query: claimedMember, body: { billing_reconciliation_issue: "reconciliation_failed" }, signal: AbortSignal.timeout(2_000) }).catch(() => undefined);
       }
     }));
   }

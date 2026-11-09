@@ -17,6 +17,7 @@ registerHooks({
 const { processAsaasEvent, processPendingAsaasEvents } = await import('../lib/asaas-events.ts');
 const { recoverMemberBilling, billingOperationsSummary, runBillingRecovery } = await import('../lib/billing-recovery.ts');
 const { reconcileMemberBilling } = await import('../lib/billing-reconciliation.ts');
+const { monthlyAccessEnd, saoPauloDate } = await import('../lib/billing-state.ts');
 const { pixSearchPeriod } = await import('../lib/asaas.ts');
 const { POST: memberAction, GET: memberGet } = await import('../app/api/membros/route.ts');
 const { POST: registerMember } = await import('../app/api/cadastros/route.ts');
@@ -61,16 +62,28 @@ function mock(t, { events = [], members = [], subscriptions = [], payments = [],
         if (!existing) payments.push(body);
         else if (init.headers.Prefer.includes('merge-duplicates')) Object.assign(existing, body);
       }
-      if (table === 'members') Object.assign(members.find((m) => q.get('id') === `eq.${m.id}`) || {}, body);
+      if (table === 'members') {
+        const row = members.find((m) => q.get('id') === `eq.${m.id}`);
+        const previousAttempt = row?.billing_last_attempt_at ? `eq.${row.billing_last_attempt_at}` : 'is.null';
+        if (!row || (q.has('billing_last_attempt_at') && q.get('billing_last_attempt_at') !== previousAttempt) ||
+          (q.has('participation_status') && !matchesFilter(q.get('participation_status'), row.participation_status))) return Response.json([]);
+        Object.assign(row, body);
+        if (init.headers.Prefer === 'return=representation') return Response.json([{ id: row.id }]);
+      }
       return Response.json([]);
     }
     if (table === 'webhook_events') return Response.json(events.filter((e) => q.has('id') ? q.get('id') === `eq.${e.id}` : !e.processed_at && e.attempt_count < 10 && e.next_attempt_at <= new Date().toISOString()).sort((a, b) => (a.last_attempt_at || '').localeCompare(b.last_attempt_at || '')).slice(0, Number(q.get('limit') || 100)));
     if (table === 'members') {
       if (q.has('id')) return Response.json(members.filter((m) => q.get('id') === `eq.${m.id}`));
       if (q.has('billing_reconciliation_issue')) return Response.json(members.filter((m) => m.billing_reconciliation_issue));
-      return Response.json([...members].sort((a, b) => (a.billing_last_attempt_at || '').localeCompare(b.billing_last_attempt_at || '') || a.id.localeCompare(b.id)).slice(0, Number(q.get('limit') || 100)));
+      const cutoff = q.get('or')?.match(/^\(billing_last_attempt_at\.is\.null,billing_last_attempt_at\.lt\.(.+)\)$/)?.[1];
+      const candidates = members.filter((m) =>
+        matchesFilter(q.get('participation_status'), m.participation_status) &&
+        (!cutoff || !m.billing_last_attempt_at || m.billing_last_attempt_at < cutoff));
+      return Response.json(candidates.sort((a, b) => (a.billing_last_attempt_at || '').localeCompare(b.billing_last_attempt_at || '') || a.id.localeCompare(b.id)).slice(0, Number(q.get('limit') || 100)));
     }
-    if (table === 'subscriptions') return Response.json(q.has('member_id') ? subscriptions.filter((s) => q.get('member_id').startsWith('in.') ? q.get('member_id').includes(s.member_id) : q.get('member_id') === `eq.${s.member_id}`) : q.has('asaas_subscription_id') ? subscriptions.filter((s) => q.get('asaas_subscription_id') === `eq.${s.asaas_subscription_id}`) : q.has('asaas_customer_id') ? subscriptions.filter((s) => q.get('asaas_customer_id') === `eq.${s.asaas_customer_id}`) : subscriptions);
+    if (table === 'subscriptions') return Response.json(subscriptions.filter((s) =>
+      ['member_id', 'asaas_subscription_id', 'asaas_customer_id', 'asaas_checkout_id'].every((key) => matchesFilter(q.get(key), s[key]))));
     if (table === 'audit_logs') return Response.json(auditRuns);
     if (table === 'invites') return Response.json(invites);
     if (table === 'payments') return Response.json(payments.filter((p) => [...q].every(([key, filter]) => !['member_id', 'asaas_payment_id'].includes(key) || filter === `eq.${p[key]}` || (filter.startsWith('in.') && filter.includes(p[key])))));
@@ -79,6 +92,9 @@ function mock(t, { events = [], members = [], subscriptions = [], payments = [],
   };
   t.after(() => { globalThis.fetch = previousFetch; process.env = previousEnv; });
   return { writes, requests };
+}
+function matchesFilter(filter, value) {
+  return filter === null || filter === `eq.${value}` || (filter.startsWith('in.(') && filter.slice(4, -1).split(',').includes(value));
 }
 const event = (id, payload) => ({ id, processed_at: null, attempt_count: 0, next_attempt_at: '2026-01-01T00:00:00.000Z', last_attempt_at: null, payload: { id, ...payload } });
 
@@ -119,13 +135,108 @@ test('subscription-only event resolves its provider ID and uses canonical reconc
 });
 
 test('missing subscription/provider attempts rotate across all members without creating customers or charges', async (t) => {
-  const members = Array.from({ length: 46 }, (_, i) => ({ id: `member_${String(i).padStart(2, '0')}`, billing_last_attempt_at: null, subscriptions: i % 2 ? [{ status: 'pending_configuration', asaas_customer_id: null, asaas_checkout_id: null, asaas_subscription_id: null }] : [] }));
+  const members = Array.from({ length: 46 }, (_, i) => ({ id: `member_${String(i).padStart(2, '0')}`, participation_status: 'awaiting_payment', billing_last_attempt_at: null, subscriptions: i % 2 ? [{ status: 'pending_configuration', asaas_customer_id: null, asaas_checkout_id: null, asaas_subscription_id: null }] : [] }));
   const http = mock(t, { members, subscriptions: members.flatMap((m) => m.subscriptions.map((s) => ({ ...s, member_id: m.id }))) });
   assert.equal((await recoverMemberBilling(AbortSignal.timeout(1000))).exceptions, 40);
   await recoverMemberBilling(AbortSignal.timeout(1000));
   assert.equal(members.filter((m) => m.billing_last_attempt_at).length, 46);
   assert.ok(members.every((m) => ['missing_subscription', 'missing_provider'].includes(m.billing_reconciliation_issue)));
   assert.ok(http.writes.every((w) => w.table === 'members'));
+});
+
+test('overlapping recovery runs work a member once before and after the timestamp claim', async (t) => {
+  const member = { id: memberId, participation_status: 'active', billing_last_attempt_at: null };
+  const subscription = { id: 'local_sub', member_id: memberId, asaas_subscription_id: 'sub_1', asaas_customer_id: 'cus_1', status: 'active' };
+  const firstProviderRead = Promise.withResolvers();
+  const releaseProvider = Promise.withResolvers();
+  let providerReads = 0;
+  const http = mock(t, { members: [member], subscriptions: [subscription], provider: async (url) => {
+    if (++providerReads === 1) {
+      firstProviderRead.resolve();
+      await releaseProvider.promise;
+    }
+    return url.pathname.endsWith('/sub_1') ? Response.json({ id: 'sub_1', customer: 'cus_1' }) : Response.json({ data: [], hasMore: false });
+  } });
+  const firstTwo = [recoverMemberBilling(AbortSignal.timeout(1000)), recoverMemberBilling(AbortSignal.timeout(1000))];
+  await firstProviderRead.promise;
+  const late = await recoverMemberBilling(AbortSignal.timeout(1000));
+  releaseProvider.resolve();
+  const overlapping = await Promise.all(firstTwo);
+  assert.deepEqual(overlapping.map((run) => run.checked).sort(), [0, 1]);
+  assert.equal(late.checked, 0);
+  assert.equal(http.requests.filter((r) => r.url.hostname === 'provider.invalid').length, 2);
+});
+
+test('member leaving the eligible states before claim is skipped', async (t) => {
+  const member = { id: memberId, participation_status: 'active', billing_last_attempt_at: null };
+  const subscription = { id: 'local_sub', member_id: memberId, asaas_subscription_id: 'sub_1', asaas_customer_id: 'cus_1', status: 'active' };
+  const http = mock(t, { members: [member], subscriptions: [subscription], provider: () => Response.json({ data: [], hasMore: false }) });
+  const fetchMock = globalThis.fetch;
+  globalThis.fetch = async (value, init) => {
+    const response = await fetchMock(value, init);
+    if (new URL(value).searchParams.get('member_id') === `in.(${memberId})`) member.participation_status = 'courtesy';
+    return response;
+  };
+  assert.equal((await recoverMemberBilling(AbortSignal.timeout(1000))).checked, 0);
+  assert.equal(member.billing_last_attempt_at, null);
+  assert.ok(!http.requests.some((r) => r.url.hostname === 'provider.invalid'));
+});
+
+test('unchanged billing projections avoid redundant requests and still recover notification rows', async (t) => {
+  const today = saoPauloDate();
+  const end = monthlyAccessEnd(today);
+  const member = { id: memberId, name: 'Atleta', email: 'athlete@example.invalid', participation_status: 'active' };
+  const subscription = { id: 'local_sub', member_id: memberId, asaas_subscription_id: 'sub_1', asaas_customer_id: 'cus_1', status: 'active', amount_cents: 2000, next_due_date: end, current_period_end: end, overdue_since: null };
+  const payment = { id: 'pay_1', customer: 'cus_1', subscription: 'sub_1', status: 'RECEIVED', dueDate: today, paymentDate: today, value: 20 };
+  const storedPayment = { member_id: memberId, asaas_payment_id: 'pay_1', status: 'RECEIVED', due_date: today, paid_at: `${today}T00:00:00+00:00`, value_cents: 2000, invoice_url: null };
+  const http = mock(t, {
+    members: [member], subscriptions: [subscription],
+    payments: [storedPayment],
+    provider: (url) => url.pathname.endsWith('/sub_1')
+      ? Response.json({ id: 'sub_1', customer: 'cus_1', status: 'ACTIVE', value: 20, nextDueDate: end })
+      : Response.json({ data: [payment], hasMore: false }),
+  });
+  delete process.env.APT_APPLICATION_TO_EMAIL;
+  delete process.env.APT_ADMIN_EMAILS;
+  assert.equal((await reconcileMemberBilling(memberId)).active, true);
+  const ownershipReads = http.requests.filter((r) => r.url.pathname.endsWith('/subscriptions') && r.init.method === 'GET' &&
+    (r.url.searchParams.has('asaas_customer_id') || r.url.searchParams.has('asaas_subscription_id')));
+  const projectionWrites = http.writes.filter((w) => w.table === 'subscriptions' && Object.hasOwn(w.body, 'overdue_since'));
+  const paymentWrites = () => http.writes.filter((w) => w.table === 'payments');
+  t.diagnostic(`ownership GETs: ${ownershipReads.length}; projection PATCHes: ${projectionWrites.length}; payment writes: ${paymentWrites().length}; total requests: ${http.requests.length}`);
+  assert.equal(paymentWrites().length, 0);
+  assert.equal(ownershipReads.length, 4);
+  assert.equal(projectionWrites.length, 0);
+  assert.ok(http.writes.some((w) => w.table === 'billing_email_deliveries' && w.body.kind === 'confirmed'));
+
+  subscription.overdue_since = today;
+  await reconcileMemberBilling(memberId);
+  assert.equal(subscription.overdue_since, null);
+  assert.ok(http.writes.some((w) => w.table === 'subscriptions' && Object.hasOwn(w.body, 'overdue_since')));
+
+  // The same calendar date at a different instant is a real change.
+  storedPayment.paid_at = `${today}T12:00:00+00:00`;
+  await reconcileMemberBilling(memberId);
+  assert.equal(paymentWrites().length, 2);
+  assert.equal(paymentWrites().at(-1).body.paid_at, today);
+
+  storedPayment.paid_at = `${today}T00:00:00.000001+00:00`;
+  await reconcileMemberBilling(memberId);
+  assert.equal(paymentWrites().length, 4);
+
+  storedPayment.paid_at = null;
+  await reconcileMemberBilling(memberId);
+  assert.equal(paymentWrites().length, 6);
+  assert.equal(paymentWrites().at(-1).body.paid_at, today);
+
+  delete payment.paymentDate;
+  await reconcileMemberBilling(memberId);
+  assert.equal(paymentWrites().length, 6);
+
+  storedPayment.paid_at = `${today}T00:00:00+00:00`;
+  await reconcileMemberBilling(memberId);
+  assert.equal(paymentWrites().length, 8);
+  assert.equal(paymentWrites().at(-1).body.paid_at, null);
 });
 
 test('an expired recovery budget aborts provider work and records a safe failure without financial writes', async (t) => {
@@ -195,7 +306,7 @@ test('recovery migration enforces non-null customer uniqueness and keeps server-
 
 test('existing cron runs stored event recovery even without incoming webhooks and persists its aggregate result', async (t) => {
   const stored = event('quiet_provider_event', { event: 'PAYMENT_CREATED' });
-  const http = mock(t, { events: [stored], members: [{ id: memberId }] });
+  const http = mock(t, { events: [stored], members: [{ id: memberId, participation_status: 'awaiting_payment' }] });
   process.env.CRON_SECRET = 'test-secret';
   assert.equal((await recoveryGet(new Request('https://apt.invalid/api/cron/billing-reconciliation'))).status, 401);
   assert.equal(http.requests.length, 0);

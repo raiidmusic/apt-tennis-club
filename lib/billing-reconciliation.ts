@@ -233,6 +233,11 @@ export async function reconcileMemberBilling(memberId: string, hints: { checkout
       ? db("members", { method: "PATCH", query: { id: `eq.${memberId}`, participation_status: `eq.${member.participation_status}` }, body: { participation_status: decision.memberStatus, joined_at: decision.covered ? member.joined_at || now : member.joined_at, updated_at: now } })
       : Promise.resolve(),
   ]);
-  if (decision.notice) await sendBillingTransitionEmails({ ...decision.notice, member }, hints.signal);
+  if (decision.notice) {
+    const pixPaidThrough = customerId && snapshots.some((payment) =>
+      payment.id === decision.notice!.paymentId && payment.billingType === "PIX" && !payment.subscription,
+    ) ? decision.paidThrough : null;
+    await sendBillingTransitionEmails({ ...decision.notice, member, pixPaidThrough }, hints.signal);
+  }
   return { found: Boolean(providerSubscription || snapshots.length), paymentCount: snapshots.length, active: decision.memberStatus === "active" };
 }

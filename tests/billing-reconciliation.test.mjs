@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { asaasPaymentState, isDateBefore, monthlyAccessEnd } from "../lib/billing-state.ts";
+import { asaasPaymentState, isDateBefore, monthlyAccessEnd, saoPauloDate } from "../lib/billing-state.ts";
 
 test("classifies the Asaas payment states that change member access", () => {
   assert.deepEqual(asaasPaymentState("confirmed"), { normalized: "CONFIRMED", paid: true, failed: false });
@@ -18,7 +18,7 @@ test("grants one calendar month for an explicitly linked one-off payment", () =>
 
 const { billingDecision } = await import('../lib/billing-state.ts');
 const decide = (payments, overrides = {}) => billingDecision({ payments, memberStatus: 'active', subscriptionStatus: 'active', recurring: false, today: '2026-10-02', ...overrides });
-const receipt = { id: 'pay_old', status: 'RECEIVED', paymentDate: '2026-08-16', dueDate: '2026-08-16' };
+const receipt = { id: 'pay_old', status: 'RECEIVED', billingType: 'PIX', paymentDate: '2026-08-16', dueDate: '2026-08-16' };
 
 test('expired monthly Pix requires attention and never queues its old confirmation', () => {
   const result = decide([receipt]);
@@ -76,7 +76,7 @@ registerHooks({
     return nextLoad(url, context);
   },
 });
-const { retryBillingEmailDeliveries } = await import('../lib/apt-email.ts');
+const { retryBillingEmailDeliveries, sendBillingTransitionEmails } = await import('../lib/apt-email.ts');
 const { assertBillingOwnership, reconcileMemberBilling } = await import('../lib/billing-reconciliation.ts');
 
 function mockBillingHttp(t, options = {}) {
@@ -174,6 +174,44 @@ test('late card receipt applies to its due month despite a newer scheduled invoi
 });
 
 const queuedAttention = { id: 'delivery_1', dedupe_key: 'test', member_id: 'member_1', payment_id: 'pay_old', kind: 'attention', recipient_email: 'member@example.com', subject: 'Pending', body_text: 'Pending', flow: 'test', status: 'failed', attempt_count: 1, provider_status: 'PIX_MONTHLY_DUE' };
+
+test('Pix cadence recognizes legacy first notices and queues one follow-up after seven days', async (t) => {
+  const input = {
+    kind: 'attention', paymentId: 'pay_old', providerStatus: 'PIX_MONTHLY_DUE', pixPaidThrough: '2026-09-16',
+    member: { id: 'member_1', name: 'Atleta', email: 'member@example.com' },
+  };
+  for (const [sentAt, expected] of [[new Date().toISOString(), false], ['2026-10-01T12:00:00Z', true]]) {
+    await t.test(sentAt, async (inner) => {
+      const delivery = { ...queuedAttention, dedupe_key: 'apt-payment-attention-member-pay_old', status: 'sent', sent_at: sentAt };
+      const http = mockBillingHttp(inner, { delivery });
+      await sendBillingTransitionEmails(input);
+      const followUp = http.writes.find((w) => w.body.flow === 'pix_renewal_follow_up');
+      assert.equal(Boolean(followUp), expected);
+      assert.equal(http.writes.some((w) => w.body.dedupe_key === 'apt-payment-attention-member-pay_old'), false);
+      if (followUp) assert.equal(followUp.body.dedupe_key, 'apt-pix-renewal-follow-up-member_1-2026-09-16');
+    });
+  }
+});
+
+test('Pix first notice is not queued until three days after coverage ends', async (t) => {
+  const http = mockBillingHttp(t);
+  await sendBillingTransitionEmails({
+    kind: 'attention', paymentId: 'pay_old', providerStatus: 'PIX_MONTHLY_DUE', pixPaidThrough: saoPauloDate(),
+    member: { id: 'member_1', name: 'Atleta', email: 'member@example.com' },
+  });
+  assert.equal(http.writes.length, 0);
+});
+
+test('existing Pix follow-up stops a repeat recovery from queuing or sending again', async (t) => {
+  const delivery = { ...queuedAttention, dedupe_key: 'apt-pix-renewal-follow-up-member_1-2026-09-16', status: 'sent' };
+  const http = mockBillingHttp(t, { delivery });
+  await sendBillingTransitionEmails({
+    kind: 'attention', paymentId: 'pay_old', providerStatus: 'PIX_MONTHLY_DUE', pixPaidThrough: '2026-09-16',
+    member: { id: 'member_1', name: 'Atleta', email: 'member@example.com' },
+  });
+  assert.equal(http.writes.length, 0);
+  assert.equal(http.sends, 0);
+});
 
 test('a new provider Pix receipt suppresses an old notice while local state still says past_due', async (t) => {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());

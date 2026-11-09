@@ -6,8 +6,12 @@ export function isProtectedMembership(status: string) {
   return protectedStates.has(status);
 }
 
-export function saoPauloDate() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+export function saoPauloDate(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+export function billingDatePlusDays(date: string, days: number) {
+  return new Date(Date.parse(date + "T00:00:00Z") + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 export type BillingPayment = {

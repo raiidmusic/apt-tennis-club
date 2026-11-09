@@ -1,6 +1,6 @@
 import { runtimeEnv, supabaseAdmin } from "./supabase-server";
 import { asaasPaymentHistory, asaasRequest, type AsaasPaymentSnapshot } from "./asaas";
-import { billingDecision, isProtectedMembership, saoPauloDate } from "./billing-state";
+import { billingDatePlusDays, billingDecision, isProtectedMembership, saoPauloDate } from "./billing-state";
 
 export type EmailDeliveryStatus = "sent" | "failed" | "not_configured";
 
@@ -158,12 +158,15 @@ export function sendMemberEmail(input: Omit<EmailInput, "to"> & { to: string }):
   return sendAptEmail(input);
 }
 
-export function sendBillingTransitionEmails(input: {
+type BillingTransition = {
   kind: "confirmed" | "attention";
   member: { id: string; name: string; email: string };
   paymentId: string;
   providerStatus: string;
-}, signal?: AbortSignal) {
+  pixPaidThrough?: string | null;
+};
+
+export function sendBillingTransitionEmails(input: BillingTransition, signal?: AbortSignal) {
   return queueAndProcessBillingEmails(input, signal);
 }
 
@@ -231,6 +234,10 @@ async function billingEmailSuppressionReason(delivery: BillingEmailDelivery, sig
     let currentPayments: AsaasPaymentSnapshot[] = payments.map((payment) => ({ id: payment.asaas_payment_id, status: payment.status, dueDate: payment.due_date || undefined, paymentDate: payment.paid_at || undefined, dateCreated: payment.created_at }));
     let providerStatus: string | undefined;
     if (delivery.kind === "attention") {
+      const pixReminder = delivery.provider_status === "PIX_MONTHLY_DUE";
+      if (pixReminder && (!subscription.asaas_customer_id || subscription.asaas_subscription_id)) {
+        return "Pix mensal não confirmado antes do lembrete.";
+      }
       const path = subscription.asaas_subscription_id
         ? `/subscriptions/${encodeURIComponent(subscription.asaas_subscription_id)}/payments`
         : `/payments?${new URLSearchParams(subscription.asaas_customer_id ? { customer: subscription.asaas_customer_id } : { externalReference: delivery.member_id })}`;
@@ -242,7 +249,13 @@ async function billingEmailSuppressionReason(delivery: BillingEmailDelivery, sig
         if (["CANCELLED", "CANCELED", "INACTIVE", "DELETED"].includes((providerStatus || "").toUpperCase())) return "Renovação encerrada no Asaas antes do aviso.";
       }
       currentPayments = await asaasPaymentHistory(path, signal);
-      if (currentPayments.some((payment) => payment.externalReference && payment.externalReference !== delivery.member_id)) throw new Error("Histórico financeiro pertence a outro cadastro.");
+      if (currentPayments.some((payment) =>
+        (payment.externalReference && payment.externalReference !== delivery.member_id)
+        || (subscription.asaas_customer_id && payment.customer && payment.customer !== subscription.asaas_customer_id),
+      )) throw new Error("Histórico financeiro pertence a outro cadastro.");
+      if (pixReminder && !currentPayments.some((payment) =>
+        payment.id === delivery.payment_id && payment.billingType === "PIX" && !payment.subscription,
+      )) return "Pix mensal não confirmado antes do lembrete.";
     } else if (payments.length === 500) {
       throw new Error("Histórico local incompleto antes da confirmação.");
     }
@@ -423,36 +436,46 @@ export async function sendManualCheckoutReminder(memberId: string) {
   return { status: delivery?.status || "failed" };
 }
 
-async function queueAndProcessBillingEmails(input: {
-  kind: "confirmed" | "attention";
-  member: { id: string; name: string; email: string };
-  paymentId: string;
-  providerStatus: string;
-}, signal?: AbortSignal) {
+async function queueAndProcessBillingEmails(input: BillingTransition, signal?: AbortSignal) {
   const db = <T>(resource: string, options: Parameters<typeof supabaseAdmin>[1] = {}) => supabaseAdmin<T>(resource, { ...options, signal });
   const confirmed = input.kind === "confirmed";
   const pixMonthlyDue = input.providerStatus === "PIX_MONTHLY_DUE";
   const management = managementRecipients();
   const memberKey = `apt-payment-${input.kind}-member-${input.paymentId}`;
+  let followUpKey: string | null = null;
+  if (pixMonthlyDue) {
+    const today = saoPauloDate();
+    if (!input.pixPaidThrough || today < billingDatePlusDays(input.pixPaidThrough, 3)) return [];
+    const secondKey = `apt-pix-renewal-follow-up-${input.member.id}-${input.pixPaidThrough}`;
+    const existing = await db<Array<{ dedupe_key: string; status: string; sent_at: string | null }>>("billing_email_deliveries", {
+      query: { select: "dedupe_key,status,sent_at", member_id: `eq.${input.member.id}`, dedupe_key: `in.(${memberKey},${secondKey})`, limit: "2" },
+    });
+    if (existing.some((delivery) => delivery.dedupe_key === secondKey)) return [];
+    const first = existing.find((delivery) => delivery.dedupe_key === memberKey);
+    if (first) {
+      if (first.status !== "sent" || !first.sent_at || today < billingDatePlusDays(saoPauloDate(new Date(first.sent_at)), 7)) return [];
+      followUpKey = secondKey;
+    }
+  }
   const deliveries = [
     {
-      dedupe_key: memberKey,
+      dedupe_key: followUpKey || memberKey,
       member_id: input.member.id,
       payment_id: input.paymentId,
       kind: input.kind,
       audience: "member",
       recipient_email: input.member.email,
-      reply_to: null,
-      subject: confirmed ? "Pagamento confirmado — mensalidade APT" : pixMonthlyDue ? "Mensalidade Pix pendente — APT" : "Atualização necessária na sua mensalidade APT",
+      reply_to: pixMonthlyDue ? managementReplyTo() || null : null,
+      subject: confirmed ? "Pagamento confirmado — mensalidade APT" : pixMonthlyDue ? "Renovação da mensalidade Pix do APT" : "Atualização necessária na sua mensalidade APT",
       body_text: confirmed
         ? `Olá, ${input.member.name}.\n\nO Asaas confirmou e o APT registrou sua mensalidade. Se o seu cadastro já estiver concluído, o acesso está liberado. Caso ainda não esteja, finalize-o pelo link enviado pela gestão.`
         : pixMonthlyDue
-          ? `Olá, ${input.member.name}.\n\nSeu período mensal anterior terminou e ainda não identificamos o Pix deste mês. Para continuar no ranking, faça o Pix pela chave habitual do APT ou peça à gestão o link para mensalidade recorrente no cartão. Se já pagou, desconsidere esta mensagem. Caso não queira continuar no ranking, avise a gestão para retirarmos seu nome sem problema.`
+          ? `Olá, ${input.member.name}.\n\nSua cobertura no APT terminou em ${input.pixPaidThrough!.split("-").reverse().join("/")}. Até a última conferência, ainda não identificamos a renovação por Pix.\n\nSe quiser continuar no ranking, use a chave Pix habitual do APT. Se você já pagou ou prefere encerrar sua participação, responda a este e-mail para a gestão atualizar seu cadastro.\n\nEquipe APT Tennis Club`
           : `Olá, ${input.member.name}.\n\nO Asaas informou uma atualização na sua mensalidade. Acesse a área de membros para acompanhar a situação ou fale com a gestão do APT.`,
-      flow: confirmed ? "payment_confirmed_member" : "payment_attention_member",
+      flow: followUpKey ? "pix_renewal_follow_up" : confirmed ? "payment_confirmed_member" : "payment_attention_member",
       provider_status: input.providerStatus,
     },
-    ...(management.length ? [{
+    ...(management.length && !followUpKey ? [{
       dedupe_key: `apt-payment-${input.kind}-management-${input.paymentId}`,
       member_id: input.member.id,
       payment_id: input.paymentId,

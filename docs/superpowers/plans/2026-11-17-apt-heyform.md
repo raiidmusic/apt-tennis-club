@@ -47,12 +47,12 @@
 
 **Interfaces:** `issueSurveyContext(input, secret)` e `verifySurveyContext(token, secret, now)` vinculam versão, membro, campanha e formulário; `receiveHeyFormEvent(request)` valida Basic, contrato e grava atomicamente. GET `/api/pesquisas?survey=experiencia-2026` retorna URL de formulário e estado somente do membro autenticado. GET com autorização administrativa retorna respostas/CSV.
 
-- [ ] Escrever e rodar testes RED com Request/Response reais e transporte Supabase simulado, sem dados ou chamadas reais: Basic ausente/incorreto, token alterado/vencido, payload inválido, admin+membro, admin sem cadastro, campanha fechada, duplicação e falha de banco.
-- [ ] Implementar contexto HMAC com segredo dedicado, comparação segura e validade de campanha+72h; não emitir depois do encerramento.
-- [ ] Implementar parser pelo snapshot de IDs/tipos de campo, seleções e limites de texto. Aceitar apenas o formulário configurado e validar todos os valores, sem usar rótulos como identidade.
-- [ ] Criar migração com CLI oficial; tabelas `member_surveys` e `member_survey_responses`, restrições únicas e grants/RLS server-only. Campanha contém público elegível congelado, questionário e datas.
-- [ ] Implementar inserção transacional via unicidade e tratamento de conflito: evento idêntico200, novo201, conflito sem overwrite409, falha recuperável503. Apenas persistência concluída permite confirmação.
-- [ ] Rodar testes GREEN e TypeScript. Validar migração/concorrência em banco isolado antes da aplicação no projeto exato.
+- [x] Escrever e rodar testes RED com Request/Response reais e transporte Supabase simulado, sem dados ou chamadas reais: Basic ausente/incorreto, token alterado/vencido, payload inválido, admin+membro, admin sem cadastro, campanha fechada, duplicação e falha de banco.
+- [x] Implementar contexto HMAC com segredo dedicado, comparação segura e validade de campanha+72h; não emitir depois do encerramento.
+- [x] Implementar parser pelo snapshot de IDs/tipos de campo, seleções e limites de texto. Aceitar apenas o formulário configurado e validar todos os valores, sem usar rótulos como identidade.
+- [x] Criar migração com CLI oficial; tabelas `member_surveys` e `member_survey_responses`, restrições únicas e grants/RLS server-only. Campanha contém público elegível congelado, questionário e datas.
+- [x] Implementar inserção transacional via unicidade e tratamento de conflito: evento idêntico200, novo201, conflito sem overwrite409, falha recuperável503. Apenas persistência concluída permite confirmação.
+- [x] Rodar testes GREEN e TypeScript. Validar migração/concorrência em banco isolado antes da aplicação no projeto exato.
 
 ## Task 3: Página e gestão
 
@@ -91,3 +91,7 @@
 - Task1: configuração válida, HeyForm local healthy/HTTP200, Basic real e rejeição de auth incorreta PASS; Mongo193,5MiB, HeyForm156,7MiB e KeyDB20,8MiB em repouso.
 - Ruling: finalizar runtime local/protocolo na Task1 e verificar instalação remota na Task4 — o contrato local independe da provisão Azure em andamento. Nenhuma publicação antecipada.
 - Baseline421bfc9: TypeScript sem erros após gerar next-env local; testes210/221,11falhas preexistentes registradas em /private/tmp/apt-heyform-baseline-tests.log.
+
+- Task2:14testes de contrato/autorização PASS, TypeScript PASS; Postgres17 descartável provou grants/RLS, insert service_role, imutabilidade e unicidade. Migração produtiva ainda não aplicada.
+- Task2: regressão RED→GREEN da assinatura Route Handler: wrapper ignora o segundo argumento Next para preservar o relógio de expiração.
+- Runtime Azure: Docker29.10.0/Compose5.8.0 instalados; OpenBot active;2.606MiB disponíveis após bootstrap; sem mudança de assinatura ou portas públicas.

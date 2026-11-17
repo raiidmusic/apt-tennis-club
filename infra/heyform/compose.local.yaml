@@ -1,0 +1,7 @@
+services:
+  heyform:
+    ports: ["127.0.0.1:19157:9157"]
+    environment:
+      TRUST_PROXY: "false"
+  keydb:
+    image: eqalpha/keydb:arm64_v6.3.3@sha256:f1bff8306a05d4dc3692852a92cb2734ea57b7c23cad024938bf211414d5ea84

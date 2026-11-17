@@ -1,0 +1,118 @@
+name: apt-heyform
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  heyform:
+    image: heyform/community-edition:v3.0.7@sha256:fc7e73c4f3c8b39af5139e2dcd596ff42be00cc26bdbd809f3382916a897f5aa
+    restart: unless-stopped
+    mem_limit: 768m
+    logging: *logging
+    environment:
+      NODE_ENV: production
+      APP_HOMEPAGE_URL: ${APP_HOMEPAGE_URL:?Set the public HTTPS URL}
+      APP_DISABLE_REGISTRATION: ${APP_DISABLE_REGISTRATION:-true}
+      VERIFY_USER_EMAIL: "false"
+      SESSION_KEY: ${SESSION_KEY:?Generate a separate random secret}
+      FORM_ENCRYPTION_KEY: ${FORM_ENCRYPTION_KEY:?Generate a separate random secret}
+      INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY:?Generate a separate random secret}
+      DISABLE_SUBMISSION_IP: "true"
+      ALLOW_PRIVATE_OUTBOUND: "false"
+      ENABLE_GOOGLE_FONTS: "false"
+      TRUST_PROXY: "1"
+      CORS_ALLOWED_ORIGINS: ${APP_HOMEPAGE_URL}
+      MONGO_URI: mongodb://mongo:27017/heyform?authSource=admin
+      MONGO_USER: ${MONGO_USER:-heyform}
+      MONGO_PASSWORD: ${MONGO_PASSWORD:?Generate a separate random secret}
+      REDIS_HOST: keydb
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Generate a separate random secret}
+      BULL_JOB_ATTEMPTS: "8"
+      BULL_JOB_BACKOFF_DELAY: "10000"
+      BULL_JOB_BACKOFF_TYPE: exponential
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_SECURE: "true"
+    volumes:
+      - uploads:/app/packages/server/static/upload
+    networks: [web, database]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      keydb:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:9157/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 5
+
+  mongo:
+    image: mongo:8.0@sha256:bdc216e9d5a6ec2cfdac789b5832fdab64cd32055f59885cae918a92de63c361
+    restart: unless-stopped
+    mem_limit: 768m
+    logging: *logging
+    command: [mongod, --wiredTigerCacheSizeGB, "0.25"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-heyform}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - mongo:/data/db
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, "mongosh --quiet --eval 'quit(db.runCommand({ping:1}).ok?0:1)'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  keydb:
+    image: ${KEYDB_IMAGE:-eqalpha/keydb:x86_64_v6.3.3@sha256:6396b5ad495437ce368a832e114d3007c070007e4f84d4c8feb1240fcd1f23c6}
+    restart: unless-stopped
+    mem_limit: 192m
+    logging: *logging
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: [sh, -c, 'exec keydb-server --appendonly yes --requirepass "$$REDIS_PASSWORD" --maxmemory 128mb --maxmemory-policy noeviction']
+    volumes:
+      - keydb:/data
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, 'REDISCLI_AUTH="$$REDIS_PASSWORD" keydb-cli ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  caddy:
+    image: caddy:2-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    restart: unless-stopped
+    mem_limit: 128m
+    logging: *logging
+    environment:
+      HEYFORM_HOST: ${HEYFORM_HOST:?Set the public hostname}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [web]
+    depends_on: [heyform]
+
+networks:
+  web:
+  database:
+    internal: true
+
+volumes:
+  mongo:
+  keydb:
+  uploads:
+  caddy_data:
+  caddy_config:

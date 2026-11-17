@@ -60,10 +60,10 @@
 
 **Interfaces:** Consome `/api/pesquisas` e o snapshot persistido. Incorpora somente a origem HeyForm configurada. Gestão exige a mesma autorização administrativa do backend atual.
 
-- [ ] Reutilizar login com retorno seguro, identidade e estilos APT. Página mostra aviso de identificação, formulário, já respondida, encerrada, pendência e erro.
-- [ ] Ajustar CSP para iframe somente da origem HeyForm aprovada, sem liberar scripts externos ou frame-ancestors da APT.
-- [ ] Criar gestão com participação sobre público congelado, distribuições, prioridades e respostas identificadas; exportação CSV com neutralização de fórmulas.
-- [ ] Acrescentar links de pesquisa na área de membro e gestão usando os componentes existentes. Não modificar cobrança para permitir pesquisa.
+- [x] Reutilizar login com retorno seguro, identidade e estilos APT. Página mostra aviso de identificação, formulário, já respondida, encerrada, pendência e erro.
+- [x] Ajustar CSP para iframe somente da origem HeyForm aprovada, sem liberar scripts externos ou frame-ancestors da APT.
+- [x] Criar gestão com participação sobre público congelado, distribuições, prioridades e respostas identificadas; exportação CSV com neutralização de fórmulas.
+- [x] Acrescentar links de pesquisa na área de membro e gestão usando os componentes existentes. Não modificar cobrança para permitir pesquisa.
 - [ ] Rodar testes, build e navegador mobile/desktop/teclado; confirmar retorno de login, iframe e confirmação por estado persistido.
 
 ## Task 4: Instalação, integração e publicação verificadas
@@ -76,7 +76,7 @@
 - [ ] Criar acesso administrativo protegido e recuperação; bloquear cadastro público. Se faltar autenticação humana, concluir todo o restante independente antes de pedir esse acesso.
 - [ ] Criar pesquisa teste, snapshot e público sintético; configurar Basic, campo `apt_context`, horários e reenvios. Confirmar Mongo→webhook→Supabase e edição/erro sem falsa sincronização.
 - [ ] Preparar backup externo protegido e testar restauração. Medir recursos/latência preservando OpenBot; não aumentar VM automaticamente.
-- [ ] Revisão independente final de correção/segurança/Ponytail e auditoria proporcional à nova estrutura. Corrigir findings importantes com regressões.
+- [x] Revisão independente final de correção/segurança/Ponytail e auditoria proporcional à nova estrutura. Corrigir findings importantes com regressões.
 - [ ] Rodar suite apropriada, TypeScript/build, diffcheck e browser. Registrar falhas preexistentes com comparação de baseline.
 - [ ] Publicar somente código da worktree aprovada, preservar deployment rollback confirmado imediatamente antes, verificar domínio/fluxo real e atualizar status com evidências.
 
@@ -95,3 +95,10 @@
 - Task2:14testes de contrato/autorização PASS, TypeScript PASS; Postgres17 descartável provou grants/RLS, insert service_role, imutabilidade e unicidade. Migração produtiva ainda não aplicada.
 - Task2: regressão RED→GREEN da assinatura Route Handler: wrapper ignora o segundo argumento Next para preservar o relógio de expiração.
 - Runtime Azure: Docker29.10.0/Compose5.8.0 instalados; OpenBot active;2.606MiB disponíveis após bootstrap; sem mudança de assinatura ou portas públicas.
+
+- Task3: páginas e navegação implementadas,18checks focais PASS. Browser da versão compilada confirmou login com retorno, proteção de resultados e layout390/1280. O browser detectou uma classe de layout inexistente; corrigida para admin-page e identidade administrativa existente. Iframe autenticado e confirmação persistida reais continuam no gate Task4.
+- Task4: migração aplicada ao projeto Supabase canônico; RLS/grants remotos conferidos, sem leitura anon/authenticated ou update/delete service_role nas respostas.
+- Task4: conta/rascunho locais exportados com autorização e restaurados em base separada; hash e17telas iguais sem imprimir valores. Pacote privado pronto, mas transferência à VPS ainda não efetuada.
+- Revisão independente final: dois findings UI corrigidos e cobertos por regressões;18/18PASS, veredito Ship para código. Auditoria estrutural proporcional cobre novas rotas/tabelas/serviços e deve permanecer distinta de prova operacional remota.
+- Verificação final: build Webpack/TypeScript PASS. Suíte239testes,228PASS,11falhas exatamente iguais ao baseline221/210/11. Nenhuma falha nova.
+- Bloqueios: janela Dia Azure inacessível (solicitada reabertura); Vercel POST env retornou402 resource_creation_blocked por limite de uso da equipe. CLI local não instalada. Não alterar plano/cobrança nem remover limite Azure. Pesquisa fechada e sem convites.

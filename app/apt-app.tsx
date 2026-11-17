@@ -828,6 +828,7 @@ export function PortalPage() {
         rankingLink ? { id: "ranking", label: "Ranking no Tweener", mobileLabel: "Ranking", icon: Trophy, href: rankingLink, external: true } : { id: "ranking", label: "Ranking no Tweener", mobileLabel: "Ranking", icon: Trophy, onSelect: openLockedRanking },
         { id: "pagamentos", label: "Pagamentos", icon: CreditCard, active: tab === "pagamentos", onSelect: () => setTab("pagamentos") },
         { id: "perfil", label: "Meu cadastro", mobileLabel: "Perfil", icon: UserRound, active: tab === "perfil", onSelect: () => setTab("perfil") },
+        { id: "pesquisa", label: "Sua experiência", mobileLabel: "Pesquisa", icon: ClipboardList, href: "/pesquisa/experiencia-2026" },
       ]}
       status={<div className="rail-status"><i /> <span>{accessLabel}</span></div>}
       footer={<SignOutButton />}
@@ -1611,6 +1612,7 @@ export function AdminPage() {
         { id: "painel", label: "Painel de decisão", mobileLabel: "Painel", icon: LayoutDashboard, active: tab === "painel", onSelect: () => setTab("painel") },
         { id: "requerimentos", label: "Requerimentos", mobileLabel: "CRM", icon: ClipboardList, active: tab === "requerimentos", onSelect: () => setTab("requerimentos"), badge: attentionCount || undefined },
         { id: "membros", label: "Membros", mobileLabel: "Membros", icon: UsersRound, active: tab === "membros", onSelect: () => setTab("membros"), badge: memberActionCount || undefined },
+        { id: "pesquisas", label: "Pesquisas", mobileLabel: "Pesquisas", icon: ClipboardList, href: "/gestao/pesquisas" },
       ]}
       status={<div className="sidebar-footer"><span>APT Tennis Club</span><strong>Operação e relacionamento</strong></div>}
       footer={<SignOutButton />}

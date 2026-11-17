@@ -191,3 +191,16 @@ test('member cannot read administrative survey results', async t => {
   assert.equal((await api.adminSurveyResults(req)).status, 401);
   assert.equal(state.writes.length, 0);
 });
+
+test('CSP allows the configured form origin without allowing arbitrary frames or scripts', async t => {
+  const before = process.env.APT_HEYFORM_URL;
+  process.env.APT_HEYFORM_URL = 'https://pesquisas.apttennis.com.br';
+  t.after(() => { if (before === undefined) delete process.env.APT_HEYFORM_URL; else process.env.APT_HEYFORM_URL = before; });
+  const { default: config } = await import('../next.config.ts');
+  const headers = await config.headers();
+  const policy = headers.find(row => row.source === '/:path*').headers.find(row => row.key === 'Content-Security-Policy').value;
+  const directives = Object.fromEntries(policy.split(';').map(part => part.trim().split(/\s+/)).map(([key, ...values]) => [key, values]));
+  assert.deepEqual(directives['frame-src'], ['https://pesquisas.apttennis.com.br']);
+  assert.equal(directives['script-src'].includes('*'), false);
+  assert.deepEqual(directives['frame-ancestors'], ["'none'"]);
+});

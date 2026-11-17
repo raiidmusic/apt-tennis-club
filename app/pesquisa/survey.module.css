@@ -1,0 +1,39 @@
+.member { max-width: 76rem; margin: auto; padding: 2rem 1rem 3rem; }
+.intro { max-width: 44rem; margin-bottom: 1.5rem; }
+.intro h1, .toolbar h1 { margin: 0 0 .75rem; font-size: 1.75rem; line-height: 1.2; letter-spacing: -.025em; }
+.intro p, .report p { line-height: 1.6; }
+.eyebrow { margin: 0 0 .5rem; color: var(--secondary); font-size: .875rem; font-weight: 600; }
+.back { display: inline-flex; align-items: center; gap: .5rem; min-height: 44px; font-size: .875rem; }
+.privacy { max-width: 65ch; margin: 0 0 1rem; font-size: .875rem; line-height: 1.6; }
+.frame { display: block; width: 100%; height: min(48rem, 80svh); min-height: 32rem; border: 1px solid var(--line); border-radius: .75rem; background: var(--white); }
+.notice { max-width: 44rem; padding: 1.5rem 0; }
+.notice h2 { font-size: 1.5rem; }
+.notice p { max-width: 65ch; line-height: 1.6; margin-bottom: 1.25rem; }
+.confirm { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding-top: 1rem; font-size: .875rem; }
+.confirm p { margin: 0; }
+.admin { min-width: 0; padding-top: 1.5rem; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
+.toolbar h2 { margin: 0; font-size: 1.5rem; }
+.toolbar p { margin: .5rem 0 0; font-size: .875rem; }
+.report { margin: 2rem 0 3rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+.summary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1rem; margin: 0 0 2rem; }
+.summary div { padding: 1rem 0; border-bottom: 1px solid var(--line); }
+.summary dt { font-size: .875rem; }
+.summary dd { margin: .5rem 0 0; font-size: 1.75rem; font-variant-numeric: tabular-nums; }
+.distributions { display: grid; gap: 2rem; }
+.distribution h3, .responses h3 { margin: 0 0 1rem; font-size: 1rem; line-height: 1.5; }
+.distribution ul { display: grid; gap: .75rem; list-style: none; padding: 0; margin: 0; }
+.distribution li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(4rem, 1fr) 2rem; gap: .75rem; align-items: center; font-size: .875rem; }
+.distribution li span { overflow-wrap: anywhere; }
+.distribution meter { width: 100%; accent-color: var(--secondary); }
+.distribution strong { text-align: right; font-variant-numeric: tabular-nums; }
+.responses { margin-top: 2rem; }
+.responses details { border-top: 1px solid var(--line); }
+.responses summary { display: flex; min-height: 64px; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 0; cursor: pointer; }
+.responses summary small { display: block; margin-top: .25rem; font-size: .875rem; }
+.responses summary > span:last-child { font-size: .875rem; text-decoration: underline; text-underline-offset: .2em; }
+.responses dl { margin: 0 0 1.5rem; display: grid; gap: 1rem; }
+.responses dt { font-size: .875rem; font-weight: 600; }
+.responses dd { margin: .25rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+@media (min-width: 900px) { .member { padding: 3rem 2rem; } .distributions { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 2rem 3rem; } }
+@media (max-width: 420px) { .summary { grid-template-columns: 1fr; gap: 0; } .summary div { display: flex; justify-content: space-between; align-items: center; } .summary dd { margin: 0; } }

@@ -3,11 +3,13 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   async headers() {
     const upgradeInsecureRequests = process.env.NODE_ENV === "production" ? "; upgrade-insecure-requests" : "";
+    const surveyOrigin = new URL(process.env.APT_HEYFORM_URL || "https://pesquisas.apttennis.com.br");
+    if (surveyOrigin.username || surveyOrigin.password || (surveyOrigin.protocol !== "https:" && !(process.env.NODE_ENV !== "production" && surveyOrigin.hostname === "127.0.0.1"))) throw new Error("Invalid HeyForm origin");
     return [
       {
         source: "/:path*",
         headers: [
-          { key: "Content-Security-Policy", value: `default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co; manifest-src 'self'${upgradeInsecureRequests}` },
+          { key: "Content-Security-Policy", value: `default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; frame-src ${surveyOrigin.origin}; object-src 'none'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co; manifest-src 'self'${upgradeInsecureRequests}` },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
           { key: "Permissions-Policy", value: "camera=(), geolocation=(), microphone=(), payment=(), usb=()" },

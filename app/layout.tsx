@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     siteName: "APT Tennis Club",
     locale: "pt_BR",
     type: "website",
-    images: [{ url: "/og-apt-social.png", width: 1200, height: 630, alt: "APT Tennis Club — O jogo começa na quadra." }],
+    images: [{ url: "/og-apt-social.png", width: 1200, height: 630, alt: "APT Tennis Club — Beyond the Court." }],
   },
   twitter: {
     card: "summary_large_image",

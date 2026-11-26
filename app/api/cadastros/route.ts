@@ -1,5 +1,6 @@
 import { asaasCheckoutUrl, asaasRequest, ensureAsaasCustomer } from "../../../lib/asaas";
 import { ensureCheckoutPaymentReminders, sendManagementEmail, sendMemberEmail } from "../../../lib/apt-email";
+import { assertBillingOwnership, claimBillingCustomer } from "../../../lib/billing-reconciliation";
 import { isValidNewPassword } from "../../../lib/auth";
 import { isValidCpf } from "../../../lib/cpf";
 import { requireTrustedOrigin } from "../../../lib/request-security";
@@ -76,6 +77,24 @@ async function findMember(id: string) {
       limit: "1",
     },
   }))[0];
+}
+
+async function assertPendingPixRegistration(memberId: string, paymentId: string, subscription: SubscriptionRow) {
+  const [member, payment, currentSubscription] = await Promise.all([
+    supabaseAdmin<Array<{ participation_status: string }>>("members", {
+      query: { select: "participation_status", id: `eq.${memberId}`, limit: "1" },
+    }).then((rows) => rows[0]),
+    supabaseAdmin<Array<{ status: string }>>("payments", {
+      query: { select: "status", asaas_payment_id: `eq.${paymentId}`, member_id: `eq.${memberId}`, limit: "1" },
+    }).then((rows) => rows[0]),
+    supabaseAdmin<Array<{ status: string; asaas_customer_id: string | null }>>("subscriptions", {
+      query: { select: "status,asaas_customer_id", id: `eq.${subscription.id}`, member_id: `eq.${memberId}`, limit: "1" },
+    }).then((rows) => rows[0]),
+  ]);
+  if (member?.participation_status !== "awaiting_payment" || payment?.status.toUpperCase() !== "PENDING"
+    || currentSubscription?.status !== subscription.status || currentSubscription?.asaas_customer_id !== subscription.asaas_customer_id) {
+    throw new SupabaseRequestError("A situação do Pix ou da participação mudou. Acesse o portal ou peça a conciliação à gestão antes de continuar.", 409);
+  }
 }
 
 async function findGroupRegistrationLink(token: string, flow: GroupRegistrationLinkRow["flow"]) {
@@ -339,11 +358,12 @@ export async function POST(request: Request) {
         const attemptedAt = new Date().toISOString();
         const claimedAttempt = await supabaseAdmin<Array<{ id: string }>>("subscriptions", {
           method: "PATCH",
-          query: { id: `eq.${subscription.id}`, checkout_attempted_at: "is.null" },
+          query: { id: `eq.${subscription.id}`, member_id: `eq.${memberId}`, status: `eq.${subscription.status}`, asaas_customer_id: subscription.asaas_customer_id ? `eq.${subscription.asaas_customer_id}` : "is.null", checkout_attempted_at: "is.null" },
           prefer: "return=representation",
           body: { checkout_attempted_at: attemptedAt, updated_at: attemptedAt },
         });
         if (!claimedAttempt[0]) return Response.json({ error: "Outra tentativa de pagamento já está em andamento." }, { status: 409 });
+        subscription = { ...subscription, checkout_attempted_at: attemptedAt };
 
         try {
           const customerId = await ensureAsaasCustomer({
@@ -354,6 +374,9 @@ export async function POST(request: Request) {
             phone,
             customerId: subscription.asaas_customer_id,
           });
+          await assertBillingOwnership(memberId, { customer: customerId });
+          await claimBillingCustomer(memberId, subscription, customerId);
+          subscription = { ...subscription, asaas_customer_id: customerId };
           const paymentResponse = await asaasRequest("/payments", {
             method: "POST",
             body: JSON.stringify({
@@ -368,51 +391,58 @@ export async function POST(request: Request) {
           pixPayment = await paymentResponse.json() as AsaasPayment;
           if (!paymentResponse.ok || !pixPayment.id) {
             if (paymentResponse.status >= 400 && paymentResponse.status < 500) {
-              await supabaseAdmin("subscriptions", { method: "PATCH", query: { id: `eq.${subscription.id}` }, body: { checkout_attempted_at: null, updated_at: new Date().toISOString() } });
+              await supabaseAdmin("subscriptions", { method: "PATCH", query: { id: `eq.${subscription.id}`, member_id: `eq.${memberId}`, status: `eq.${subscription.status}`, asaas_customer_id: subscription.asaas_customer_id ? `eq.${subscription.asaas_customer_id}` : "is.null", checkout_attempted_at: `eq.${attemptedAt}` }, body: { checkout_attempted_at: null, updated_at: new Date().toISOString() } });
             }
             throw new SupabaseRequestError(pixPayment.errors?.[0]?.description || "O Asaas recusou a cobrança Pix.", paymentResponse.status >= 400 && paymentResponse.status < 500 ? 502 : 409);
           }
         } catch (error) {
           if (error instanceof SupabaseRequestError && error.status === 502) {
-            await supabaseAdmin("subscriptions", { method: "PATCH", query: { id: `eq.${subscription.id}` }, body: { checkout_attempted_at: null, updated_at: new Date().toISOString() } }).catch(() => undefined);
+            await supabaseAdmin("subscriptions", { method: "PATCH", query: { id: `eq.${subscription.id}`, member_id: `eq.${memberId}`, status: `eq.${subscription.status}`, asaas_customer_id: subscription.asaas_customer_id ? `eq.${subscription.asaas_customer_id}` : "is.null", checkout_attempted_at: `eq.${attemptedAt}` }, body: { checkout_attempted_at: null, updated_at: new Date().toISOString() } }).catch(() => undefined);
             throw error;
           }
           throw new SupabaseRequestError("A criação do Pix ficou inconclusiva. A gestão precisa conciliar no Asaas antes de uma nova tentativa.", 409);
         }
       }
 
-      if (!pixPayment?.id) throw new SupabaseRequestError("A cobrança Pix ficou inconclusiva.", 409);
+      if (!pixPayment?.id || !pixPayment.customer || pixPayment.billingType !== "PIX" || pixPayment.externalReference !== memberId) throw new SupabaseRequestError("A cobrança Pix não confirma a identidade deste cadastro.", 409);
+      if (subscription.asaas_customer_id && pixPayment.customer !== subscription.asaas_customer_id) throw new SupabaseRequestError("A cobrança Pix aponta para outro cliente financeiro.", 409);
+      await assertBillingOwnership(memberId, pixPayment);
+      await claimBillingCustomer(memberId, subscription, pixPayment.customer);
+      subscription = { ...subscription, asaas_customer_id: pixPayment.customer };
       const qrResponse = await asaasRequest(`/payments/${encodeURIComponent(pixPayment.id)}/pixQrCode`);
       const qrCode = qrResponse.ok ? await qrResponse.json() as { payload?: string; expirationDate?: string } : {};
+      // QR lookup can yield to another writer; revalidate the original state before persisting finance.
+      await claimBillingCustomer(memberId, subscription, pixPayment.customer);
+      await assertBillingOwnership(memberId, pixPayment);
+      const paymentBody = {
+        status: (pixPayment.status || "PENDING").toUpperCase(),
+        value_cents: Math.round((pixPayment.value || monthlyValue) * 100),
+        due_date: pixPayment.dueDate || new Date().toISOString().slice(0, 10),
+        paid_at: null, invoice_url: pixPayment.invoiceUrl || null, payload: pixPayment, updated_at: new Date().toISOString(),
+      };
+      await supabaseAdmin("payments", {
+        method: "POST", query: { on_conflict: "asaas_payment_id" }, prefer: "resolution=ignore-duplicates,return=minimal",
+        body: { ...paymentBody, member_id: memberId, subscription_id: subscription.id, asaas_payment_id: pixPayment.id },
+      });
+      await assertBillingOwnership(memberId, pixPayment);
+      await assertPendingPixRegistration(memberId, pixPayment.id, subscription);
+      const completed = await supabaseAdmin<Array<{ id: string }>>("subscriptions", {
+        method: "PATCH", prefer: "return=representation",
+        query: { id: `eq.${subscription.id}`, member_id: `eq.${memberId}`, asaas_customer_id: `eq.${pixPayment.customer}`, status: `eq.${subscription.status}`, checkout_attempted_at: subscription.checkout_attempted_at ? `eq.${subscription.checkout_attempted_at}` : "is.null" },
+        body: { status: "awaiting_payment", checkout_attempted_at: null, updated_at: new Date().toISOString() },
+      });
+      if (!completed[0]) throw new SupabaseRequestError("O cadastro financeiro mudou durante o Pix; a gestão precisa conciliar antes de continuar.", 409);
       await Promise.all([
-        supabaseAdmin("subscriptions", {
-          method: "PATCH",
-          query: { id: `eq.${subscription.id}` },
-          body: { asaas_customer_id: pixPayment.customer || subscription.asaas_customer_id, status: "awaiting_payment", checkout_attempted_at: null, updated_at: new Date().toISOString() },
-        }),
-        supabaseAdmin("payments", {
-          method: "POST",
-          query: { on_conflict: "asaas_payment_id" },
-          prefer: "resolution=merge-duplicates,return=minimal",
-          body: {
-            member_id: memberId,
-            subscription_id: subscription.id,
-            asaas_payment_id: pixPayment.id,
-            status: (pixPayment.status || "PENDING").toUpperCase(),
-            value_cents: Math.round((pixPayment.value || monthlyValue) * 100),
-            due_date: pixPayment.dueDate || new Date().toISOString().slice(0, 10),
-            paid_at: null,
-            invoice_url: pixPayment.invoiceUrl || null,
-            payload: pixPayment,
-            updated_at: new Date().toISOString(),
-          },
-        }),
         invite ? supabaseAdmin("invites", { method: "PATCH", query: { id: `eq.${invite.id}` }, body: { used_at: new Date().toISOString() } }) : Promise.resolve(),
         application ? supabaseAdmin("applications", { method: "PATCH", query: { id: `eq.${application.id}` }, body: { status: "registered", updated_at: new Date().toISOString() } }) : Promise.resolve(),
         supabaseAdmin("audit_logs", {
           method: "POST",
           body: { actor: email, action: "member.pix_registration_completed", entity_type: "member", entity_id: memberId, metadata: { consent_version: "2026-08", asaas_payment_id: pixPayment.id } },
         }),
+      ]);
+      // Registration persistence can yield to a receipt or manual decision; revalidate at the send boundary.
+      await assertPendingPixRegistration(memberId, pixPayment.id, { ...subscription, status: "awaiting_payment", checkout_attempted_at: null });
+      await Promise.all([
         sendMemberEmail({
           to: email,
           subject: "Seu cadastro APT está pronto para o Pix",

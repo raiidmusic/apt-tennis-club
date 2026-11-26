@@ -1,0 +1,1068 @@
+{
+  "name": "Sua experiência na APT",
+  "slug": "experiencia-2026",
+  "hiddenFields": [
+    {
+      "id": "apt_context",
+      "name": "apt_context"
+    }
+  ],
+  "drafts": [
+    {
+      "id": "apt_welcome",
+      "kind": "welcome",
+      "title": [
+        "Sua experiência na APT"
+      ],
+      "description": [
+        "Queremos entender o que funciona e o que precisa melhorar no clube. Leva cerca de 5 minutos. A pesquisa é identificada: a gestão da APT poderá consultar suas respostas vinculadas ao seu cadastro. Responda com sinceridade; sua opinião orientará as próximas melhorias."
+      ],
+      "properties": {
+        "buttonText": "Começar",
+        "enableShareIcon": false,
+        "enableCompleteTime": false
+      }
+    },
+    {
+      "id": "apt_objetivos",
+      "kind": "multiple_choice",
+      "title": [
+        "1. O que você mais busca ao participar da APT?"
+      ],
+      "validations": {
+        "required": true,
+        "max": 2
+      },
+      "properties": {
+        "allowMultiple": true,
+        "allowOther": true,
+        "choices": [
+          {
+            "id": "objetivos_1",
+            "label": "Jogar com mais frequência"
+          },
+          {
+            "id": "objetivos_2",
+            "label": "Encontrar adversários do meu nível"
+          },
+          {
+            "id": "objetivos_3",
+            "label": "Evoluir no tênis"
+          },
+          {
+            "id": "objetivos_4",
+            "label": "Competir no ranking"
+          },
+          {
+            "id": "objetivos_5",
+            "label": "Conhecer pessoas e conviver no clube"
+          }
+        ]
+      },
+      "description": [
+        "Escolha até duas opções."
+      ]
+    },
+    {
+      "id": "apt_frequencia",
+      "kind": "multiple_choice",
+      "title": [
+        "2. Quantos jogos você fez pela APT nos últimos 60 dias?"
+      ],
+      "validations": {
+        "required": true,
+        "max": 1
+      },
+      "properties": {
+        "allowMultiple": false,
+        "allowOther": false,
+        "choices": [
+          {
+            "id": "frequencia_1",
+            "label": "Nenhum"
+          },
+          {
+            "id": "frequencia_2",
+            "label": "1 ou 2 jogos"
+          },
+          {
+            "id": "frequencia_3",
+            "label": "3 ou 4 jogos"
+          },
+          {
+            "id": "frequencia_4",
+            "label": "5 jogos ou mais"
+          },
+          {
+            "id": "frequencia_5",
+            "label": "Entrei há menos de 60 dias e ainda não consigo avaliar"
+          }
+        ]
+      }
+    },
+    {
+      "id": "apt_satisfacao",
+      "kind": "opinion_scale",
+      "title": [
+        "3. No geral, qual é seu nível de satisfação com a APT?"
+      ],
+      "validations": {
+        "required": true
+      },
+      "properties": {
+        "total": 5,
+        "leftLabel": "Muito insatisfeito",
+        "rightLabel": "Muito satisfeito"
+      }
+    },
+    {
+      "id": "apt_agenda",
+      "kind": "multiple_choice",
+      "title": [
+        "4. Como você avalia: facilidade para combinar jogos?"
+      ],
+      "validations": {
+        "required": true,
+        "max": 1
+      },
+      "properties": {
+        "allowMultiple": false,
+        "allowOther": false,
+        "choices": [
+          {
+            "id": "agenda_1",
+            "label": "1 — Muito insatisfeito"
+          },
+          {
+            "id": "agenda_2",
+            "label": "2 — Insatisfeito"
+          },
+          {
+            "id": "agenda_3",
+            "label": "3 — Nem satisfeito, nem insatisfeito"
+          },
+          {
+            "id": "agenda_4",
+            "label": "4 — Satisfeito"
+          },
+          {
+            "id": "agenda_5",
+            "label": "5 — Muito satisfeito"
+          },
+          {
+            "id": "agenda_6",
+            "label": "Não tive experiência suficiente para avaliar"
+          }
+        ]
+      }
+    },
+    {
+      "id": "apt_nivel",
+      "kind": "multiple_choice",
+      "title": [
+        "4. Como você avalia: equilíbrio do nível dos adversários?"
+      ],
+      "validations": {
+        "required": true,
+        "max": 1
+      },
+      "properties": {
+        "allowMultiple": false,
+        "allowOther": false,
+        "choices": [
+          {
+            "id": "nivel_1",
+            "label": "1 — Muito insatisfeito"
+          },
+          {
+            "id": "nivel_2",
+            "label": "2 — Insatisfeito"
+          },
+          {
+            "id": "nivel_3",
+            "label": "3 — Nem satisfeito, nem insatisfeito"
+          },
+          {
+            "id": "nivel_4",
+            "label": "4 — Satisfeito"
+          },
+          {
+            "id": "nivel_5",
+            "label": "5 — Muito satisfeito"
+          },
+          {
+            "id": "nivel_6",
+            "label": "Não tive experiência suficiente para avaliar"
+          }
+        ]
+      }
+    },
+    {
+      "id": "apt_rodadas",
+      "kind": "multiple_choice",
+      "title": [
+        "4. Como você avalia: organização das rodadas?"
+      ],
+      "validations": {
+        "required": true,
+        "max": 1
+      },
+      "properties": {
+        "allowMultiple": false,
+        "allowOther": false,
+        "choices": [
+          {
+            "id": "rodadas_1",
+            "label": "1 — Muito insatisfeito"
+          },
+          {
+            "id": "rodadas_2",
+            "label": "2 — Insatisfeito"
+          },
+          {
+            "id": "rodadas_3",
+            "label": "3 — Nem satisfeito, nem insatisfeito"
+          },
+          {
+            "id": "rodadas_4",
+            "label": "4 — Satisfeito"
+          },
+          {
+            "id": "rodadas_5",
+            "label": "5 — Muito satisfeito"
+          },
+          {
+            "id": "rodadas_6",
+            "label": "Não tive experiência suficiente para avaliar"
+          }
+        ]
+      }
+    },
+    {
+      "id": "apt_regras",
+      "kind": "multiple_choice",
+      "title": [
+        "4. Como você avalia: clareza das regras?"
+      ],
+      "validations": {
+        "required": true,
+        "max": 1
+      },
+      "properties": {
+        "allowMultiple": false,
+        "allowOther": false,
+        "choices": [
+          {
+            "id": "regras_1",
+            "label": "1 — Muito insatisfeito"
+          },
+          {
+            "id": "regras_2",
+            "label": "2 — Insatisfeito"
+          },
+          {
+            "id": "regras_3",
+            "label": "3 — Nem satisfeito, nem insatisfeito"
+          },
+          {
+            "id": "regras_4",
+            "label": "4 — Satisfeito"
+          },
+          {
+            "id": "regras_5",
+            "label": "5 — Muito satisfeito"
+          },
+          {
+            "id": "regras_6",
+            "label": "Não tive experiência suficiente para avaliar"
+          }
+        ]
+      }
+    },
+    {
+      "id": "apt_convivencia",
+      "kind": "multiple_choice",
+      "title": [
+        "4. Como você avalia: convivência entre os membros?"
+      ],
+      "validations": {
+        "required": true,
+        "max": 1
+      },
+      "properties": {
+        "allowMultiple": false,
+        "allowOther": false,
+        "choices": [
+          {
+            "id": "convivencia_1",
+            "label": "1 — Muito insatisfeito"
+          },
+          {
+            "id": "convivencia_2",
+            "label": "2 — Insatisfeito"
+          },
+          {
+            "id": "convivencia_3",
+            "label": "3 — Nem satisfeito, nem insatisfeito"
+          },
+          {
+            "id": "convivencia_4",
+            "label": "4 — Satisfeito"
+          },
+          {
+            "id": "convivencia_5",
+            "label": "5 — Muito satisfeito"
+          },
+          {
+            "id": "convivencia_6",
+            "label": "Não tive experiência suficiente para avaliar"
+          }
+        ]
+      }
+    },
+    {
+      "id": "apt_comunicacao",
+      "kind": "multiple_choice",
+      "title": [
+        "4. Como você avalia: comunicação pelo whatsapp?"
+      ],
+      "validations": {
+        "required": true,
+        "max": 1
+      },
+      "properties": {
+        "allowMultiple": false,
+        "allowOther": false,
+        "choices": [
+          {
+            "id": "comunicacao_1",
+            "label": "1 — Muito insatisfeito"
+          },
+          {
+            "id": "comunicacao_2",
+            "label": "2 — Insatisfeito"
+          },
+          {
+            "id": "comunicacao_3",
+            "label": "3 — Nem satisfeito, nem insatisfeito"
+          },
+          {
+            "id": "comunicacao_4",
+            "label": "4 — Satisfeito"
+          },
+          {
+            "id": "comunicacao_5",
+            "label": "5 — Muito satisfeito"
+          },
+          {
+            "id": "comunicacao_6",
+            "label": "Não tive experiência suficiente para avaliar"
+          }
+        ]
+      }
+    },
+    {
+      "id": "apt_barreira",
+      "kind": "multiple_choice",
+      "title": [
+        "5. Hoje, qual é a principal dificuldade para participar mais?"
+      ],
+      "validations": {
+        "required": true,
+        "max": 1
+      },
+      "properties": {
+        "allowMultiple": false,
+        "allowOther": true,
+        "choices": [
+          {
+            "id": "barreira_1",
+            "label": "Falta de tempo"
+          },
+          {
+            "id": "barreira_2",
+            "label": "Dificuldade para conciliar horários"
+          },
+          {
+            "id": "barreira_3",
+            "label": "Disponibilidade ou localização das quadras"
+          },
+          {
+            "id": "barreira_4",
+            "label": "Custo total para jogar"
+          },
+          {
+            "id": "barreira_5",
+            "label": "Demora ou falta de resposta dos adversários"
+          },
+          {
+            "id": "barreira_6",
+            "label": "Dúvidas sobre regras ou organização"
+          },
+          {
+            "id": "barreira_7",
+            "label": "Dificuldade para me integrar ao grupo"
+          },
+          {
+            "id": "barreira_8",
+            "label": "Lesão ou questão pessoal"
+          },
+          {
+            "id": "barreira_9",
+            "label": "Nenhuma dificuldade relevante"
+          }
+        ]
+      }
+    },
+    {
+      "id": "apt_valor",
+      "kind": "multiple_choice",
+      "title": [
+        "6. Pensando no valor da mensalidade e no que você recebe, como avalia sua participação?"
+      ],
+      "validations": {
+        "required": true,
+        "max": 1
+      },
+      "properties": {
+        "allowMultiple": false,
+        "allowOther": false,
+        "choices": [
+          {
+            "id": "valor_1",
+            "label": "Muito abaixo do que espero"
+          },
+          {
+            "id": "valor_2",
+            "label": "Abaixo do que espero"
+          },
+          {
+            "id": "valor_3",
+            "label": "Dentro do que espero"
+          },
+          {
+            "id": "valor_4",
+            "label": "Acima do que espero"
+          },
+          {
+            "id": "valor_5",
+            "label": "Muito acima do que espero"
+          },
+          {
+            "id": "valor_6",
+            "label": "Ainda não consigo avaliar"
+          }
+        ]
+      }
+    },
+    {
+      "id": "apt_permanencia",
+      "kind": "multiple_choice",
+      "title": [
+        "7. Qual é sua intenção de continuar na APT nos próximos três meses?"
+      ],
+      "validations": {
+        "required": true,
+        "max": 1
+      },
+      "properties": {
+        "allowMultiple": false,
+        "allowOther": false,
+        "choices": [
+          {
+            "id": "permanencia_1",
+            "label": "Com certeza vou continuar"
+          },
+          {
+            "id": "permanencia_2",
+            "label": "Provavelmente vou continuar"
+          },
+          {
+            "id": "permanencia_3",
+            "label": "Ainda estou em dúvida"
+          },
+          {
+            "id": "permanencia_4",
+            "label": "Provavelmente vou sair"
+          },
+          {
+            "id": "permanencia_5",
+            "label": "Com certeza vou sair"
+          }
+        ]
+      }
+    },
+    {
+      "id": "apt_prioridade",
+      "kind": "multiple_choice",
+      "title": [
+        "8. Se a APT pudesse melhorar uma coisa primeiro, qual deveria ser?"
+      ],
+      "validations": {
+        "required": true,
+        "max": 1
+      },
+      "properties": {
+        "allowMultiple": false,
+        "allowOther": true,
+        "choices": [
+          {
+            "id": "prioridade_1",
+            "label": "Facilitar a marcação de jogos"
+          },
+          {
+            "id": "prioridade_2",
+            "label": "Ajustar o equilíbrio das classes"
+          },
+          {
+            "id": "prioridade_3",
+            "label": "Melhorar a organização das rodadas"
+          },
+          {
+            "id": "prioridade_4",
+            "label": "Esclarecer regras e critérios"
+          },
+          {
+            "id": "prioridade_5",
+            "label": "Melhorar a comunicação no WhatsApp"
+          },
+          {
+            "id": "prioridade_6",
+            "label": "Acolher e integrar novos membros"
+          },
+          {
+            "id": "prioridade_7",
+            "label": "Criar encontros e atividades fora das partidas"
+          },
+          {
+            "id": "prioridade_8",
+            "label": "Agilizar o suporte aos membros"
+          },
+          {
+            "id": "prioridade_9",
+            "label": "Não vejo uma prioridade de melhoria agora"
+          }
+        ]
+      }
+    },
+    {
+      "id": "apt_preservar",
+      "kind": "long_text",
+      "title": [
+        "9. O que a APT faz bem e deve preservar?"
+      ],
+      "description": [
+        "Opcional. Até 1.200 caracteres. Evite incluir dados sensíveis de outras pessoas."
+      ],
+      "validations": {
+        "required": false,
+        "max": 1200
+      }
+    },
+    {
+      "id": "apt_melhoria",
+      "kind": "long_text",
+      "title": [
+        "10. Que mudança concreta faria mais diferença na sua experiência?"
+      ],
+      "description": [
+        "Opcional. Até 1.200 caracteres. Evite incluir dados sensíveis de outras pessoas."
+      ],
+      "validations": {
+        "required": false,
+        "max": 1200
+      }
+    },
+    {
+      "id": "apt_thanks",
+      "kind": "thank_you",
+      "title": [
+        "Obrigado por compartilhar sua experiência."
+      ],
+      "description": [
+        "Sua resposta foi enviada ao formulário. Volte à página da APT para conferir o registro no seu cadastro."
+      ],
+      "properties": {
+        "enableShareIcon": false
+      }
+    }
+  ],
+  "snapshot": [
+    {
+      "id": "apt_objetivos",
+      "key": "objetivos",
+      "title": "1. O que você mais busca ao participar da APT?",
+      "kind": "multiple_choice",
+      "required": true,
+      "max": 2,
+      "allowOther": true,
+      "choices": [
+        {
+          "id": "objetivos_1",
+          "label": "Jogar com mais frequência"
+        },
+        {
+          "id": "objetivos_2",
+          "label": "Encontrar adversários do meu nível"
+        },
+        {
+          "id": "objetivos_3",
+          "label": "Evoluir no tênis"
+        },
+        {
+          "id": "objetivos_4",
+          "label": "Competir no ranking"
+        },
+        {
+          "id": "objetivos_5",
+          "label": "Conhecer pessoas e conviver no clube"
+        }
+      ]
+    },
+    {
+      "id": "apt_frequencia",
+      "key": "frequencia",
+      "title": "2. Quantos jogos você fez pela APT nos últimos 60 dias?",
+      "kind": "multiple_choice",
+      "required": true,
+      "max": 1,
+      "allowOther": false,
+      "choices": [
+        {
+          "id": "frequencia_1",
+          "label": "Nenhum"
+        },
+        {
+          "id": "frequencia_2",
+          "label": "1 ou 2 jogos"
+        },
+        {
+          "id": "frequencia_3",
+          "label": "3 ou 4 jogos"
+        },
+        {
+          "id": "frequencia_4",
+          "label": "5 jogos ou mais"
+        },
+        {
+          "id": "frequencia_5",
+          "label": "Entrei há menos de 60 dias e ainda não consigo avaliar"
+        }
+      ]
+    },
+    {
+      "id": "apt_satisfacao",
+      "key": "satisfacao",
+      "title": "3. No geral, qual é seu nível de satisfação com a APT?",
+      "kind": "opinion_scale",
+      "required": true,
+      "min": 1,
+      "max": 5
+    },
+    {
+      "id": "apt_agenda",
+      "key": "agenda",
+      "title": "4. Como você avalia: facilidade para combinar jogos?",
+      "kind": "multiple_choice",
+      "required": true,
+      "max": 1,
+      "allowOther": false,
+      "choices": [
+        {
+          "id": "agenda_1",
+          "label": "1 — Muito insatisfeito"
+        },
+        {
+          "id": "agenda_2",
+          "label": "2 — Insatisfeito"
+        },
+        {
+          "id": "agenda_3",
+          "label": "3 — Nem satisfeito, nem insatisfeito"
+        },
+        {
+          "id": "agenda_4",
+          "label": "4 — Satisfeito"
+        },
+        {
+          "id": "agenda_5",
+          "label": "5 — Muito satisfeito"
+        },
+        {
+          "id": "agenda_6",
+          "label": "Não tive experiência suficiente para avaliar"
+        }
+      ]
+    },
+    {
+      "id": "apt_nivel",
+      "key": "nivel",
+      "title": "4. Como você avalia: equilíbrio do nível dos adversários?",
+      "kind": "multiple_choice",
+      "required": true,
+      "max": 1,
+      "allowOther": false,
+      "choices": [
+        {
+          "id": "nivel_1",
+          "label": "1 — Muito insatisfeito"
+        },
+        {
+          "id": "nivel_2",
+          "label": "2 — Insatisfeito"
+        },
+        {
+          "id": "nivel_3",
+          "label": "3 — Nem satisfeito, nem insatisfeito"
+        },
+        {
+          "id": "nivel_4",
+          "label": "4 — Satisfeito"
+        },
+        {
+          "id": "nivel_5",
+          "label": "5 — Muito satisfeito"
+        },
+        {
+          "id": "nivel_6",
+          "label": "Não tive experiência suficiente para avaliar"
+        }
+      ]
+    },
+    {
+      "id": "apt_rodadas",
+      "key": "rodadas",
+      "title": "4. Como você avalia: organização das rodadas?",
+      "kind": "multiple_choice",
+      "required": true,
+      "max": 1,
+      "allowOther": false,
+      "choices": [
+        {
+          "id": "rodadas_1",
+          "label": "1 — Muito insatisfeito"
+        },
+        {
+          "id": "rodadas_2",
+          "label": "2 — Insatisfeito"
+        },
+        {
+          "id": "rodadas_3",
+          "label": "3 — Nem satisfeito, nem insatisfeito"
+        },
+        {
+          "id": "rodadas_4",
+          "label": "4 — Satisfeito"
+        },
+        {
+          "id": "rodadas_5",
+          "label": "5 — Muito satisfeito"
+        },
+        {
+          "id": "rodadas_6",
+          "label": "Não tive experiência suficiente para avaliar"
+        }
+      ]
+    },
+    {
+      "id": "apt_regras",
+      "key": "regras",
+      "title": "4. Como você avalia: clareza das regras?",
+      "kind": "multiple_choice",
+      "required": true,
+      "max": 1,
+      "allowOther": false,
+      "choices": [
+        {
+          "id": "regras_1",
+          "label": "1 — Muito insatisfeito"
+        },
+        {
+          "id": "regras_2",
+          "label": "2 — Insatisfeito"
+        },
+        {
+          "id": "regras_3",
+          "label": "3 — Nem satisfeito, nem insatisfeito"
+        },
+        {
+          "id": "regras_4",
+          "label": "4 — Satisfeito"
+        },
+        {
+          "id": "regras_5",
+          "label": "5 — Muito satisfeito"
+        },
+        {
+          "id": "regras_6",
+          "label": "Não tive experiência suficiente para avaliar"
+        }
+      ]
+    },
+    {
+      "id": "apt_convivencia",
+      "key": "convivencia",
+      "title": "4. Como você avalia: convivência entre os membros?",
+      "kind": "multiple_choice",
+      "required": true,
+      "max": 1,
+      "allowOther": false,
+      "choices": [
+        {
+          "id": "convivencia_1",
+          "label": "1 — Muito insatisfeito"
+        },
+        {
+          "id": "convivencia_2",
+          "label": "2 — Insatisfeito"
+        },
+        {
+          "id": "convivencia_3",
+          "label": "3 — Nem satisfeito, nem insatisfeito"
+        },
+        {
+          "id": "convivencia_4",
+          "label": "4 — Satisfeito"
+        },
+        {
+          "id": "convivencia_5",
+          "label": "5 — Muito satisfeito"
+        },
+        {
+          "id": "convivencia_6",
+          "label": "Não tive experiência suficiente para avaliar"
+        }
+      ]
+    },
+    {
+      "id": "apt_comunicacao",
+      "key": "comunicacao",
+      "title": "4. Como você avalia: comunicação pelo whatsapp?",
+      "kind": "multiple_choice",
+      "required": true,
+      "max": 1,
+      "allowOther": false,
+      "choices": [
+        {
+          "id": "comunicacao_1",
+          "label": "1 — Muito insatisfeito"
+        },
+        {
+          "id": "comunicacao_2",
+          "label": "2 — Insatisfeito"
+        },
+        {
+          "id": "comunicacao_3",
+          "label": "3 — Nem satisfeito, nem insatisfeito"
+        },
+        {
+          "id": "comunicacao_4",
+          "label": "4 — Satisfeito"
+        },
+        {
+          "id": "comunicacao_5",
+          "label": "5 — Muito satisfeito"
+        },
+        {
+          "id": "comunicacao_6",
+          "label": "Não tive experiência suficiente para avaliar"
+        }
+      ]
+    },
+    {
+      "id": "apt_barreira",
+      "key": "barreira",
+      "title": "5. Hoje, qual é a principal dificuldade para participar mais?",
+      "kind": "multiple_choice",
+      "required": true,
+      "max": 1,
+      "allowOther": true,
+      "choices": [
+        {
+          "id": "barreira_1",
+          "label": "Falta de tempo"
+        },
+        {
+          "id": "barreira_2",
+          "label": "Dificuldade para conciliar horários"
+        },
+        {
+          "id": "barreira_3",
+          "label": "Disponibilidade ou localização das quadras"
+        },
+        {
+          "id": "barreira_4",
+          "label": "Custo total para jogar"
+        },
+        {
+          "id": "barreira_5",
+          "label": "Demora ou falta de resposta dos adversários"
+        },
+        {
+          "id": "barreira_6",
+          "label": "Dúvidas sobre regras ou organização"
+        },
+        {
+          "id": "barreira_7",
+          "label": "Dificuldade para me integrar ao grupo"
+        },
+        {
+          "id": "barreira_8",
+          "label": "Lesão ou questão pessoal"
+        },
+        {
+          "id": "barreira_9",
+          "label": "Nenhuma dificuldade relevante"
+        }
+      ]
+    },
+    {
+      "id": "apt_valor",
+      "key": "valor",
+      "title": "6. Pensando no valor da mensalidade e no que você recebe, como avalia sua participação?",
+      "kind": "multiple_choice",
+      "required": true,
+      "max": 1,
+      "allowOther": false,
+      "choices": [
+        {
+          "id": "valor_1",
+          "label": "Muito abaixo do que espero"
+        },
+        {
+          "id": "valor_2",
+          "label": "Abaixo do que espero"
+        },
+        {
+          "id": "valor_3",
+          "label": "Dentro do que espero"
+        },
+        {
+          "id": "valor_4",
+          "label": "Acima do que espero"
+        },
+        {
+          "id": "valor_5",
+          "label": "Muito acima do que espero"
+        },
+        {
+          "id": "valor_6",
+          "label": "Ainda não consigo avaliar"
+        }
+      ]
+    },
+    {
+      "id": "apt_permanencia",
+      "key": "permanencia",
+      "title": "7. Qual é sua intenção de continuar na APT nos próximos três meses?",
+      "kind": "multiple_choice",
+      "required": true,
+      "max": 1,
+      "allowOther": false,
+      "choices": [
+        {
+          "id": "permanencia_1",
+          "label": "Com certeza vou continuar"
+        },
+        {
+          "id": "permanencia_2",
+          "label": "Provavelmente vou continuar"
+        },
+        {
+          "id": "permanencia_3",
+          "label": "Ainda estou em dúvida"
+        },
+        {
+          "id": "permanencia_4",
+          "label": "Provavelmente vou sair"
+        },
+        {
+          "id": "permanencia_5",
+          "label": "Com certeza vou sair"
+        }
+      ]
+    },
+    {
+      "id": "apt_prioridade",
+      "key": "prioridade",
+      "title": "8. Se a APT pudesse melhorar uma coisa primeiro, qual deveria ser?",
+      "kind": "multiple_choice",
+      "required": true,
+      "max": 1,
+      "allowOther": true,
+      "choices": [
+        {
+          "id": "prioridade_1",
+          "label": "Facilitar a marcação de jogos"
+        },
+        {
+          "id": "prioridade_2",
+          "label": "Ajustar o equilíbrio das classes"
+        },
+        {
+          "id": "prioridade_3",
+          "label": "Melhorar a organização das rodadas"
+        },
+        {
+          "id": "prioridade_4",
+          "label": "Esclarecer regras e critérios"
+        },
+        {
+          "id": "prioridade_5",
+          "label": "Melhorar a comunicação no WhatsApp"
+        },
+        {
+          "id": "prioridade_6",
+          "label": "Acolher e integrar novos membros"
+        },
+        {
+          "id": "prioridade_7",
+          "label": "Criar encontros e atividades fora das partidas"
+        },
+        {
+          "id": "prioridade_8",
+          "label": "Agilizar o suporte aos membros"
+        },
+        {
+          "id": "prioridade_9",
+          "label": "Não vejo uma prioridade de melhoria agora"
+        }
+      ]
+    },
+    {
+      "id": "apt_preservar",
+      "key": "preservar",
+      "title": "9. O que a APT faz bem e deve preservar?",
+      "kind": "long_text",
+      "required": false
+    },
+    {
+      "id": "apt_melhoria",
+      "key": "melhoria",
+      "title": "10. Que mudança concreta faria mais diferença na sua experiência?",
+      "kind": "long_text",
+      "required": false
+    }
+  ],
+  "themeSettings": {
+    "theme": {
+      "fontFamily": "Arial",
+      "questionTextColor": "#172b25",
+      "answerTextColor": "#234a39",
+      "buttonBackground": "#234a39",
+      "buttonTextColor": "#ffffff",
+      "backgroundColor": "#faf8f3",
+      "fieldFontSize": "normal",
+      "screenFontSize": "normal"
+    }
+  },
+  "settings": {
+    "active": false,
+    "locale": "pt-br",
+    "enableEmailNotification": false,
+    "displayIpAddress": false,
+    "enableProgress": true,
+    "enableQuestionList": true,
+    "enableNavigationArrows": true
+  }
+}

@@ -31,7 +31,7 @@ test("recadastro migration keeps CPF nullable until self-entry and gives an invi
     readFile(new URL("../supabase/migrations/202608110003_member_recadastro.sql", import.meta.url), "utf8"),
     readFile(new URL("../app/api/membros/importacao/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cadastros/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/webhooks/asaas/route.ts", import.meta.url), "utf8"),
+    Promise.all([readFile(new URL("../app/api/webhooks/asaas/route.ts", import.meta.url), "utf8"), readFile(new URL("../lib/asaas-events.ts", import.meta.url), "utf8")]).then((parts) => parts.join("\n")),
   ]);
   assert.match(migration, /alter column cpf_hash drop not null/);
   assert.match(migration, /invites_exactly_one_target_check/);
@@ -43,7 +43,7 @@ test("recadastro migration keeps CPF nullable until self-entry and gives an invi
   assert.match(enrollmentRoute, /checkouts\/\$\{encodeURIComponent\(checkoutId\)\}\/cancel/);
   assert.match(webhookRoute, /processed_at: null/);
   assert.match(webhookRoute, /payments\/\$\{encodeURIComponent\(payment\.id\)\}/);
-  assert.match(webhookRoute, /current_period_end: providerNextDueDate/);
-  assert.match(webhookRoute, /monthlyAccessEnd/);
+  assert.match(webhookRoute, /reconcileMemberBilling\(memberId, \{ paymentSnapshot: payment, signal \}\)/);
+  assert.doesNotMatch(webhookRoute, /current_period_end|participation_status: "active"/);
   assert.doesNotMatch(webhookRoute, /reconciled: false/);
 });

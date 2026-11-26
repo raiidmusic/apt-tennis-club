@@ -137,8 +137,31 @@ function attachApplicationToMember(member: MemberInviteCandidate | undefined, ap
   });
 }
 
-async function issueInvite(application: InviteApplication, target: { applicationId?: string; memberId?: string }) {
+async function ensureInviteAvailable(application: InviteApplication, target: { applicationId?: string; memberId?: string }, statuses: string[]) {
+  const current = (await supabaseAdmin<Array<{ id: string }>>("applications", {
+    query: { select: "id", id: `eq.${application.id}`, status: `in.(${statuses.join(",")})`, limit: "1" },
+  }))[0];
+  const existingMember = await findMemberByEmail(application.email);
+  const pendingMember = pendingMemberForInvite(existingMember);
+  if (!current || (existingMember && !pendingMember) ||
+    (target.memberId ? pendingMember?.id !== target.memberId : Boolean(existingMember)) ||
+    (pendingMember?.application_id && pendingMember.application_id !== application.id)) {
+    throw new SupabaseRequestError("O cadastro mudou. Atualize o requerimento antes de enviar um convite.", 409);
+  }
+}
+
+async function issueInvite(application: InviteApplication, target: { applicationId?: string; memberId?: string }, statuses: string[]) {
+  await ensureInviteAvailable(application, target, statuses);
   const { inviteId, inviteToken } = await createPrivateInvite(target);
+  try {
+    await ensureInviteAvailable(application, target, statuses);
+  } catch (error) {
+    await supabaseAdmin("invites", {
+      method: "PATCH", query: { id: `eq.${inviteId}`, used_at: "is.null", revoked_at: "is.null" },
+      body: { revoked_at: new Date().toISOString() },
+    }).catch(() => undefined);
+    throw error;
+  }
   const emailStatus = await sendInviteEmail(application, inviteToken, inviteId);
   return { inviteToken, inviteDelivery: emailStatus === "sent" ? "sent" as const : "manual" as const, emailStatus };
 }
@@ -235,10 +258,12 @@ export async function PATCH(request: Request) {
   if (blocked) return blocked;
   const admin = await requireAdmin(request).catch(() => null);
   if (!admin) return Response.json({ error: "Acesso restrito à gestão." }, { status: 401 });
+  let savedNote: AdminNote | undefined;
   try {
     const payload = await request.json() as {
       id?: string;
       status?: ApplicationStatus;
+      expectedStatus?: "new" | "in_review" | "awaiting_info" | "rejected";
       note?: string;
       action?: "resend_invite" | "rotate_direct_link";
     };
@@ -275,12 +300,13 @@ export async function PATCH(request: Request) {
       const member = pendingMemberForInvite(existingMember);
       if (existingMember && !member) return Response.json({ error: "Este e-mail já pertence a um integrante com cadastro concluído." }, { status: 409 });
       await attachApplicationToMember(member, application.id);
-      const issued = await issueInvite(application, member ? { memberId: member.id } : { applicationId: application.id });
+      const issued = await issueInvite(application, member ? { memberId: member.id } : { applicationId: application.id }, ["approved", "invite_sent"]);
       const finalStatus = issued.inviteDelivery === "sent" ? "invite_sent" : "approved";
       const rows = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
-        method: "PATCH", query: { id: `eq.${application.id}` }, prefer: "return=representation",
+        method: "PATCH", query: { id: `eq.${application.id}`, status: "in.(approved,invite_sent)" }, prefer: "return=representation",
         body: { status: finalStatus, email_status: issued.emailStatus, updated_at: new Date().toISOString() },
       });
+      if (!rows[0]) return Response.json({ error: "O cadastro mudou durante o envio. Atualize o requerimento; a etapa atual foi preservada.", inviteDelivery: issued.inviteDelivery, emailStatus: issued.emailStatus }, { status: 409 });
       await supabaseAdmin("audit_logs", {
         method: "POST",
         body: { actor: admin.email, action: "application.invite_resent", entity_type: "application", entity_id: application.id, metadata: { invite_delivery: issued.inviteDelivery, member_targeted: Boolean(member) } },
@@ -289,7 +315,11 @@ export async function PATCH(request: Request) {
     }
 
     const allowed = new Set<ApplicationStatus>(["new", "in_review", "awaiting_info", "approved", "rejected", "invite_sent"]);
+    const movable = new Set(["new", "in_review", "awaiting_info", "rejected"]);
     const note = payload.note?.trim() || "";
+    if (payload.expectedStatus !== undefined && (!movable.has(payload.expectedStatus) || !payload.status || payload.status === "invite_sent")) {
+      return Response.json({ error: "Movimentação inválida para este requerimento." }, { status: 400 });
+    }
     if (!payload.id || !uuidPattern.test(payload.id) || (payload.status && !allowed.has(payload.status)) || (!payload.status && !note) || note.length > 1_200 || (payload.status === "awaiting_info" && !note)) {
       return Response.json({ error: "Decisão inválida." }, { status: 400 });
     }
@@ -310,7 +340,6 @@ export async function PATCH(request: Request) {
       finalStatus = "approved";
     }
 
-    let savedNote: AdminNote | undefined;
     // A request for more information must never be shown without the internal
     // record that explains what the team still has to request.
     if (note && payload.status === "awaiting_info") {
@@ -321,13 +350,13 @@ export async function PATCH(request: Request) {
     }
     let rows = finalStatus
       ? await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
-        method: "PATCH", query: { id: `eq.${payload.id}`, ...(payload.status === "approved" ? { status: "in.(new,in_review,awaiting_info,rejected)" } : {}) }, prefer: "return=representation",
+        method: "PATCH", query: { id: `eq.${payload.id}`, ...(payload.expectedStatus ? { status: `eq.${payload.expectedStatus}` } : payload.status === "approved" ? { status: "in.(new,in_review,awaiting_info,rejected)" } : {}) }, prefer: "return=representation",
         body: { status: finalStatus, updated_at: new Date().toISOString() },
       })
       : await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
         query: { select: "id,name,email,whatsapp,city,class_level,referrer,status,created_at", id: `eq.${payload.id}`, limit: "1" },
       });
-    if (!rows[0]) return Response.json({ error: "Requerimento não encontrado." }, { status: 404 });
+    if (!rows[0]) return Response.json({ error: payload.expectedStatus ? "Este requerimento mudou de etapa. Atualize o quadro antes de decidir." : "Requerimento não encontrado.", note: savedNote, noteRecorded: Boolean(savedNote) }, { status: payload.expectedStatus ? 409 : 404 });
     savedNote = savedNote || (note
       ? (await supabaseAdmin<AdminNote[]>("admin_notes", {
         method: "POST", prefer: "return=representation",
@@ -337,17 +366,22 @@ export async function PATCH(request: Request) {
     let decisionEmail: string | undefined;
     if (payload.status === "approved" && inviteApplication) {
       await attachApplicationToMember(inviteMember, inviteApplication.id);
-      const issued = await issueInvite(inviteApplication, inviteMember ? { memberId: inviteMember.id } : { applicationId: inviteApplication.id });
+      const issued = await issueInvite(inviteApplication, inviteMember ? { memberId: inviteMember.id } : { applicationId: inviteApplication.id }, ["approved"]);
       inviteToken = issued.inviteToken;
       inviteDelivery = issued.inviteDelivery;
       decisionEmail = inviteDelivery;
       finalStatus = inviteDelivery === "sent" ? "invite_sent" : "approved";
       rows = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
-        method: "PATCH", query: { id: `eq.${payload.id}` }, prefer: "return=representation",
+        method: "PATCH", query: { id: `eq.${payload.id}`, status: "eq.approved" }, prefer: "return=representation",
         body: { status: finalStatus, email_status: issued.emailStatus, updated_at: new Date().toISOString() },
       });
+      if (!rows[0]) return Response.json({ error: "O cadastro mudou durante o envio. Atualize o requerimento; a etapa atual foi preservada.", note: savedNote, noteRecorded: Boolean(savedNote), inviteDelivery, emailStatus: issued.emailStatus }, { status: 409 });
     }
     if (payload.status === "rejected") {
+      rows = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
+        query: { id: `eq.${payload.id}`, status: "eq.rejected", limit: "1" },
+      });
+      if (!rows[0]) return Response.json({ error: "O cadastro mudou. Atualize o requerimento; nenhum aviso de rejeição foi enviado.", note: savedNote, noteRecorded: Boolean(savedNote) }, { status: 409 });
       const application = rows[0] as { name?: unknown; email?: unknown };
       if (typeof application.name === "string" && typeof application.email === "string") {
         decisionEmail = await sendMemberEmail({
@@ -358,6 +392,10 @@ export async function PATCH(request: Request) {
           idempotencyKey: `apt-application-rejected-${payload.id}`,
         });
       }
+      rows = await supabaseAdmin<Array<Record<string, unknown>>>("applications", {
+        query: { id: `eq.${payload.id}`, limit: "1" },
+      });
+      if (!rows[0] || rows[0].status !== "rejected") return Response.json({ error: "O cadastro mudou durante o aviso. Atualize o requerimento; a etapa atual foi preservada.", note: savedNote, noteRecorded: Boolean(savedNote), emailStatus: decisionEmail }, { status: 409 });
     }
     await supabaseAdmin("audit_logs", {
       method: "POST", body: { actor: admin.email, action: finalStatus ? `application.${finalStatus}` : "application.note_added", entity_type: "application", entity_id: payload.id, metadata: { invite_delivery: inviteDelivery, decision_email: decisionEmail, note_recorded: Boolean(savedNote) } },
@@ -365,6 +403,6 @@ export async function PATCH(request: Request) {
     return Response.json({ application: toApplication(rows[0], inviteToken), inviteDelivery, emailStatus: decisionEmail === "sent" ? "sent" : decisionEmail === "manual" ? "failed" : undefined, note: savedNote });
   } catch (error) {
     const status = error instanceof SupabaseRequestError ? error.status : 500;
-    return Response.json({ error: "Não foi possível atualizar o requerimento." }, { status: status >= 400 && status < 600 ? status : 500 });
+    return Response.json({ error: status === 409 ? "O cadastro mudou. Atualize o requerimento antes de decidir." : "Não foi possível atualizar o requerimento.", note: savedNote, noteRecorded: Boolean(savedNote) }, { status: status >= 400 && status < 600 ? status : 500 });
   }
 }

@@ -6,20 +6,20 @@ export const metadata: Metadata = {
   applicationName: "APT Tennis Club",
   title: "APT Tennis Club | Beyond the Court",
   description:
-    "Um ranking para quem leva o tênis a sério. Jogos equilibrados e participação por indicação em Brasília.",
+    "Clube de tênis em Brasília com entrada por indicação e análise. Ranking masculino, quatro divisões e rodadas quinzenais.",
   openGraph: {
     title: "APT Tennis Club",
-    description: "Um ranking para quem leva o tênis a sério.",
+    description: "Clube de tênis em Brasília com entrada por indicação e análise. Ranking masculino e rodadas quinzenais.",
     url: "/",
     siteName: "APT Tennis Club",
     locale: "pt_BR",
     type: "website",
-    images: [{ url: "/og-apt-social.png", width: 1200, height: 630, alt: "APT Tennis Club — O jogo começa na quadra." }],
+    images: [{ url: "/og-apt-social.png", width: 1200, height: 630, alt: "APT Tennis Club — Beyond the Court." }],
   },
   twitter: {
     card: "summary_large_image",
     title: "APT Tennis Club",
-    description: "Um ranking para quem leva o tênis a sério.",
+    description: "Clube de tênis em Brasília com entrada por indicação e análise. Ranking masculino e rodadas quinzenais.",
     images: ["/og-apt-social.png"],
   },
   manifest: "/manifest.webmanifest",
@@ -42,12 +42,13 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#1f2e50",
+  themeColor: "#f3f4f6",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR">
+      <head><link rel="preload" href="/fonts/outfit-latin-variable.woff2" as="font" type="font/woff2" crossOrigin="anonymous" /></head>
       <body>{children}</body>
     </html>
   );

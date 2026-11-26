@@ -51,6 +51,9 @@ next-env.d.ts
 /app/globals 2.css
 /design-output/
 
+# Local private APT V2 diagnosis and operational planning (public repository)
+/APT_V2_*.md
+
 # impeccable-live-ignore-start
 .impeccable/hook.cache.json
 .impeccable/hook.pending.json

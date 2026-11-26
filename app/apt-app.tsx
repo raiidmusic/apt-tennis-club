@@ -1,13 +1,15 @@
 "use client";
 /* eslint-disable @next/next/no-html-link-for-pages */
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
-import { ArrowDownLeft, ArrowUpRight, CheckCheck, ChevronRight, ClipboardList, CreditCard, GripVertical, Home, LayoutDashboard, LogOut, Plus, RefreshCw, Search, Settings2, SlidersHorizontal, Table2, Trophy, UserRound, UsersRound, Wallet } from "lucide-react";
+import { blurProps } from "./apt-blur";
+import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useScroll, useSpring, useTransform, type MotionValue } from "framer-motion";
+import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, CheckCheck, ChevronRight, ClipboardList, CreditCard, GripVertical, Home, LayoutDashboard, LogOut, Plus, RefreshCw, Search, Settings2, SlidersHorizontal, Table2, Trophy, UserRound, UsersRound, Wallet } from "lucide-react";
 import { ProductSidebar } from "@/components/ui/sidebar";
 import GlyphPortal from "@/components/ui/glyph-portal";
+import TennisFooterScene from "@/components/ui/tennis-footer-scene";
 import { AthleteImportInput, parseAthleteCsv } from "../lib/member-import";
 import { billingCalendarDate, billingMonthKeys, financialMetricRows, type FinancialPayment, type FinancialMetric, type MemberFinancialView } from "../lib/billing-view";
 import { isProtectedMembership, saoPauloDate } from "../lib/billing-state";
@@ -219,6 +221,9 @@ export function Brand({ inverse = false, large = false }: { inverse?: boolean; l
   return <span className={`brand-lockup${inverse ? " brand-lockup--inverse" : ""}${large ? " brand-lockup--large" : ""}`}><img src={source} width={large ? 1109 : 949} height={large ? 1162 : 823} alt="APT Tennis Club — Beyond the Court" /></span>;
 }
 
+// Current club terms shown on the landing. They can change: update them here.
+const clubTerms = { monthly: "R$ 22,90 por mês", review: "até 3 dias", movers: 3 };
+
 const heroStatements = [
   "critério.",
   "constância.",
@@ -345,60 +350,37 @@ export function PasswordRecoveryPage({ reset = false }: { reset?: boolean }) {
 }
 
 export function LandingPage() {
+  // FAQ opens on mouse hover and closes on leave; touch and keyboard keep the native toggle.
+  const faqTimer = useRef<number | undefined>(undefined);
+  const faqHover = {
+    onPointerEnter: (event: ReactPointerEvent<HTMLDetailsElement>) => {
+      if (event.pointerType !== "mouse") return;
+      const item = event.currentTarget;
+      window.clearTimeout(faqTimer.current);
+      faqTimer.current = window.setTimeout(() => { item.open = true; }, 120);
+    },
+    onPointerLeave: (event: ReactPointerEvent<HTMLDetailsElement>) => {
+      if (event.pointerType !== "mouse") return;
+      const item = event.currentTarget;
+      window.clearTimeout(faqTimer.current);
+      faqTimer.current = window.setTimeout(() => { if (!item.matches(":hover")) item.open = false; }, 220);
+    },
+    // A mouse click on an answer that hover already opened would close it; keep it open instead.
+    onClick: (event: ReactMouseEvent<HTMLDetailsElement>) => {
+      if (event.detail && event.currentTarget.open && (event.target as Element).closest("summary") && window.matchMedia("(hover: hover)").matches) event.preventDefault();
+    },
+  };
+
   const heroRef = useRef<HTMLElement>(null);
-  const courtsRef = useRef<HTMLElement>(null);
   const reducedMotion = useReducedMotion();
-  const [highlightedCourt, setHighlightedCourt] = useState(0);
   const courts = [
-    { name: "Central Court", tone: "central", position: "Topo do ranking", description: "A divisão de maior nível do APT." },
-    { name: "Court 1", tone: "one", position: "Primeiro patamar", description: "Competição forte, um patamar abaixo do Central." },
-    { name: "Court 2", tone: "two", position: "Competição crescente", description: "O nível intermediário da escada competitiva." },
-    { name: "Court 3", tone: "three", position: "Base do ranking", description: "A base da escada competitiva do APT." },
+    { name: "Central Court", tone: "central", position: "Topo do ranking", description: "A divisão de maior nível do APT.", photo: "/apt-assets/court-serve-blue.jpg", crop: "62% 50%", alt: "Saque visto de cima na quadra azul" },
+    { name: "Court 1", tone: "one", position: "Primeiro patamar", description: "Competição forte, um patamar abaixo do Central.", photo: "/apt-motion.jpg", crop: "50% 62%", alt: "Um jogador em base, pronto para a devolução na quadra azul" },
+    { name: "Court 2", tone: "two", position: "Competição crescente", description: "O nível intermediário da escada competitiva.", photo: "/apt-hero.jpg", crop: "70% 55%", alt: "Jogador de costas no saibro, olhando a quadra ao pôr do sol" },
+    { name: "Court 3", tone: "three", position: "Base do ranking", description: "A base da escada competitiva do APT.", photo: "/apt-assets/court-painted.jpg", crop: "50% 52%", alt: "Marca APT pintada no piso de uma quadra verde, junto à rede" },
   ];
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
   const photoY = useTransform(scrollYProgress, [0, 1], ["0%", "3.5%"]);
-  function resetSpreadPointer(stage: HTMLElement) {
-    stage.style.setProperty("--apt-pointer-x", "0px");
-    stage.style.setProperty("--apt-pointer-y", "0px");
-  }
-  function moveSpreadPointer(event: ReactPointerEvent<HTMLDivElement>) {
-    if (reducedMotion || event.pointerType !== "mouse" || !window.matchMedia("(hover: hover) and (pointer: fine)").matches || !CSS.supports("animation-timeline: view()")) return;
-    const stage = event.currentTarget;
-    const section = stage.parentElement!;
-    const travel = section.offsetHeight - window.innerHeight;
-    const progress = -section.getBoundingClientRect().top / Math.max(1, travel);
-    if (progress < 0.9) { resetSpreadPointer(stage); return; }
-    const rect = stage.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width * 2 - 1) * Math.min(26, rect.width * 0.026);
-    const y = ((event.clientY - rect.top) / rect.height * 2 - 1) * Math.min(22, rect.height * 0.022);
-    stage.style.setProperty("--apt-pointer-x", `${x.toFixed(2)}px`);
-    stage.style.setProperty("--apt-pointer-y", `${y.toFixed(2)}px`);
-  }
-  const courtCount = courts.length;
-  useEffect(() => {
-    const section = courtsRef.current;
-    if (reducedMotion || !section || typeof IntersectionObserver === "undefined") return;
-    let visible = false;
-    let timer: number | undefined;
-    const schedule = () => {
-      window.clearTimeout(timer);
-      timer = undefined;
-      if (visible && !document.hidden) {
-        timer = window.setTimeout(() => setHighlightedCourt(current => (current + 1) % courtCount), 6000);
-      }
-    };
-    const observer = new IntersectionObserver(entries => {
-      visible = entries.some(entry => entry.isIntersecting && entry.intersectionRatio >= 0.15);
-      schedule();
-    }, { threshold: 0.15 });
-    observer.observe(section);
-    document.addEventListener("visibilitychange", schedule);
-    return () => {
-      window.clearTimeout(timer);
-      observer.disconnect();
-      document.removeEventListener("visibilitychange", schedule);
-    };
-  }, [highlightedCourt, reducedMotion, courtCount]);
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.slice(1));
     const type = hash.get("type");
@@ -436,84 +418,48 @@ export function LandingPage() {
               <a className="apt-pill apt-pill--clay" href="/requerimento">Solicitar entrada <span aria-hidden="true">↗</span></a>
             </div>
           </div>
-          <div className="apt-hero__visual" role="group" aria-label="O tênis, dentro e além da quadra">
-            <figure><Image src="/apt-editorial-clay.jpeg" width="736" height="1211" sizes="(max-width: 767px) 32vw, (max-width: 920px) 30vw, 280px" alt="Um saque e sua sombra sobre o saibro" loading="eager" /></figure>
-            <figure><motion.div className="apt-hero__photo" style={{ y: reducedMotion ? 0 : photoY }}><Image src="/apt-editorial-hero.jpeg" width="736" height="981" sizes="(max-width: 767px) 35vw, (max-width: 920px) 33vw, 310px" alt="Jogador junto à rede, entre dois pontos" loading="eager" fetchPriority="high" /></motion.div></figure>
-            <figure><Image src="/apt-assets/tennis-green-racket.webp" width="736" height="1277" sizes="(max-width: 767px) 32vw, (max-width: 920px) 30vw, 280px" alt="Raquete vermelha e o passo de um jogador na quadra verde" loading="eager" /></figure>
-          </div>
-          <aside className="apt-hero__season" aria-label="Temporada atual"><span>Ranking masculino · Brasília</span><a href="/calendario2026">Temporada 2026 <ArrowUpRight size={16} aria-hidden="true" /></a><span>Beyond the Court.</span></aside>
+          <HeroFan photoY={photoY} reducedMotion={Boolean(reducedMotion)} />
+          <aside className="apt-hero__season" aria-label="Temporada atual"><span>Ranking masculino · Brasília</span><a href="/calendario2026">Temporada 2026 <ArrowUpRight size={16} aria-hidden="true" /></a><span>Entrada por indicação</span></aside>
         </section>
 
         <section className="apt-manifesto" id="o-apt">
-          <figure className="apt-manifesto__photo apt-manifesto__photo--one"><Image src="/apt-ritual-figma.jpg" width="900" height="1125" sizes="(max-width: 767px) 136px, (max-width: 1485px) 14vw, 208px" alt="Bola e raquete, antes do próximo ponto" loading="lazy" /></figure>
-          <div className="apt-manifesto__heading"><p className="apt-kicker">O clube</p><h2>Indicação e análise.<br /><em>Antes de cada convite.</em></h2></div>
-          <div className="apt-manifesto__body"><p>A indicação apresenta o candidato ao APT. A gestão analisa o perfil e a disponibilidade na divisão adequada antes de liberar o convite de cadastro.</p><p>Os membros participam de uma temporada comum, com adversários de nível compatível e calendário definido. Cada jogador combina suas partidas e registra os resultados no prazo da rodada.</p><div className="apt-manifesto__mark"><img src="/logo-apt3-navy.svg" width="1241" height="1246" alt="" /><span>Beyond the Court.</span></div></div>
-          <figure className="apt-manifesto__photo apt-manifesto__photo--two"><Image src="/apt-assets/tennis-green-racket.webp" width="736" height="1277" sizes="(max-width: 767px) 136px, (max-width: 1485px) 14vw, 208px" alt="O ritmo de um jogador entre pontos" loading="lazy" /></figure>
+          <div className="apt-manifesto__heading"><h2>Indicação e análise.<br /><em>Antes de cada convite.</em></h2></div>
+          <div className="apt-manifesto__body"><p>A indicação apresenta o candidato ao APT. A gestão analisa o perfil e a disponibilidade na divisão adequada antes de liberar o convite de cadastro.</p><p>Os membros disputam uma temporada comum, com adversários de nível compatível.</p><div className="apt-manifesto__mark"><img src="/logo-apt3-navy.svg" width="1241" height="1246" alt="" /></div></div>
         </section>
 
-        <section className="apt-product" id="ranking">
+        <RoundsList>
           <header className="apt-section-heading"><h2>Rodadas quinzenais.<br /><em>Horários combinados.</em></h2><p>O ranking define os confrontos. Você combina a data e o horário com cada adversário, dentro do prazo da rodada.</p></header>
-          <div className="apt-product__layout"><figure className="apt-product__photo"><Image src="/apt-assets/apt-club-outdoor.webp" width="1149" height="1368" sizes="(max-width: 767px) calc(100vw - 64px), (max-width: 1480px) calc(50vw - 108px), 632px" alt="Três painéis ao ar livre: fotografias de tênis nas laterais e a marca APT ao centro" loading="lazy" /></figure>
-            <dl className="apt-format"><div><dt>2</dt><dd><strong>Jogos por rodada</strong><p>A cada quinze dias, você recebe dois confrontos para combinar.</p></dd></div><div><dt>14</dt><dd><strong>Dias para jogar</strong><p>Combine o horário com seu adversário, entre em quadra e registre o resultado dentro do prazo.</p></dd></div><div><dt>4</dt><dd><strong>Divisões de nível</strong><p>Central Court, Court 1, Court 2 e Court 3. Os resultados definem sua posição e o próximo ciclo.</p></dd></div></dl>
-          </div>
-        </section>
+        </RoundsList>
 
-        <section className="apt-courts" ref={courtsRef}>
+        <section className="apt-courts" id="courts">
           <header className="apt-section-heading">
             <h2>Quatro divisões.<br /><em>Classificação por resultado.</em></h2>
-            <p>Você começa na divisão compatível com seu nível. Ao fim de cada ciclo, os resultados definem quem sobe e quem desce.</p>
+            <p>Você começa na divisão compatível com seu nível. Hoje, ao fim de cada ciclo, os {clubTerms.movers} melhores de cada Court sobem e os {clubTerms.movers} últimos descem.</p>
           </header>
-          <p className="apt-courts__hint" id="apt-courts-hint">Selecione uma divisão para vê-la em destaque.</p>
-          <div className="apt-courts__layout">
-            <div className="apt-courts__list" role="group" aria-label="Divisões do ranking" aria-describedby="apt-courts-hint">
-              {courts.map((court, index) => <article className={`apt-court apt-court--${court.tone}`} data-highlighted={highlightedCourt === index} key={court.name}>
-                <span className="apt-court__number" aria-hidden="true">0{index + 1}</span>
-                <div><span className="apt-court__position">{court.position}</span><h3><button type="button" aria-pressed={highlightedCourt === index} aria-label={`Destacar ${court.name}`} onClick={() => setHighlightedCourt(index)}>{court.name}<span aria-hidden="true">↗</span></button></h3><p>{court.description}</p></div>
-              </article>)}
-            </div>
-            <div className={`apt-courts__portrait apt-court--${courts[highlightedCourt].tone}`} aria-hidden="true">
-              <div className="apt-courts__portrait-top"><span>APT Tennis Club</span><span>Escada competitiva</span></div>
-              <svg key={highlightedCourt} className="apt-courts__drawing" viewBox="0 0 400 640" fill="none"><rect x="48" y="44" width="304" height="552" /><path d="M86 44v552M314 44v552M86 175h228M86 465h228M200 175v290M20 320h360" /><path className="apt-courts__service" d="M86 175h114v145H86zM200 320h114v145H200z" /><circle cx="200" cy="320" r="5" /></svg>
-              <div className="apt-courts__portrait-bottom"><span>0{highlightedCourt + 1}</span><p>{courts[highlightedCourt].name}</p></div>
-            </div>
+          <CourtStack courts={courts} reducedMotion={Boolean(reducedMotion)} />
+        </section>
+
+        {/* Hover Expand gallery, after 21st.dev references (educalvolpz/hover-expand, kedhareswer/hover-expand-gallery); rebuilt in CSS with local APT photography. */}
+        <section className="apt-expand-section" aria-labelledby="beyond-title">
+          <header className="apt-expand-section__heading">
+            <h2 id="beyond-title">Beyond <em>the Court.</em></h2>
+            <p>Gente com quem jogar. Uma temporada para compartilhar.</p>
+          </header>
+          <div className="apt-expand">
+            {[
+              { src: "/apt-assets/clay-court-empty.jpg", width: 675, height: 1200, alt: "Quadra de saibro vazia, com as linhas e a rede sob a luz da tarde", label: "O saibro" },
+              { src: "/apt-assets/tennis-green-indian-wells.webp", width: 736, height: 863, alt: "Uma troca de bola na quadra verde", label: "A troca" },
+              { src: "/apt-assets/player-step-white.jpg", width: 736, height: 920, alt: "O passo de um jogador de tênis branco, com a raquete na mão", label: "O passo" },
+              { src: "/apt-ritual-figma.jpg", width: 900, height: 1125, alt: "Bola e raquete nas mãos, junto à rede", label: "O ritual" },
+              { src: "/apt-assets/apt-court-photographic.webp", width: 1122, height: 1402, alt: "Marca APT pintada no piso de uma quadra", label: "A marca" },
+            ].map((photo, index) => <figure key={photo.src}>
+              <Image {...blurProps(photo.src)} src={photo.src} width={photo.width} height={photo.height} sizes="(max-width: 767px) 78vw, 44vw" alt={photo.alt} loading="lazy" draggable={false} />
+              <figcaption><span>{photo.label}</span><span aria-hidden="true">0{index + 1}</span></figcaption>
+            </figure>)}
           </div>
         </section>
 
-        {/* Stack Spread adapted from the Hyperiux source supplied by the user; native CSS scroll, local APT photography. */}
-        <section className="apt-spread" aria-label="Beyond the Court — fotografias de tênis">
-          <div className="apt-spread__stage" onPointerMove={moveSpreadPointer} onPointerLeave={event => resetSpreadPointer(event.currentTarget)}>
-            <svg className="apt-spread__court" viewBox="0 0 1200 900" fill="none" aria-hidden="true"><rect x="150" y="120" width="900" height="660" /><path d="M260 120v660M940 120v660M260 285h680M260 615h680M600 285v330M150 450h900" /></svg>
-            <div className="apt-spread__copy"><p className="apt-kicker">APT Tennis Club</p><h2>Beyond<br /><em>the Court.</em></h2><p>Gente com quem jogar.<br />Uma temporada para compartilhar.</p></div>
-            <div className="apt-spread__photos">
-              {[
-                { src: "/apt-assets/tennis-green-racket.webp", width: 736, height: 1277, alt: "O passo de um jogador com sua raquete vermelha" },
-                { src: "/apt-ritual-figma.jpg", width: 900, height: 1125, alt: "Bola e raquete nas mãos, junto à rede" },
-                { src: "/apt-editorial-clay.jpeg", width: 736, height: 1211, alt: "Um saque sobre o saibro" },
-                { src: "/apt-assets/tennis-green-indian-wells.webp", width: 736, height: 863, alt: "Uma troca de bola na quadra verde" },
-                { src: "/apt-assets/apt-court-photographic.webp", width: 1122, height: 1402, alt: "Composição de marca APT pintada no piso de uma quadra" },
-                { src: "/apt-editorial-hero.jpeg", width: 736, height: 981, alt: "A pausa de um jogador junto à rede" },
-              ].map((photo, index) => <figure key={photo.src}><div className="apt-spread__photo-drift" style={{ "--apt-depth": 0.55 + index * 0.15 } as CSSProperties}><Image {...photo} sizes="(max-width: 767px) calc(50vw - 40px), (max-width: 1023px) calc(33.33vw - 48px), 288px" alt={photo.alt} loading="lazy" draggable={false} /></div></figure>)}
-            </div>
-          </div>
-        </section>
-
-        <section className="apt-cycle" id="temporada">
-          <header className="apt-cycle__heading">
-            <div>
-            <p className="apt-kicker">A temporada</p><h2>Quatro ciclos.<br /><em>Uma temporada anual.</em></h2>
-            </div>
-            <div><p>Quatro ciclos ao longo do ano, com sorteios quinzenais e mudanças de divisão ao fim de cada ciclo.</p><a className="apt-text-link" href="/calendario2026">Ver calendário da temporada <span aria-hidden="true">↗</span></a></div>
-          </header>
-          <div className="apt-cycle__body">
-            <figure className="apt-cycle__photo"><div><Image src="/apt-editorial-clay.jpeg" width="736" height="1211" sizes="(max-width: 767px) calc(100vw - 64px), (max-width: 1480px) calc(45vw - 92px), 600px" alt="Jogador executa um golpe no saibro" loading="lazy" /></div><figcaption><span>2 jogos por rodada</span><span>14 dias para jogar</span></figcaption></figure>
-            <ol className="apt-cycle__steps">
-              <li><span className="apt-cycle__number" aria-hidden="true">01</span><div><span className="apt-cycle__rhythm">A cada quinze dias</span><h3>Sorteios quinzenais</h3><p>Dois jogos liberados a cada rodada.</p></div></li>
-              <li><span className="apt-cycle__number" aria-hidden="true">02</span><div><span className="apt-cycle__rhythm">A cada partida</span><h3>Pontuação por resultado</h3><p>Vitórias, sets e games entram na classificação.</p></div></li>
-              <li><span className="apt-cycle__number" aria-hidden="true">03</span><div><span className="apt-cycle__rhythm">Ao fim do ciclo</span><h3>Promoção e rebaixamento</h3><p>No fim de cada ciclo, a classificação define quem sobe e quem desce.</p></div></li>
-              <li><span className="apt-cycle__number" aria-hidden="true">04</span><div><span className="apt-cycle__rhythm">O encontro em quadra</span><h3>APT Finals</h3><p>Os melhores de cada Court se encontram no torneio presencial.</p></div></li>
-            </ol>
-          </div>
-        </section>
+        <SeasonCarousel />
 
         <section className="apt-member-block">
           <div className="apt-member-block__copy">
@@ -526,31 +472,57 @@ export function LandingPage() {
             <svg className="apt-member-block__court" viewBox="0 0 500 600" fill="none" aria-hidden="true"><rect x="30" y="25" width="440" height="550" /><path d="M84 25v550M416 25v550M84 150h332M84 450h332M250 150v300M30 300h440" /></svg>
             <figure className="apt-member-block__main-photo"><img src="/apt-assets/tennis-black-white.jpeg" width="736" height="981" alt="Fotografia em preto e branco de um jogador executando um golpe em quadra" loading="lazy" /></figure>
             <figure className="apt-member-block__detail-photo"><img src="/apt-assets/apt-balls-photoshop.webp" width="938" height="1679" alt="Bolas de tênis com a marca APT em preto na bola central" loading="lazy" /></figure>
-            <span className="apt-member-block__caption">Beyond the Court.</span>
           </div>
         </section>
 
-        <section className="apt-faq" id="duvidas">
-          <header><h2>Antes de entrar.</h2><p>Como entrar, combinar os jogos e acompanhar sua participação.</p></header>
+        <section className="apt-faq apt-faq--study" id="duvidas" aria-labelledby="duvidas-titulo">
           <div className="apt-faq__layout">
-            <figure><img src="/apt-editorial-blue.jpeg" width="474" height="593" alt="Jogador se movimentando em uma quadra azul" loading="lazy" /></figure>
+            <header className="apt-faq__cover">
+              <div className="apt-faq__photographs" aria-hidden="true">
+                <Image {...blurProps("/apt-editorial-ocean.jpeg")} src="/apt-editorial-ocean.jpeg" alt="" fill sizes="(max-width: 767px) 90vw, 38vw" data-frame="overview" style={{ objectPosition: "50% 48%" }} />
+                <Image {...blurProps("/apt-editorial-ritual.jpeg")} src="/apt-editorial-ritual.jpeg" alt="" fill sizes="(max-width: 767px) 90vw, 38vw" data-frame="entry" style={{ objectPosition: "50% 43%" }} />
+                <Image {...blurProps("/apt-editorial-blue.jpeg")} src="/apt-editorial-blue.jpeg" alt="" fill sizes="(max-width: 767px) 90vw, 38vw" data-frame="courts" style={{ objectPosition: "50% 44%" }} />
+                <Image {...blurProps("/apt-hero.jpg")} src="/apt-hero.jpg" alt="" fill sizes="(max-width: 767px) 90vw, 38vw" data-frame="matches" style={{ objectPosition: "53% 51%" }} />
+                <Image {...blurProps("/apt-ritual.jpg")} src="/apt-ritual.jpg" alt="" fill sizes="(max-width: 767px) 90vw, 38vw" data-frame="member" style={{ objectPosition: "50% 38%" }} />
+              </div>
+              <div className="apt-faq__intro">
+                <h2 id="duvidas-titulo">Antes de <em>entrar.</em></h2>
+                <p>Como entrar, combinar os jogos e acompanhar sua participação.</p>
+              </div>
+            </header>
             <div className="apt-faq__items">
-              <details open><summary>O que é o APT?</summary><p>Um clube de tênis em Brasília, com entrada por indicação e ranking masculino. Os jogos acontecem em rodadas quinzenais, com quatro divisões de nível e quatro ciclos ao longo do ano.</p></details>
-              <details><summary>Como faço para entrar?</summary><p>A entrada começa por indicação. Você conta um pouco sobre seu tênis no requerimento; a gestão analisa o perfil e a disponibilidade na divisão adequada. Com a aprovação, você recebe o convite para cadastro.</p></details>
-              <details><summary>Como são definidos os Courts?</summary><p>Seu nível de jogo e a disponibilidade de vagas definem a divisão inicial. Depois, os resultados do ranking determinam promoção e rebaixamento.</p></details>
-              <details><summary>Quantos jogos acontecem por rodada?</summary><p>Você recebe dois confrontos a cada quinze dias e tem 14 dias para combinar e realizar as partidas.</p></details>
-              <details><summary>Onde acompanho o ranking e os pagamentos?</summary><p>O ranking fica no Tweener. Na área do membro do APT, você acompanha assinatura, pagamentos e situação da participação. O checkout de cartão é realizado no Asaas.</p></details>
+              <details name="apt-faq" {...faqHover} data-topic="overview" open>
+                <summary>O que é o APT?</summary>
+                <div className="apt-faq__answer"><p>Um clube de tênis em Brasília, com entrada por indicação e ranking masculino. Os jogos acontecem em rodadas quinzenais, com quatro divisões de nível e quatro ciclos ao longo do ano.</p></div>
+              </details>
+              <details name="apt-faq" {...faqHover} data-topic="entry">
+                <summary>Como faço para entrar?</summary>
+                <div className="apt-faq__answer"><p>A entrada começa por indicação. Você conta um pouco sobre seu tênis no requerimento; a gestão analisa o perfil e a disponibilidade na divisão adequada. Com a aprovação, você recebe o convite para cadastro. A análise leva {clubTerms.review}.</p><a href="/requerimento" className="apt-faq__link">Abrir requerimento <span aria-hidden="true">↗</span></a></div>
+              </details>
+              <details name="apt-faq" {...faqHover} data-topic="courts">
+                <summary>Como são definidos os Courts?</summary>
+                <div className="apt-faq__answer"><p>Seu nível de jogo e a disponibilidade de vagas definem a divisão inicial. Depois, os resultados do ranking determinam promoção e rebaixamento.</p></div>
+              </details>
+              <details name="apt-faq" {...faqHover} data-topic="matches">
+                <summary>Quantos jogos acontecem por rodada?</summary>
+                <div className="apt-faq__answer"><p>Você recebe dois confrontos a cada quinze dias e tem 14 dias para combinar e realizar as partidas.</p></div>
+              </details>
+              <details name="apt-faq" {...faqHover} data-topic="member">
+                <summary>Onde acompanho o ranking e os pagamentos?</summary>
+                <div className="apt-faq__answer"><p>O ranking fica no Tweener. Na área do membro do APT, você acompanha assinatura, pagamentos e situação da participação. A participação custa {clubTerms.monthly}. O checkout de cartão é realizado no Asaas.</p><a href="/entrar" className="apt-faq__link">Acessar a área do membro <span aria-hidden="true">↗</span></a></div>
+              </details>
             </div>
           </div>
         </section>
 
-        <GlyphPortal className="apt-glyph" word="JOGAR" focusChar="O" interactive={false} scrollLength={1} fontFamily="Georgia, serif" fontWeight={700} enterLabel="Ver como participar" style={{ "--gp-paper": "#ecebe2", "--gp-ink": "var(--navy)", "--gp-field": "var(--navy)", "--gp-foreground": "var(--white)" }} background={<svg className="apt-glyph__court" viewBox="0 0 1200 900" fill="none" aria-hidden="true"><rect x="150" y="120" width="900" height="660" /><path d="M260 120v660M940 120v660M260 285h680M260 615h680M600 285v330M150 450h900" /></svg>} front={<div className="apt-glyph__front"><span>APT Tennis Club</span><span>Entrada por indicação e análise.</span></div>}>
+        <GlyphPortal className="apt-glyph" word="JOGAR" focusChar="O" interactive={false} scrollLength={1} fontFamily="Georgia, serif" fontWeight={700} enterLabel="Ver como participar" style={{ "--gp-paper": "#efeee6", "--gp-ink": "var(--navy)", "--gp-field": "var(--navy)", "--gp-foreground": "var(--white)" }} background={<svg className="apt-glyph__court" viewBox="0 0 1200 900" fill="none" aria-hidden="true"><rect x="150" y="120" width="900" height="660" /><path d="M260 120v660M940 120v660M260 285h680M260 615h680M600 285v330M150 450h900" /></svg>} front={<div className="apt-glyph__front"><span>APT Tennis Club</span><span>Entrada por indicação e análise.</span></div>}>
         <section className="apt-entry" id="entrada">
-          <div className="apt-entry__copy"><div className="apt-entry__brand"><Brand inverse /><span>APT Tennis Club · Brasília</span></div><h2>Entrada por indicação.<br />Admissão por análise.</h2><p>Informe quem o indicou e sua experiência no tênis. A gestão avalia o requerimento e a disponibilidade na divisão adequada. Se aprovado, você recebe um convite individual para cadastro.</p><ol className="apt-entry__steps" aria-label="Etapas de entrada"><li><span>01</span>Requerimento</li><li><span>02</span>Análise do perfil</li><li><span>03</span>Convite e cadastro</li></ol></div>
+          <div className="apt-entry__copy"><div className="apt-entry__brand"><Brand inverse /><span>APT Tennis Club · Brasília</span></div><h2>Entrada por indicação.<br />Admissão por análise.</h2><p>Informe quem o indicou e sua experiência no tênis. A gestão avalia o requerimento e a disponibilidade na divisão adequada. Se aprovado, você recebe um convite individual para cadastro.</p><ol className="apt-entry__steps" aria-label="Etapas de entrada"><li><span>01</span>Requerimento</li><li><span>02</span>Análise do perfil</li><li><span>03</span>Convite e cadastro</li></ol><p className="apt-entry__terms"><span>Participação: {clubTerms.monthly}</span><span>Análise em {clubTerms.review}</span></p></div>
           <a className="apt-pill apt-pill--light" href="/requerimento">Solicitar entrada <span aria-hidden="true">↗</span></a>
         </section>
         </GlyphPortal>
       </main>
+      <EntryFloat />
       <footer className="apt-footer">
         <div className="apt-footer__body">
           <div className="apt-footer__identity">
@@ -559,11 +531,12 @@ export function LandingPage() {
             <p>APT Tennis Club · Brasília</p>
           </div>
           <nav aria-label="Links do rodapé">
-            <div><h3>O clube</h3><ul><li><a href="#o-apt">O APT</a></li><li><a href="#ranking">Ranking</a></li><li><a href="#temporada">Temporada</a></li><li><a href="/calendario2026">Calendário</a></li></ul></div>
+            <div><h3>O clube</h3><ul><li><a href="#o-apt">O APT</a></li><li><a href="#ranking">Ranking</a></li></ul></div>
+            <div><h3>Jogos</h3><ul><li><a href="#temporada">Temporada</a></li><li><a href="/calendario2026">Calendário</a></li></ul></div>
             <div><h3>Participe</h3><ul><li><a href="/requerimento">Solicitar entrada</a></li><li><a href="/entrar">Área do membro</a></li><li><a href="#duvidas">Dúvidas frequentes</a></li></ul></div>
           </nav>
         </div>
-        <div className="apt-footer__base"><span>Desde 2025</span><span>Admissão por indicação e análise.</span></div>
+        <TennisFooterScene />
       </footer>
     </div>
   );
@@ -1625,4 +1598,253 @@ export function AdminPage() {
       {tab === "membros" && <><header className="admin-heading"><div><h2>Membros e cobranças</h2><p>Operação em tempo real, com conciliação segura.</p></div></header><div className="admin-toolbar"><label className="search-field"><Search size={18} aria-hidden="true" /><span className="sr-only">Buscar membro</span><input name="member-search" type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar nome, e-mail ou WhatsApp" /></label><label className="filter-field"><SlidersHorizontal size={18} aria-hidden="true" /><span className="sr-only">Filtrar membros</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value as typeof memberFilter)}><option value="all">Todos os estágios</option><option value="attention">Precisa de ação</option><option value="overdue">Dívida emitida vencida</option><option value="pix_renewal">Pix a renovar</option><option value="configuration">Configuração pendente</option><option value="divergence">Divergência financeira</option><option value="communication">Falha / revisão de comunicação</option><option value="active">Ativos</option><option value="cancellation_requested">Cancelamento</option><option value="inactive">Inativos</option></select></label><span className="records-count">{filteredMembers.length} de {members.length}</span><div className="view-switch" role="group" aria-label="Visualização dos membros"><button type="button" aria-pressed={memberView === "table"} onClick={() => setMemberView("table")}><Table2 size={18} aria-hidden="true" />Tabela</button><button type="button" aria-pressed={memberView === "board"} onClick={() => setMemberView("board")}><LayoutDashboard size={18} aria-hidden="true" />Quadro</button></div></div>{financialError && <p className="field-error" role="alert">{financialError}</p>}<PaymentReminderQueue members={members} /><div className="member-view">{memberView === "table" ? <MemberRecordsTable members={filteredMembers} onManage={openMember} onResendCheckout={resendMemberCheckout} remindingMemberId={checkoutRemindingMemberId} /> : <MemberOperationsKanban key={mobileDefaultStage} members={filteredMembers} onManage={openMember} onResendCheckout={resendMemberCheckout} remindingMemberId={checkoutRemindingMemberId} mobileDefaultStage={mobileDefaultStage} />}</div><details className="member-addition"><summary><Plus size={20} aria-hidden="true" /><span>Adicionar atleta ou importar base</span><ChevronRight size={18} aria-hidden="true" /></summary><MemberImportPanel onImported={refreshMembers} /></details>{filteredMembers.length === 0 && <div className="empty-state"><strong>Nenhum membro encontrado.</strong><span>Ajuste a busca ou o filtro.</span></div>}{(selectedMember || memberLoading) && <MemberManagementDetail member={selectedMember} loading={memberLoading} saving={memberSaving} refreshing={memberRefreshing} error={memberError} onClose={() => { memberGeneration.current++; setMemberError(""); setSelectedMember(null); setMemberLoading(false); setMemberSaving(false); setMemberRefreshing(false); memberTrigger.current?.focus(); }} onSave={updateMember} onRefresh={refreshMemberBilling} onDeleted={(id) => { setMembers((current) => current.filter((member) => member.id !== id)); setSelectedMember(null); setNotice("Cadastro incompleto excluído."); }} />}</>}
     </section>
   </main></div>;
+}
+
+type Court = { name: string; tone: string; position: string; description: string; photo: string; crop: string; alt: string };
+
+// Stacking Cards, after 21st.dev references (danielpetho/stacking-cards, aakashmehra/scroll-stacking-cards): sticky cards that recede as the next one arrives.
+function CourtStack({ courts, reducedMotion }: { courts: Court[]; reducedMotion: boolean }) {
+  const stackRef = useRef<HTMLOListElement>(null);
+  const { scrollYProgress } = useScroll({ target: stackRef, offset: ["start start", "end end"] });
+  return <ol ref={stackRef} className="apt-court-stack" aria-label="Divisões do ranking">
+    {courts.map((court, index) => <CourtCard key={court.name} court={court} index={index} total={courts.length} progress={scrollYProgress} reducedMotion={reducedMotion} />)}
+  </ol>;
+}
+
+function CourtCard({ court, index, total, progress, reducedMotion }: { court: Court; index: number; total: number; progress: MotionValue<number>; reducedMotion: boolean }) {
+  const settled = 1 - (total - 1 - index) * 0.045;
+  const scale = useTransform(progress, [index / total, 1], [1, settled]);
+  const shade = useTransform(progress, [index / total, 1], [0, (total - 1 - index) * 0.12]);
+  return <li className={`apt-court-card apt-court--${court.tone}`} style={{ "--court-index": index } as CSSProperties}>
+    <motion.div className="apt-court-card__inner" style={reducedMotion ? undefined : { scale }}>
+      <div className="apt-court-card__copy">
+        <div className="apt-court-card__meta"><span>{court.position}</span><span aria-hidden="true">0{index + 1} / 0{total}</span></div>
+        <div><h3>{court.name}</h3><p>{court.description}</p><p className="apt-court-card__move">{index === 0 ? `Os ${clubTerms.movers} últimos descem para o Court 1.` : index === total - 1 ? `Os ${clubTerms.movers} melhores sobem para o Court ${index - 1 || "Central"}.` : `Os ${clubTerms.movers} melhores sobem e os ${clubTerms.movers} últimos descem.`}</p></div>
+      </div>
+      <figure className="apt-court-card__photo">
+        <Image {...blurProps(court.photo)} src={court.photo} alt={court.alt} fill quality={90} sizes="(max-width: 767px) 100vw, 50vw" style={{ objectPosition: court.crop }} loading="lazy" />
+      </figure>
+      {!reducedMotion && <motion.span className="apt-court-card__shade" style={{ opacity: shade }} aria-hidden="true" />}
+    </motion.div>
+  </li>;
+}
+
+type HeroPhoto = { src: string; width: number; height: number; sizes: string; alt: string; turn: number; lift: number; depth: number; spread: number; lead?: boolean };
+const heroFan: HeroPhoto[] = [
+  { src: "/apt-editorial-clay.jpeg", width: 736, height: 1211, sizes: "(max-width: 767px) 32vw, (max-width: 920px) 30vw, 280px", alt: "Um saque e sua sombra sobre o saibro", turn: -6, lift: 16, depth: 1.25, spread: 1 },
+  { src: "/apt-editorial-hero.jpeg", width: 736, height: 981, sizes: "(max-width: 767px) 35vw, (max-width: 920px) 33vw, 310px", alt: "Jogador junto à rede, entre dois pontos", turn: 0, lift: -8, depth: 0.55, spread: 0, lead: true },
+  { src: "/apt-assets/tennis-green-racket.webp", width: 736, height: 1277, sizes: "(max-width: 767px) 32vw, (max-width: 920px) 30vw, 280px", alt: "Raquete vermelha e o passo de um jogador na quadra verde", turn: 6, lift: 16, depth: 1.25, spread: -1 },
+];
+
+const heroSets: HeroPhoto[][] = [
+  heroFan,
+  [
+    { src: "/apt-assets/clay-court-empty.jpg", width: 675, height: 1200, sizes: "(max-width: 767px) 32vw, (max-width: 920px) 30vw, 280px", alt: "Quadra de saibro vazia, com as linhas e a rede sob a luz da tarde", turn: -6, lift: 16, depth: 1.25, spread: 1 },
+    { src: "/apt-assets/player-effort-bw.jpg", width: 736, height: 1308, sizes: "(max-width: 767px) 35vw, (max-width: 920px) 33vw, 310px", alt: "Jogador curvado sobre os joelhos depois do ponto, coberto de saibro", turn: 0, lift: -8, depth: 0.55, spread: 0, lead: true },
+    { src: "/apt-assets/indoor-court-night.jpg", width: 736, height: 1308, sizes: "(max-width: 767px) 32vw, (max-width: 920px) 30vw, 280px", alt: "Jogador em movimento numa quadra coberta, sob as luzes", turn: 6, lift: 16, depth: 1.25, spread: -1 },
+  ],
+  [
+    { src: "/apt-ritual-figma.jpg", width: 900, height: 1125, sizes: "(max-width: 767px) 32vw, (max-width: 920px) 30vw, 280px", alt: "Bola e raquete nas mãos, junto à rede", turn: -6, lift: 16, depth: 1.25, spread: 1 },
+    { src: "/apt-assets/tennis-black-white.jpeg", width: 736, height: 981, sizes: "(max-width: 767px) 35vw, (max-width: 920px) 33vw, 310px", alt: "Fotografia em preto e branco de um jogador executando um golpe em quadra", turn: 0, lift: -8, depth: 0.55, spread: 0, lead: true },
+    { src: "/apt-assets/player-step-white.jpg", width: 736, height: 920, sizes: "(max-width: 767px) 32vw, (max-width: 920px) 30vw, 280px", alt: "O passo de um jogador de tênis branco, com a raquete na mão", turn: 6, lift: 16, depth: 1.25, spread: -1 },
+  ],
+];
+// The server always renders the first set (the page is static); each browser visit then picks one at random.
+let heroSetChoice: number | undefined;
+const noSubscription = () => () => {};
+const pickHeroSet = () => (heroSetChoice ??= Math.floor(Math.random() * heroSets.length));
+
+// Hero fan, after 21st.dev references (scrollxui/hero-with-cards, cnippet-dev/parallax-floating, sarmaasis/perspective-gallery):
+// the three photos open from a stack on load, then lean toward the pointer with depth.
+function HeroFan({ photoY, reducedMotion }: { photoY: MotionValue<string>; reducedMotion: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const photos = heroSets[useSyncExternalStore(noSubscription, pickHeroSet, () => 0)];
+  const pointerX = useMotionValue(0);
+  const pointerY = useMotionValue(0);
+  const intro = useMotionValue(1);
+  const smoothX = useSpring(pointerX, { stiffness: 110, damping: 18, mass: 0.7 });
+  const smoothY = useSpring(pointerY, { stiffness: 110, damping: 18, mass: 0.7 });
+  useEffect(() => {
+    if (reducedMotion) { intro.set(0); return; }
+    const opening = animate(intro, 0, { duration: 1.5, delay: 0.3, ease: [0.22, 1, 0.36, 1] });
+    return () => opening.stop();
+  }, [intro, reducedMotion]);
+  useEffect(() => {
+    const stage = ref.current?.closest<HTMLElement>(".apt-hero");
+    if (!stage || reducedMotion || !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+    const move = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") return;
+      const rect = stage.getBoundingClientRect();
+      pointerX.set((event.clientX - rect.left) / rect.width * 2 - 1);
+      pointerY.set((event.clientY - rect.top) / rect.height * 2 - 1);
+    };
+    const leave = () => { pointerX.set(0); pointerY.set(0); };
+    stage.addEventListener("pointermove", move);
+    stage.addEventListener("pointerleave", leave);
+    return () => { stage.removeEventListener("pointermove", move); stage.removeEventListener("pointerleave", leave); };
+  }, [pointerX, pointerY, reducedMotion]);
+  return <div ref={ref} className="apt-hero__visual" role="group" aria-label="O tênis, dentro e além da quadra">
+    {photos.map(photo => <HeroCard key={photo.src} photo={photo} pointerX={smoothX} pointerY={smoothY} intro={intro} photoY={photo.lead && !reducedMotion ? photoY : undefined} />)}
+  </div>;
+}
+
+function HeroCard({ photo, pointerX, pointerY, intro, photoY }: { photo: HeroPhoto; pointerX: MotionValue<number>; pointerY: MotionValue<number>; intro: MotionValue<number>; photoY?: MotionValue<string> }) {
+  const x = useTransform([pointerX, intro], ([px, k]: number[]) => px * 16 * photo.depth + k * photo.spread * 150);
+  const y = useTransform([pointerY, intro], ([py, k]: number[]) => photo.lift + py * 10 * photo.depth + k * 24);
+  const rotate = useTransform(intro, k => photo.turn * (1 - k));
+  const rotateY = useTransform(pointerX, px => px * 8 * photo.depth);
+  const rotateX = useTransform(pointerY, py => py * -6 * photo.depth);
+  const scale = useTransform(intro, k => 1 - k * 0.06);
+  const image = <Image {...blurProps(photo.src)} src={photo.src} width={photo.width} height={photo.height} sizes={photo.sizes} alt={photo.alt} loading="eager" fetchPriority={photo.lead ? "high" : undefined} />;
+  return <motion.figure style={{ x, y, rotate, rotateX, rotateY, scale }}>
+    {photo.lead ? <motion.div className="apt-hero__photo" style={photoY ? { y: photoY } : undefined}>{image}</motion.div> : image}
+    <span className="apt-hero__sheen" aria-hidden="true" />
+  </motion.figure>;
+}
+
+const seasonActs = [
+  { num: "01", rhythm: "A cada partida", title: "Pontuação por resultado", text: "Vitórias, sets e games entram na classificação.", src: "/apt-assets/indoor-court-night.jpg", crop: "50% 55%", alt: "Jogador em movimento numa quadra coberta, sob as luzes" },
+  { num: "02", rhythm: "Ao fim do ciclo", title: "Promoção e rebaixamento", text: "No fim de cada ciclo, a classificação define quem sobe e quem desce.", src: "/apt-assets/player-effort-bw.jpg", crop: "50% 40%", alt: "Jogador curvado sobre os joelhos depois do ponto, coberto de saibro" },
+  { num: "03", rhythm: "O encontro em quadra", title: "APT Finals", text: "Os melhores de cada Court se encontram no torneio presencial.", src: "/apt-finals-2027.png", crop: "66% 50%", alt: "Quatro jogadores lado a lado em uma quadra iluminada à noite" },
+];
+
+// Season carousel, after 21st.dev "Apple Card Carousel" (shadcnspace/carousel-08): tall photo cards with captions,
+// native scroll-snap so trackpad, touch and keyboard work, mouse drag, and previous/next controls.
+function SeasonCarousel() {
+  const trackRef = useRef<HTMLOListElement>(null);
+  const [edges, setEdges] = useState({ start: true, end: false });
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const update = () => setEdges({ start: track.scrollLeft < 8, end: track.scrollLeft + track.clientWidth > track.scrollWidth - 8 });
+    update();
+    track.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    let drag: { x: number; left: number; moved: boolean } | null = null;
+    const down = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse" || event.button !== 0) return;
+      drag = { x: event.clientX, left: track.scrollLeft, moved: false };
+      track.setPointerCapture(event.pointerId);
+    };
+    const move = (event: PointerEvent) => {
+      if (!drag) return;
+      const delta = event.clientX - drag.x;
+      if (Math.abs(delta) > 4 && !drag.moved) { drag.moved = true; track.dataset.dragging = ""; }
+      if (drag.moved) track.scrollLeft = drag.left - delta;
+    };
+    const up = (event: PointerEvent) => {
+      if (!drag) return;
+      drag = null;
+      delete track.dataset.dragging;
+      if (track.hasPointerCapture(event.pointerId)) track.releasePointerCapture(event.pointerId);
+    };
+    track.addEventListener("pointerdown", down);
+    track.addEventListener("pointermove", move);
+    track.addEventListener("pointerup", up);
+    track.addEventListener("pointercancel", up);
+    return () => {
+      track.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      track.removeEventListener("pointerdown", down);
+      track.removeEventListener("pointermove", move);
+      track.removeEventListener("pointerup", up);
+      track.removeEventListener("pointercancel", up);
+    };
+  }, []);
+  const step = (direction: number) => {
+    const track = trackRef.current;
+    const card = track?.querySelector<HTMLElement>(".apt-season-card");
+    if (!track || !card) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    track.scrollBy({ left: direction * (card.offsetWidth + parseFloat(getComputedStyle(track).columnGap || "0")), behavior: reduce ? "auto" : "smooth" });
+  };
+  return <section className="apt-cycle apt-season" id="temporada">
+    <header className="apt-cycle__heading">
+      <div><h2>Quatro ciclos.<br /><em>Uma temporada anual.</em></h2></div>
+      <div><p>Quatro ciclos ao longo do ano, com sorteios quinzenais e mudanças de divisão ao fim de cada ciclo.</p><a className="apt-text-link" href="/calendario2026">Ver calendário da temporada <span aria-hidden="true">↗</span></a></div>
+    </header>
+    <ol ref={trackRef} className="apt-season__track" aria-label="Etapas da temporada" tabIndex={0}>
+      {seasonActs.map(act => <li key={act.num} className="apt-season-card">
+        <Image {...blurProps(act.src)} src={act.src} alt={act.alt} fill quality={90} sizes="(max-width: 767px) 80vw, 380px" style={{ objectPosition: act.crop }} loading="lazy" draggable={false} />
+        <div className="apt-season-card__top"><span className="apt-season-card__num" aria-hidden="true">{act.num}</span><span>{act.rhythm}</span><h3>{act.title}</h3></div>
+        <p>{act.text}</p>
+      </li>)}
+    </ol>
+    <div className="apt-season__controls">
+      <button type="button" aria-label="Etapa anterior" onClick={() => step(-1)} disabled={edges.start}><ArrowLeft size={18} aria-hidden="true" /></button>
+      <button type="button" aria-label="Próxima etapa" onClick={() => step(1)} disabled={edges.end}><ArrowRight size={18} aria-hidden="true" /></button>
+    </div>
+  </section>;
+}
+
+const roundsOpening = { image: "/apt-assets/apt-court-photographic.webp" };
+
+const roundFacts = [
+  { num: "2", title: "Jogos por rodada", text: "A cada quinze dias, você recebe dois confrontos para combinar.", image: "/apt-assets/apt-balls-photoshop.webp", alt: "Bolas de tênis com a marca APT na bola central" },
+  { num: "14", title: "Dias para jogar", text: "Combine o horário com seu adversário, entre em quadra e registre o resultado dentro do prazo.", image: "/apt-assets/apt-club-outdoor.webp", alt: "Três painéis ao ar livre com fotografias de tênis e a marca APT ao centro" },
+];
+
+// Rounds list, after 21st.dev "Hover Image List" (educalvolpz/hover-image-list) and "Reveal images" (hari):
+// large typographic rows; on a mouse device the row's photograph follows the cursor and leans with its speed.
+function RoundsList({ children }: { children: ReactNode }) {
+  const reduced = useReducedMotion();
+  const canFollow = !reduced;
+  // -1 is the fold heading, which shows the opening photograph; 0..n are the rows.
+  const [active, setActive] = useState<number | null>(null);
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const skew = useMotionValue(0);
+  const springX = useSpring(x, { damping: 26, stiffness: 260 });
+  const springY = useSpring(y, { damping: 26, stiffness: 260 });
+  const springSkew = useSpring(skew, { damping: 18, stiffness: 220 });
+  const last = useRef<{ x: number; t: number } | null>(null);
+  const floatRef = useRef<HTMLDivElement>(null);
+  const move = (event: ReactPointerEvent<HTMLElement>) => {
+    if (!canFollow || event.pointerType !== "mouse") return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const localX = event.clientX - rect.left;
+    const now = performance.now();
+    if (last.current) { const dt = Math.min(now - last.current.t, 50); if (dt > 0) skew.set(Math.max(-8, Math.min(8, (localX - last.current.x) / dt * 1.2))); }
+    last.current = { x: localX, t: now };
+    // Keep the photograph inside the fold, to the right of the pointer, at any width.
+    const width = floatRef.current?.offsetWidth ?? 280, height = floatRef.current?.offsetHeight ?? 340;
+    x.set(Math.max(0, Math.min(localX + 28, rect.width - width)));
+    y.set(Math.max(-height / 3, Math.min(event.clientY - rect.top - height / 2, rect.height - height * 0.66)));
+  };
+  const photo = active === null ? null : active < 0 ? roundsOpening : roundFacts[active];
+  return <section className="apt-product" id="ranking" onPointerMove={move} onPointerLeave={() => { setActive(null); last.current = null; skew.set(0); }}>
+    <div onPointerEnter={event => { if (event.pointerType === "mouse") setActive(-1); }}>{children}</div>
+    <dl className="apt-rounds">
+    {roundFacts.map((fact, index) => <div key={fact.num} className="apt-rounds__row" data-active={active === index || undefined} onPointerEnter={event => { if (event.pointerType === "mouse") setActive(index); }}>
+      <dt><span className="apt-rounds__num">{fact.num}</span><span className="apt-rounds__title">{fact.title}</span></dt>
+      <span className="apt-rounds__thumb" aria-hidden="true"><Image {...blurProps(fact.image)} src={fact.image} alt="" fill sizes="96px" quality={90} /></span>
+      <dd>{fact.text}</dd>
+    </div>)}
+    </dl>
+    {canFollow && <motion.div ref={floatRef} className="apt-rounds__float" aria-hidden="true" style={{ x: springX, y: springY, skewX: springSkew }}>
+      <AnimatePresence>
+        {photo && <motion.div key={photo.image} className="apt-rounds__image" initial={{ opacity: 0, scale: 0.92, rotate: -2 }} animate={{ opacity: 1, scale: 1, rotate: 0 }} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}>
+          <Image src={photo.image} alt="" fill sizes="280px" quality={90} />
+        </motion.div>}
+      </AnimatePresence>
+    </motion.div>}
+  </section>;
+}
+
+// Persistent entry action: appears once the hero leaves the screen and hides while the entry block or footer is visible.
+function EntryFloat() {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const hero = document.querySelector(".apt-hero");
+    const ends = [document.querySelector("#entrada"), document.querySelector(".apt-footer")].filter((node): node is Element => Boolean(node));
+    if (!hero || typeof IntersectionObserver === "undefined") return;
+    const state = new Map<Element, boolean>();
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) state.set(entry.target, entry.isIntersecting);
+      setVisible(!state.get(hero) && !ends.some(node => state.get(node)));
+    }, { threshold: 0 });
+    [hero, ...ends].forEach(node => observer.observe(node));
+    return () => observer.disconnect();
+  }, []);
+  return <a className="apt-entry-float" href="/requerimento" data-visible={visible || undefined} aria-hidden={!visible} tabIndex={visible ? 0 : -1}>Solicitar entrada <span aria-hidden="true">↗</span></a>;
 }

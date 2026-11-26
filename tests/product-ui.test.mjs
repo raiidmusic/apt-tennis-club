@@ -24,6 +24,9 @@ const require = createRequire(import.meta.url);
 const glyphModule = { exports: {} };
 const glyphSource = ts.transpileModule(readFileSync(new URL('../components/ui/glyph-portal.tsx', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 } }).outputText;
 vm.runInNewContext(glyphSource, { exports: glyphModule.exports, require, React });
+const footerModule = { exports: {} };
+const footerSource = ts.transpileModule(`${readFileSync(new URL('../components/ui/tennis-footer-scene.tsx', import.meta.url), 'utf8')}\nexport { dropStart, makeBody, stepBodies };`, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 } }).outputText;
+vm.runInNewContext(footerSource, { exports: footerModule.exports, require, React });
 const source = ts.transpileModule(`${readFileSync(new URL('../app/apt-app.tsx', import.meta.url), 'utf8')}\nexport { MemberRecordsTable, ManagementDashboard, MemberManagementDetail, MemberImportPanel, ApplicationReviewDetail, HeroRotatingStatement };`, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 } }).outputText;
 
 // Render and invoke the shipped components and handlers. Network is always local fixture data.
@@ -36,9 +39,9 @@ function product({ fetch, search = '', initial = {}, document, reducedMotion = f
     useMemo: (calculate) => calculate(), useRef: (current) => { const index = refCursor++; return references[index] ||= { current }; },
     useEffect(effect, dependencies = []) { const index = effectCursor++; const previous = effectDependencies[index]; if (!previous || dependencies.some((value, i) => value !== previous[i])) effects.push(() => { cleanups[index]?.(); const cleanup = effect(); cleanups[index] = typeof cleanup === 'function' ? cleanup : undefined; }); effectDependencies[index] = dependencies; },
   };
-  const context = vm.createContext({ exports: {}, React: hooks, document, IntersectionObserver: intersectionObserver, CSS: { supports: () => scrollTimeline }, URL, URLSearchParams, Intl, FormData, Date, queueMicrotask, fetch: fetch || (() => { throw new Error('Unexpected request'); }), window: { innerHeight: 500, location: { search, hash: '', origin: 'https://apt.invalid', assign: (path) => assigned.push(path) }, matchMedia: () => ({ matches: finePointer }), setTimeout: (callback) => { const id = ++nextTimer; timers.set(id, callback); return id; }, clearTimeout: (id) => timers.delete(id) }, require: (name) => name === 'react' ? hooks : name === 'lucide-react' ? require(name) : name === 'framer-motion' ? { motion: { div: 'div', aside: 'aside', span: 'span' }, useReducedMotion: () => reducedMotion, useScroll: () => ({ scrollYProgress: 0 }), useTransform: (_progress, _input, output) => output[1] } : name === 'next/image' ? { default: 'img' } : name === 'next/dynamic' ? { default: () => () => null } : name === '@/components/ui/sidebar' ? { ProductSidebar: () => null } : name === '@/components/ui/advanced-stats' ? { ClippedAreaChart: () => null } : name.endsWith('/billing-view') ? billing : name.endsWith('/billing-state') ? state : name.endsWith('/member-import') ? imports : (() => { throw new Error(`Unexpected import ${name}`); })() });
+  const context = vm.createContext({ exports: {}, React: hooks, document, IntersectionObserver: intersectionObserver, CSS: { supports: () => scrollTimeline }, URL, URLSearchParams, Intl, FormData, Date, queueMicrotask, fetch: fetch || (() => { throw new Error('Unexpected request'); }), window: { innerHeight: 500, location: { search, hash: '', origin: 'https://apt.invalid', assign: (path) => assigned.push(path) }, matchMedia: () => ({ matches: finePointer }), setTimeout: (callback) => { const id = ++nextTimer; timers.set(id, callback); return id; }, clearTimeout: (id) => timers.delete(id) }, require: (name) => name === 'react' ? hooks : name === 'lucide-react' ? require(name) : name === 'framer-motion' ? { motion: { div: 'div', aside: 'aside', span: 'span', figure: 'figure' }, AnimatePresence: ({ children }) => children ?? null, animate: () => ({ stop() {} }), useMotionValue: (value) => ({ get: () => value, set() {} }), useSpring: (value) => value, useReducedMotion: () => reducedMotion, useScroll: () => ({ scrollYProgress: 0 }), useTransform: (_progress, input, output) => Array.isArray(output) ? output[1] : typeof input === 'function' ? 0 : undefined } : name === 'next/image' ? { default: 'img' } : name === 'next/dynamic' ? { default: () => () => null } : name === '@/components/ui/sidebar' ? { ProductSidebar: () => null } : name === '@/components/ui/advanced-stats' ? { ClippedAreaChart: () => null } : name.endsWith('/billing-view') ? billing : name.endsWith('/billing-state') ? state : name.endsWith('/member-import') ? imports : name === './apt-blur' ? { blurProps: () => ({}) } : (() => { throw new Error(`Unexpected import ${name}`); })() });
   const resolve = context.require;
-  context.require = (name) => name === '@/components/ui/glyph-portal' ? glyphModule.exports : resolve(name);
+  context.require = (name) => name === '@/components/ui/glyph-portal' ? glyphModule.exports : name === '@/components/ui/tennis-footer-scene' ? footerModule.exports : resolve(name);
   vm.runInContext(source, context);
   return { values, assigned, references, timers, exports: context.exports,
     render(name, props) { cursor = 0; effectCursor = 0; refCursor = 0; return context.exports[name](props); },
@@ -81,84 +84,26 @@ test('hero has no user stop control and keeps the accessible headline static wit
   }
 });
 
-test('highlighting a Court changes only the editorial emphasis and keeps every division readable', () => {
-  const ui = product();
-  let tree = ui.render('LandingPage');
-  const courtButtons = () => nodes(tree, node => node.type === 'button' && node.props['aria-label']?.startsWith('Destacar '));
-  assert.equal(courtButtons().length, 4);
-  assert.equal(courtButtons().filter(node => node.props['aria-pressed']).length, 1);
-  courtButtons().find(node => node.props['aria-label'] === 'Destacar Court 2').props.onClick();
-  tree = ui.render('LandingPage');
-  assert.equal(courtButtons().find(node => node.props['aria-pressed']).props['aria-label'], 'Destacar Court 2');
-  const portrait = nodes(tree, node => node.props.className?.startsWith('apt-courts__portrait '))[0];
-  assert.match(portrait.props.className, /apt-court--two/);
-  const list = nodes(tree, node => node.props.className === 'apt-courts__list')[0];
-  const html = renderToStaticMarkup(list);
-  for (const name of ['Central Court', 'Court 1', 'Court 2', 'Court 3']) assert.match(html, new RegExp(name));
-  assert.match(html, /A divisão de maior nível do APT/);
-  assert.match(html, /A base da escada competitiva/);
-  for (const node of nodes(list, node => ['article', 'h3', 'p'].includes(node.type))) {
-    assert.equal(Boolean(node.props.hidden || node.props.inert || node.props['aria-hidden']), false);
-  }
-  assert.deepEqual(ui.assigned, []);
+test('Courts stack every division in reading order with its current movement rule', () => {
+  const html = renderToStaticMarkup(product().render('LandingPage'));
+  const order = ['Central Court', 'Court 1', 'Court 2', 'Court 3'].map(name => html.indexOf(`<h3>${name}</h3>`));
+  assert.ok(order.every((position, index) => position > 0 && (index === 0 || position > order[index - 1])));
+  assert.match(html, /A divisão de maior nível do APT/); assert.match(html, /A base da escada competitiva/);
+  assert.match(html, /Os 3 últimos descem para o Court 1\./);
+  assert.match(html, /Os 3 melhores sobem para o Court 2\./);
+  assert.equal((html.match(/Os 3 melhores sobem e os 3 últimos descem\./g) ?? []).length, 2);
+  assert.doesNotMatch(html, /aria-pressed/);
 });
 
-test('Courts cycle only while visible, restart after manual selection and stop for hidden tabs or reduced motion', async () => {
-  const observers = [], listeners = new Map();
-  class Observer {
-    constructor(callback) { this.callback = callback; observers.push(this); }
-    observe() {}
-    disconnect() { this.disconnected = true; }
-  }
-  const document = { hidden: false, addEventListener: (name, callback) => listeners.set(name, callback), removeEventListener: (name) => listeners.delete(name) };
-  const ui = product({ document, intersectionObserver: Observer });
-  let tree = ui.render('LandingPage');
-  nodes(tree, node => node.props.className === 'apt-courts')[0].props.ref.current = {};
-  await ui.mount();
-  assert.equal(ui.timers.size, 0);
-  const show = () => observers.at(-1).callback([{ isIntersecting: true, intersectionRatio: 0.5 }]);
-  const selected = () => nodes(tree, node => node.type === 'button' && node.props['aria-pressed'])[0].props['aria-label'];
-  show(); assert.equal(ui.timers.size, 1);
-  for (const name of ['Court 1', 'Court 2', 'Court 3', 'Central Court']) {
-    ui.advanceTimer(); tree = ui.render('LandingPage'); await ui.mount();
-    assert.equal(selected(), `Destacar ${name}`);
-    show(); assert.equal(ui.timers.size, 1);
-  }
-  nodes(tree, node => node.props['aria-label'] === 'Destacar Court 2')[0].props.onClick();
-  tree = ui.render('LandingPage'); await ui.mount();
-  assert.equal(selected(), 'Destacar Court 2');
-  assert.equal(ui.timers.size, 0); show(); assert.equal(ui.timers.size, 1);
-  document.hidden = true; listeners.get('visibilitychange')(); assert.equal(ui.timers.size, 0);
-  document.hidden = false; listeners.get('visibilitychange')(); assert.equal(ui.timers.size, 1);
-  observers.at(-1).callback([{ isIntersecting: false, intersectionRatio: 0 }]); assert.equal(ui.timers.size, 0);
-  show(); ui.unmount(); assert.equal(ui.timers.size, 0); assert.equal(listeners.size, 0);
-  assert.ok(observers.every(observer => observer.disconnected));
-  const calm = product({ document, reducedMotion: true, intersectionObserver: Observer });
-  tree = calm.render('LandingPage'); nodes(tree, node => node.props.className === 'apt-courts')[0].props.ref.current = {};
-  await calm.mount(); assert.equal(calm.timers.size, 0); assert.equal(listeners.size, 0); calm.unmount();
-});
-
-test('photo pointer drift starts after spreading, resets on leave and stays static for touch, reduced motion or unsupported timelines', () => {
-  const values = new Map();
-  let progress = 0.5;
-  const stage = { offsetHeight: 300, style: { setProperty: (name, value) => values.set(name, value) }, getBoundingClientRect: () => ({ left: 20, top: 0, width: 600, height: 500 }), parentElement: { offsetHeight: 850, getBoundingClientRect: () => ({ top: -350 * progress }) } };
-  const getStage = options => nodes(product(options).render('LandingPage'), node => node.props.className === 'apt-spread__stage')[0];
-  const frame = getStage();
-  const pointer = { pointerType: 'mouse', currentTarget: stage, clientX: 620, clientY: 500 };
-  frame.props.onPointerMove(pointer);
-  assert.ok([...values.values()].every(value => value === '0px'));
-  progress = 0.95;
-  frame.props.onPointerMove(pointer);
-  assert.ok(parseFloat(values.get('--apt-pointer-x')) > 0 && parseFloat(values.get('--apt-pointer-x')) <= 26);
-  assert.ok(parseFloat(values.get('--apt-pointer-y')) > 0 && parseFloat(values.get('--apt-pointer-y')) <= 22);
-  frame.props.onPointerLeave({ currentTarget: stage });
-  assert.ok([...values.values()].every(value => value === '0px'));
-  for (const options of [{ reducedMotion: true }, { finePointer: false }, { scrollTimeline: false }]) {
-    values.clear(); getStage(options).props.onPointerMove(pointer); assert.equal(values.size, 0);
-  }
-  values.clear(); frame.props.onPointerMove({ ...pointer, pointerType: 'touch' }); assert.equal(values.size, 0);
-  progress = 1.2; frame.props.onPointerMove(pointer); assert.ok(parseFloat(values.get('--apt-pointer-x')) > 0);
-  frame.props.onPointerLeave({ currentTarget: stage }); assert.ok([...values.values()].every(value => value === '0px'));
+test('Beyond the Court photos are described and the season carousel has labelled controls', () => {
+  const html = renderToStaticMarkup(product().render('LandingPage'));
+  const start = html.indexOf('class="apt-expand"'), gallery = html.slice(start, html.indexOf('</section>', start));
+  assert.equal((gallery.match(/<figure/g) ?? []).length, 5);
+  assert.doesNotMatch(gallery, /alt=""/);
+  assert.match(html, /aria-label="Etapas da temporada"/);
+  assert.match(html, /aria-label="Etapa anterior" disabled=""/);
+  assert.match(html, /aria-label="Próxima etapa"/);
+  assert.match(html, /Participação: R\$ 22,90 por mês/); assert.match(html, /Análise em até 3 dias/);
 });
 
 test('the closing portal server-renders the real invitation and a direct entry link before any canvas or motion', () => {
@@ -428,8 +373,9 @@ test('landing renders the actual member, calendar and enrollment destinations wi
     assert.ok(links.some((node) => node.props.href === destination), `Navigation keeps ${destination}`);
   }
   const hero = nodes(tree, (node) => node.props.className === 'apt-hero')[0];
-  const photo = nodes(hero, (node) => node.type === 'img' && node.props.fetchPriority === 'high')[0];
-  assert.ok(photo); assert.equal(Number(photo.props.width), 736); assert.equal(Number(photo.props.height), 981);
+  const heroHtml = renderToStaticMarkup(hero);
+  assert.equal((heroHtml.match(/<img[^>]+fetchPriority="high"[^>]*>/gi) ?? []).length, 1);
+  assert.match(heroHtml, /<img[^>]+width="736"[^>]+height="981"[^>]+fetchPriority="high"/i);
   assert.ok(nodes(hero, (node) => node.type === 'a' && node.props.href === '/requerimento').length);
   const faq = nodes(tree, (node) => node.type === 'details');
   assert.equal(faq.length, 5); assert.equal(faq[0].props.open, true);
@@ -438,17 +384,21 @@ test('landing renders the actual member, calendar and enrollment destinations wi
   assert.match(html, /O ranking fica no Tweener/);
 });
 
-test('landing footer groups real club and member destinations without placeholder links or forms', () => {
+test('landing footer groups real destinations and lets visitors replay the decoration', () => {
   const ui = product();
   const footer = nodes(ui.render('LandingPage'), (node) => node.type === 'footer')[0];
   const links = nodes(footer, (node) => node.type === 'a');
   assert.deepEqual(links.map((node) => node.props.href), ['#o-apt', '#ranking', '#temporada', '/calendario2026', '/requerimento', '/entrar', '#duvidas']);
   assert.equal(nodes(footer, (node) => node.type === 'nav')[0].props['aria-label'], 'Links do rodapé');
-  assert.equal(nodes(footer, (node) => node.type === 'form' || node.type === 'input' || node.type === 'button').length, 0);
   const html = renderToStaticMarkup(footer);
+  assert.doesNotMatch(html, /<(?:form|input)\b/);
+  assert.match(html, /<button[^>]+type="button"[^>]*><span>Soltar as bolas de novo<\/span><\/button>/);
+  assert.equal((html.match(/<img[^>]+src="\/apt-assets\/footer-tennis-ball\.webp"/g) ?? []).length, 6);
   assert.match(html, /O clube/); assert.match(html, /Participe/); assert.match(html, /Beyond the Court/);
   assert.match(html, /Desde 2025/);
-  assert.doesNotMatch(html, /APT TENNIS/);
+  assert.match(html, /class="apt-footer__wordmark"/);
+  const lettering = Array.from(html.matchAll(/class="apt-footer__letter">([^<]+)<\/span>/g), ([, letter]) => letter).join('');
+  assert.equal(lettering.replaceAll('\u00a0', ' '), 'APT TENNIS');
   const closing = nodes(ui.render('LandingPage'), (node) => node.props.id === 'entrada')[0];
   const actions = nodes(closing, (node) => node.type === 'a');
   assert.equal(actions.length, 1); assert.equal(actions[0].props.href, '/requerimento');
@@ -456,18 +406,38 @@ test('landing footer groups real club and member destinations without placeholde
   assert.match(renderToStaticMarkup(closing), /Se aprovado/);
 });
 
+test('footer balls fall from above, bounce on the floor, and push each other apart', () => {
+  const { dropStart, makeBody, stepBodies } = footerModule.exports;
+  const world = { w: 500, h: 300, floor: 10, gravity: 2600, bounce: 0.32 };
+  const ball = makeBody(35);
+  dropStart(ball, 0, 1, world, () => 0.5);
+  assert.ok(ball.y - ball.r > world.h);
+  let bounced = false;
+  for (let step = 0; step < 150 && !bounced; step++) {
+    const [hit] = stepBodies([ball], world, 1 / 180, null);
+    bounced = hit > 0 && ball.vy > 0;
+  }
+  assert.ok(bounced);
+  const neighbor = Object.assign(makeBody(35), { live: true, x: ball.x + 45, y: ball.y, vx: -80 });
+  ball.vx = 80;
+  stepBodies([ball, neighbor], world, 1 / 180, null);
+  assert.ok(neighbor.x - ball.x > 60);
+  assert.ok(ball.vx < 0 && neighbor.vx > 0);
+});
+
 test('hero preserves readable content and native destinations with only the photo moving and OS reduced motion respected', () => {
   for (const reducedMotion of [false, true]) {
     const ui = product({ reducedMotion });
     const hero = nodes(ui.render('LandingPage'), (node) => node.props.className === 'apt-hero')[0];
-    const planes = nodes(hero, (node) => node.props.className === 'apt-hero__photo');
+    const heroHtml = renderToStaticMarkup(hero);
+    const planes = heroHtml.match(/<div class="apt-hero__photo"[^>]*>/g) ?? [];
     assert.equal(planes.length, 1);
-    if (reducedMotion) assert.ok(planes.every((node) => node.props.style.y === 0));
-    else assert.equal(planes[0].props.style.y, '3.5%');
+    if (reducedMotion) assert.doesNotMatch(planes[0], /style=/);
+    else assert.match(planes[0], /3\.5%/);
     assert.ok(nodes(hero, (node) => node.type === 'a' && node.props.href === '/requerimento').length);
     assert.ok(nodes(hero, (node) => node.type === 'a' && node.props.href === '/calendario2026').length);
-    assert.equal(nodes(hero, (node) => node.type === 'img' && node.props.fetchPriority === 'high').length, 1);
-    assert.match(renderToStaticMarkup(hero), /A entrada depende de indicação e análise do perfil/);
+    assert.equal((heroHtml.match(/<img[^>]+fetchPriority="high"/gi) ?? []).length, 1);
+    assert.match(heroHtml, /A entrada depende de indicação e análise do perfil/);
   }
 });
 
